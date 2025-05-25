@@ -1,15 +1,22 @@
-
-from worm.occupational_profiles import transform_onet_skills_scaled
-from worm.agents import Employer, Job
-from worm.plotting.occupational import plot_occupation_space
-
+import sys
+import os
+import matplotlib.pyplot as plt
 import numpy as np
 import uuid
 
-# 1. Ladda transformerade O*NET-data
-df = transform_onet_skills_scaled(n_clusters=25)
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-# 2. Skapa arbetsgivare baserat på varje occupation-kluster
+from worm.occupational_profiles import transform_onet_skills_scaled, select_representative_occupations
+from worm.agents import Employer, Job
+from worm.plotting.occupational import plot_occupation_space
+
+# 1. Ladda transformerade O*NET-data (hela datasettet)
+all_occupations_df = transform_onet_skills_scaled(n_clusters=50)
+
+# 2. Välj representativa yrken per kluster
+df = select_representative_occupations(all_occupations_df)
+
+# 3. Skapa arbetsgivare baserat på varje occupation-kluster
 employers = []
 for i, row in df.iterrows():
     emp_id = str(uuid.uuid4())
@@ -36,8 +43,8 @@ for i, row in df.iterrows():
 
     employers.append(employer)
 
-# 3. Visualisera occupations space
+# 4. Visualisera occupation space för de representativa yrkena
 fig, ax = plot_occupation_space(df, bubble_scale=1.5, labels=True)
-fig.suptitle("Occupationspace of Employers (O*NET-derived)")
+fig.suptitle("Occupation Space of Employers (Representative O*NET Occupations)")
 fig.tight_layout()
-fig.show()
+plt.show()
