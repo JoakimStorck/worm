@@ -1,9 +1,9 @@
-{"queryObj":{
+{
   "query": [
     {
       "code": "Region",
       "selection": {
-        "filter": "vs:RegionKommun07EjAggr",
+        "filter": "item",
         "values": [
           "0114",
           "0115",
@@ -327,9 +327,28 @@
           "0"
         ]
       }
+    },
+    {
+      "code": "ContentsCode",
+      "selection": {
+        "filter": "item",
+        "values": [
+          "0000056Q",
+          "0000056R"
+        ]
+      }
+    },
+    {
+      "code": "Tid",
+      "selection": {
+        "filter": "item",
+        "values": [
+          "2020"
+        ]
+      }
     }
   ],
   "response": {
-    "format": "px"
+    "format": "json"
   }
-},"tableIdForQuery":"Verksamhetsomraden"}
+}
