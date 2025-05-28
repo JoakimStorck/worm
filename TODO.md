@@ -7,10 +7,10 @@
 
 ## Datainsamling och lagring
 - [x] Hämta data om antal arbetsställen och anställda per SNI-kod och kommun (2020)
-- [ ] Demo: Läs in och visa antal kommuner och variabler från SCB-data
+- [x] Demo: Läs in och visa antal kommuner och variabler från SCB-data
 - [ ] Hämta kompletterande data om demografi, utbildningsnivå och kommunstorlek (SCB)
 - [ ] Demo: Läs in och visa befolkning, areal och utbildningsnivå per kommun
-- [x] Använd SQLite som databas för lokal lagring
+- [ ] Använd SQLite som databas för lokal lagring
 - [ ] Bygg databasstruktur för att lagra SCB-data, O*NET-transformationer och metainformation
 - [ ] Demo: Spara och ladda data till/från SQLite – visa innehållet som DataFrame
 - [ ] Spara transformerade O*NET-data till SQLite

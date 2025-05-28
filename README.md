@@ -1,60 +1,109 @@
+````markdown
+# WORM – Workforce and Regional Modeling
 
-# WORM: Worker-Occupation-Region Model
+WORM is a modular Python framework designed for analyzing labor markets, commuting patterns, and regional structures. It facilitates the integration of statistical data, geographic hierarchies, and synthetic modeling to support research and planning at municipal, regional, and national levels.
 
-WORM är en simuleringsmodell för att analysera matchning mellan arbetsgivare och arbetstagare på lokala arbetsmarknader. Modellen kombinerar O*NET-data med svensk statistik (SCB) och bygger upp en struktur där kompetensprofiler, arbetsgivare, jobb och geografi kopplas samman.
+## 🚀 Features
 
-## 🧩 Funktioner
+- Modular architecture with clear separation of concerns
+- Integration with SCB (Statistics Sweden) data
+- SQLite backend for local data storage
+- YAML support for structured geographic definitions
+- K-Nearest Neighbors (KNN) algorithms for typology matching
+- Extensible classes for municipalities, regions, zones, and nations
+- Demo scripts for data import, analysis, and synthetic generation
 
-- Transformation av O*NET-data till en tvådimensionell occupation space (PCA)
-- Klustring av yrken (med kmeans) och visualisering i polär form
-- Matchningslogik baserat på överlappning i kompetensprofil
-- Automatisk namngivning av kluster via representativa yrken
-- Visualisering med interaktiv och statisk matplotlib-plot
-- Hämtning av SCB-data via PX-API
-- Stöd för geografisk strukturering (påbörjat)
+## 📦 Project Structure
 
-## 📁 Projektstruktur
-
-```
+```plaintext
 worm/
-├── __init__.py                  # Definierar PROJECT_ROOT
-├── occupational_profiles.py     # PCA, klustring, transformerad O*NET
-├── plotting/
-│   └── occupational.py          # Visualisering av occupation space
-├── statistics/
-│   └── scb_api.py               # PX-API-hämtning från SCB
-├── geography/                   # (påbörjas)
-├── employers/                   # (påbörjas)
-├── workers/                     # (påbörjas)
-scripts/
-├── scenario_onet_employers.py   # Demo: generera populationer & matcha
-├── demo_plot_full_space.py      # Demo: plotta alla yrken i occupation space
-```
+├── data/                        # Raw data, imported/exported CSV, YAML, SQLite
+│   ├── scb_municipalities.csv
+│   ├── scb_sni_by_municipality.csv
+│   ├── worm.sqlite3
+│   └── ...
+├── worm/
+│   ├── __init__.py
+│   ├── database/                # SQLite handling
+│   │   ├── __init__.py
+│   │   ├── schema.py            # Creates and migrates database structure
+│   │   ├── loader.py            # Import/export functions to/from DB
+│   │   └── query.py             # Standard queries/utilities for SELECT etc.
+│   ├── geography/               # Geographic models and utilities
+│   │   ├── __init__.py
+│   │   ├── municipality.py
+│   │   ├── region.py
+│   │   ├── nation.py
+│   │   ├── zone.py
+│   │   └── geo_utils.py
+│   ├── yaml_io/                 # YAML handling (import, export, validation)
+│   │   ├── __init__.py
+│   │   └── loader.py
+│   ├── knn/                     # KNN algorithms and related analysis
+│   │   ├── __init__.py
+│   │   └── municipality_knn.py
+│   └── utils/                   # Helper functions, conversion, validation
+│       ├── __init__.py
+│       └── helpers.py
+├── scripts/                     # Executable demo and helper scripts
+│   ├── demo_fetch_scb_data.py
+│   ├── demo_sqlite_init.py
+│   ├── demo_list_municipalities.py
+│   ├── demo_knn_match.py
+│   ├── demo_generate_synthetic_sni.py
+│   └── ...
+├── tests/                       # Unit tests (pytest, unittest etc.)
+│   └── ...
+├── docs/                        # Documentation, README, TODO
+│   ├── README.md
+│   ├── TODO.md
+│   └── ...
+├── .gitignore
+├── setup.py                     # (or pyproject.toml if you want to package)
+└── requirements.txt
+````
 
-## 🧪 Installation & körning
-
-Kräver Python 3.10+ och `requirements.txt`.
+## 🛠️ Installation
 
 ```bash
+git clone https://github.com/JoakimStorck/worm.git
+cd worm
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Exempel på körning:
+## 📊 Example Usage
+
+Initialize the SQLite database and import SCB data:
 
 ```bash
-python scripts/demo_plot_full_space.py
+python scripts/demo_sqlite_init.py
 ```
 
-## 💡 Pågående utveckling
+List municipalities with population and area:
 
-Se `ROADMAP.md` för detaljerade TODO-punkter. Nästa fas fokuserar på att bygga simulerade geografiska arbetsmarknader med verklig SCB-data.
+```bash
+python scripts/demo_list_municipalities.py
+```
 
-## 📚 Källor
+Run KNN matching to find similar municipalities:
 
-- O*NET Data: [https://www.onetcenter.org/](https://www.onetcenter.org/)
-- SCB MI0815A: Verksamhetsområden
-- Arbetsmarknadsmodellering via kompetensklustring och geografisk simulering
+```bash
+python scripts/demo_knn_match.py
+```
 
-## 📜 Licens
+## 📄 License
 
-Prototypstadium – ej publiceringsklar. Kontakta projektledare innan distribution.
+MIT License. See [LICENSE](LICENSE) for details.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please open an issue or submit a pull request.
+
+## 📬 Contact
+
+For questions or suggestions, please contact [Joakim Storck](https://github.com/JoakimStorck).
+
+```
+
