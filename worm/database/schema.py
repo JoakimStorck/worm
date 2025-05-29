@@ -13,6 +13,24 @@ def create_schema(db_path="data/worm.sqlite3"):
         education_share REAL
     )
     """)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS urban_areas (
+            object_id INTEGER PRIMARY KEY,
+            uuid TEXT,
+            urban_area_id TEXT,
+            urban_area TEXT,
+            municipal_code TEXT,
+            municipality TEXT,
+            county_code TEXT,
+            county TEXT,
+            area_ha INTEGER,
+            population INTEGER,
+            year INTEGER,
+            valid_from TEXT,
+            valid_to TEXT,
+            geom_wkt TEXT
+        )
+    ''')
     # Table: deso
     c.execute("""
     CREATE TABLE IF NOT EXISTS deso (
@@ -37,16 +55,3 @@ def create_schema(db_path="data/worm.sqlite3"):
     conn.commit()
     conn.close()
 
-def create_municipalities_table(db_path="data/worm.sqlite3"):
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS municipalities (
-        municipal_code TEXT PRIMARY KEY,
-        name TEXT,
-        population INTEGER
-        -- Lägg till fler kolumner här vid behov, t.ex. area_km2, population_25_64, num_higher_educated_25_64
-    )
-    """)
-    conn.commit()
-    conn.close()
