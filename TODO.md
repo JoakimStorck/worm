@@ -1,52 +1,111 @@
-# TODO – WORM-projektet
+# TODO – WORM Project
 
-## Grundläggande mål
-- [x] Skapa en arbetsmarknadsmodell med individer, yrken och regioner
-- [x] Använda O*NET och SCB:s statistik
-- [x] Implementera grundläggande datainsamling från SCB:s API
+## Project Goals (summary)
 
-## Datainsamling och lagring
-- [x] Hämta data om antal arbetsställen och anställda per SNI-kod och kommun (2020)
-- [x] Demo: Läs in och visa antal kommuner och variabler från SCB-data
-- [ ] Hämta kompletterande data om demografi, utbildningsnivå och kommunstorlek (SCB)
-- [ ] Demo: Läs in och visa befolkning, areal och utbildningsnivå per kommun
-- [ ] Använd SQLite som databas för lokal lagring
-- [ ] Bygg databasstruktur för att lagra SCB-data, O*NET-transformationer och metainformation
-- [ ] Demo: Spara och ladda data till/från SQLite – visa innehållet som DataFrame
-- [ ] Spara transformerade O*NET-data till SQLite
-- [ ] Länka SCB:s data till kommungruppsindelning (SCB:s kommuntyp)
+- Build a synthetic, agent-based labor market model with individuals, occupations, and regions
+- Integrate SCB and O*NET data for both real and synthetic geographies
+- Enable flexible modeling at multiple geographical scales (nation, region, municipality, zone)
+- Store all data and results in a local SQLite database for reproducibility
+- Provide tools for matching, commuting, and analysis of labor market dynamics
+- Support scenario testing and stepwise demos for each core function
 
-## Modellering av geografi och struktur
-- [x] Definiera YAML-baserad struktur för att beskriva kommuner, tätorter, småorter och regioner
-- [x] Skapa motsvarande Python-klasser: Land, Region, Kommun, Zon
-- [ ] Demo: Ladda YAML med en kommun och visa dess struktur (exempel: Falun)
-- [ ] Implementera inläsning och utskrift till/från YAML
-- [ ] Demo: Skapa och spara en region som kombinerar flera kommuner
-- [ ] Möjliggör modellering på flera geografiska nivåer (ex: nation, region, kommun, tätort)
-- [ ] Implementera flexibel granularitet – tillåt detaljerad eller övergripande modell
+## Data Collection and Storage
 
-## Generering av typkommuner och regioner
-- [ ] Demo: Ladda YAML med typkommun och hämta dess nyckelattribut
-- [ ] Träna KNN-modell baserat på kommundata för att generera nya, syntetiska kommuner
-- [ ] Demo: Kör KNN och visa de närmaste kommunerna till en given profil
-- [ ] Definiera typkommuner (ex: ”industrikommun i inlandet, 30 000 inv.”)
-- [ ] Demo: Generera syntetisk kommunprofil via KNN från YAML-specifikation
-- [ ] Skapa semantiska profiler i YAML för olika typer av kommuner
-- [ ] Generera regioner genom att kombinera flera syntetiska kommuner
-
-## Matchning och simulering
-- [ ] Modellera matchning mellan arbetare och yrken baserat på O*NET-positioner
-- [ ] Demo: Simulera en enkel arbetsmarknadsmatchning i en kommun
-- [ ] Implementera funktion för att simulera pendlingsmönster mellan kommuner
-- [ ] Demo: Visa pendlingsflöden mellan två kommuner/regioner
-- [ ] Tillåt överlapp mellan arbetskraft och bostadsort (pendling)
-
-## Visualisering och analys
-- [ ] Demo: Visualisera kommunfördelning och arbetsmarknadsstruktur med matplotlib/seaborn
-- [ ] Skapa verktyg för att visualisera simulerade arbetsmarknader och pendlingsflöden
-- [ ] Demo: Exportera data till GeoJSON/CSV och visa exempel på extern analys
-- [ ] Utveckla metoder för att mäta entropi, klustring och matchningskvalitet i simuleringar
+* [x] Retrieve data on number of workplaces and employees per SNI code and municipality (2020)
+* [x] **Demo:** Read and display number of municipalities and variables from SCB data
+* [ ] Retrieve complementary data on demography, education level, and municipality area (from SCB)
+* [ ] **Demo:** Read and display population, area, and education level per municipality
+* [ ] Use SQLite as a local database
+* [ ] Build a database structure to store SCB data, O\*NET transformations, and metadata
+* [ ] **Demo:** Save and load data to/from SQLite – display contents as DataFrame
+* [ ] Save transformed O\*NET data to SQLite
+* [ ] Link SCB data to municipality type classification (SCB municipal groups)
 
 ---
 
-Senast uppdaterad: 2025-05-28
+### A) Geography Modeling and Structure
+
+* [x] Define YAML-based structure for municipalities, urban areas, small towns, and regions
+* [x] Implement corresponding Python classes: Nation, Region, Municipality, Zone
+
+  * [ ] **Demo:** Load and visualize the structure of a municipality (e.g., Falun) from YAML
+* [ ] Implement import/export to/from YAML (including support for variable granularity)
+* [ ] Build SQL tables for nation, region, municipality, and zone – with code, name, area, centroid (and optionally bounding box/polygon)
+* [ ] Link locations (workplaces/residences) to all relevant geographical levels (municipality, region, zone)
+* [ ] Enable a variable number of zones per municipality (scalable granularity, one or many zones possible)
+
+  * [ ] **Demo:** Visualize a municipality with both 1 and N zones
+* [ ] Enable modeling and analysis at all geographical levels (nation, region, municipality, zone)
+* [ ] Ensure table and class design allows for future extensions (additional levels, polygons, etc.)
+
+  * [ ] **Demo:** Create and save a region combining multiple municipalities
+
+---
+
+### B) Generation of Typmunicipalities and Regions
+
+* [ ] Create and load YAML profiles for typmunicipalities (e.g., “industrial inland town, 30,000 inhabitants”) and regions
+
+  * [ ] **Demo:** Load a typmunicipality from YAML and display its key attributes
+* [ ] Train a KNN model on Swedish municipality data (and optionally zone data) to generate new synthetic municipalities based on real statistics
+
+  * [ ] **Demo:** Run KNN and display nearest real municipalities to a given profile
+  * [ ] **Demo:** Generate a synthetic municipality profile via KNN from YAML specification
+* [ ] Generate regions by combining multiple synthetic municipalities
+* [ ] Create semantic profiles in YAML for different types of municipalities (e.g., metropolitan, suburb, small town, rural)
+* [ ] Implement a pipeline to randomly generate synthetic regions/labor market areas from profiles and KNN
+
+---
+
+### C) Stepwise Allocation of Workplaces and Residences to Zones
+
+* [ ] **Step 1: Random allocation**
+
+  * Implement random allocation (e.g., Dirichlet) of workplaces/residences to zones (always summing to the municipality total)
+  * **Demo:** Generate and visualize such a random allocation
+* [ ] **Step 2: Rule-based/static allocation**
+
+  * Define and use standard weights for zone types (e.g., CBD, industrial, residential)
+  * **Demo:** Show difference compared to random allocation
+* [ ] **Step 3: KNN-based allocation**
+
+  * Collect statistics on real-world zone distributions per typmunicipality
+  * Implement a KNN-based method to generate realistic zone weights based on similar municipalities
+  * **Demo:** Generate a synthetic municipality with KNN-based zone allocation
+
+---
+
+### D) Integration and Documentation
+
+* [ ] Always allocate workplaces and residences to both zone and municipality so that totals match at the municipality level
+* [ ] Document the structure and logic for geography and zone allocation (README or a dedicated data dictionary)
+* [ ] Make it easy to switch allocation strategy (random, rule-based, KNN) via parameter or config
+* [ ] Integrate new geography and allocation logic with the SQLite database structure
+
+  * [ ] **Demo:** Visualize (simply) the generated municipalities/regions and their distribution of workplaces/residences
+
+---
+
+## Matching and Simulation
+
+* [ ] Model matching between workers and occupations based on O\*NET positions
+
+  * [ ] **Demo:** Simulate simple labor market matching in one municipality
+* [ ] Implement function to simulate commuting patterns between municipalities
+
+  * [ ] **Demo:** Show commuting flows between two municipalities/regions
+* [ ] Allow overlap between workforce and residence location (commuting)
+
+---
+
+## Visualization and Analysis
+
+* [ ] **Demo:** Visualize municipality distribution and labor market structure with matplotlib/seaborn
+* [ ] Develop tools to visualize simulated labor markets and commuting flows
+* [ ] **Demo:** Export data to GeoJSON/CSV and show example of external analysis
+* [ ] Develop methods to measure entropy, clustering, and matching quality in simulations
+
+---
+
+Last updated: 2025-05-29
+
