@@ -15,11 +15,11 @@
 * [x] **Demo:** Read and display number of municipalities and variables from SCB data
 * [ ] Retrieve complementary data on demography, education level, and municipality area (from SCB)
 * [ ] **Demo:** Read and display population, area, and education level per municipality
-* [ ] Use SQLite as a local database
-* [ ] Build a database structure to store SCB data, O\*NET transformations, and metadata
-* [ ] **Demo:** Save and load data to/from SQLite – display contents as DataFrame
+* [x] Use SQLite as a local database
+* [x] Build a database structure to store SCB data, O\*NET transformations, and metadata
+* [x] **Demo:** Save and load data to/from SQLite – display contents as DataFrame
 * [ ] Save transformed O\*NET data to SQLite
-* [ ] Link SCB data to municipality type classification (SCB municipal groups)
+* [x] Link SCB data to municipality type classification (SCB municipal groups)
 
 ---
 

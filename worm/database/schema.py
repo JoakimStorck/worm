@@ -72,29 +72,27 @@ def create_schema(db_path="data/worm.sqlite3"):
             FOREIGN KEY (municipal_code) REFERENCES municipalities(municipal_code)
         )
     """)
-    # SNI-baserad sysselsättning
+    # SNI-baserad data för arbetsställen
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS employment_municipality_sni (
+            municipal_code TEXT,
+            year INTEGER,
+            sni_code TEXT,
+            employed INTEGER,
+            workplaces INTEGER,
+            PRIMARY KEY (municipal_code, year, sni_code)
+        )
+    """)
+
+    # Arbetsmarknadsstatus efter bostadens DESO-kod
     c.execute("""
         CREATE TABLE IF NOT EXISTS employment_deso_sni (
             deso_code TEXT,
             year INTEGER,
             sni_code TEXT,
-            age_group TEXT,
+            sni_description TEXT,
             employed INTEGER,
-            workplaces INTEGER,
-            PRIMARY KEY (deso_code, year, sni_code, age_group)
-        )
-        """)
-
-    # Arbetsmarknadsstatus
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS employment_deso_status (
-            deso_code TEXT,
-            year INTEGER,
-            age_group TEXT,
-            employed INTEGER,
-            unemployed INTEGER,
-            outside_labor_force INTEGER,
-            PRIMARY KEY (deso_code, year, age_group)
+            PRIMARY KEY (deso_code, year, sni_code)
         )
     """)
     conn.commit()

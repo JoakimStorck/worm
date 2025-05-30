@@ -1,5 +1,6 @@
 import geopandas as gpd
 import pandas as pd
+import csv
 
 # Ange sökvägen till din GeoPackage-fil och namn på lagret
 gpk_path = "data/DeSO_2025.gpkg"
@@ -30,6 +31,6 @@ if "area_ha" in gdf.columns:
     df["area_km2"] = gdf["area_ha"] / 100.0
 
 # Spara till UTF-8 CSV
-df.to_csv(csv_path, index=False, encoding="utf-8")
+df.to_csv(csv_path, index=False, encoding="utf-8", quoting=csv.QUOTE_NONNUMERIC)
 
 print(f"Sparade {len(df)} rader till {csv_path}")

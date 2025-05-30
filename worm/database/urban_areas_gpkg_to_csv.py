@@ -1,6 +1,7 @@
 import pandas as pd
 from shapely.geometry import shape
 import fiona
+import csv
 
 rows = []
 with fiona.open("data/Tatorter_2023.gpkg", layer="Tatorter_2023") as src:
@@ -25,4 +26,4 @@ with fiona.open("data/Tatorter_2023.gpkg", layer="Tatorter_2023") as src:
         })
 
 df = pd.DataFrame(rows)
-df.to_csv("urban_areas_2023.csv", index=False, encoding="utf-8")
+df.to_csv("data/scb_urban_areas.csv", index=False, encoding="utf-8", quoting=csv.QUOTE_NONNUMERIC)

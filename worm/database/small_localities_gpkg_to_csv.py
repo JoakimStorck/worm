@@ -1,6 +1,8 @@
 import geopandas as gpd
 import pandas as pd
 from shapely.geometry import shape
+import csv
+
 
 # Läs in filen (GeoPackage)
 gdf = gpd.read_file("data/Smaorter_2023.gpkg", layer="Smaorter_2023")
@@ -22,4 +24,4 @@ df = pd.DataFrame({
 })
 
 # Spara till CSV (utan index)
-df.to_csv("data/scb_small_localities.csv", index=False, encoding="utf-8")
+df.to_csv("data/scb_small_localities.csv", index=False, encoding="utf-8", quoting=csv.QUOTE_NONNUMERIC)
