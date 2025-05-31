@@ -17,25 +17,43 @@
 
 ## **AP1. Database & Data Collection**
 
+Här kommer ett färdigt block anpassat för din TODO-struktur, med checkboxar. Du kan enkelt klistra in det – och jag har bockat av det som, utifrån tidigare samtal och din tidigare TODO, verkar vara klart. Du kan såklart justera det vidare efter din faktiska status!
+
+---
+
+## **AP1. Database & Data Collection**
+
 ### **a) Grund**
 
-* [ ] Skapa och dokumentera SQLite-struktur (kommuner, DeSO, tätorter, småorter, verksamhetsområden)
-* [ ] Importera SCB\:s tabeller för befolkning, arbetsplatser, utbildning, yta
+* [x] Skapa och dokumentera SQLite-struktur (kommuner, DeSO, tätorter, småorter, verksamhetsområden)
+* [x] Importera SCB\:s tabeller för befolkning, arbetsplatser, utbildning, yta
 * [ ] Lagra och länka polygoner/geometrier för alla geografiska nivåer
-* [ ] **Demo:** Läs in och visa antal kommuner, tätorter, population mm från SQLite
+* [x] Lägg till arbetsmarknadsdata per SNI på kommun och DeSO
+* [x] Lagra O\*NET–SCB transformationer och cluster-data
+* [ ] Länka samtliga tabeller med relevanta nycklar
+* [ ] **Demo:** Läs in och visa antal kommuner, tätorter, population mm från SQLite; samkör befolknings- och arbetsmarknadsdata, visa SQL-join/exempel
+
+---
 
 ### **b) Utbyggnad**
 
-* [ ] Lägg till arbetsmarknadsdata per SNI på kommun och DeSO
-* [ ] Lagra O\*NET–SCB transformationer och cluster-data
-* [ ] Länka samtliga tabeller med relevanta nycklar
-* [ ] **Demo:** Samkör befolknings- och arbetsmarknadsdata, visa SQL-join/exempel
+* [ ] Lägg till indexering av viktiga nycklar och tabeller för prestanda
+* [ ] Skapa vyer och aggregerade tabeller för typiska analyser (t.ex. arbetskraft per region/yrke/utbildning/SNI)
+* [ ] Implementera flexibla queries/parametriserade urval (kommun, DeSO, yrke etc.)
+* [ ] Integrera fler kodlistor/mapping-tabeller (ex. SSYK/SNI/O\*NET)
+* [ ] Förbered datastruktur för agentbaserade simuleringar (ex. agents, initialstatus, seeds)
+* [ ] Koppla till externa datakällor för löpande/periodiska uppdateringar
+* [ ] **Demo:** Visa exempel på typisk analys (t.ex. arbetskraft per utbildningsnivå i region X, eller matchande jobb för viss kompetensprofil)
 
-### **c) Full synk/metadata**
+---
 
-* [ ] Fullständig datavalidering, constraint-checks och automatiska uppdateringsscripts
-* [ ] Skapa system för dataversionering och dokumentera tabellstruktur i kod
-* [ ] **Demo:** Automatisk integritetskontroll och visualisering av tabellstruktur
+### **c) Full synk/metadata och kvalitet**
+
+* [ ] Fullständig datavalidering (test av constraints, integritetsregler, foreign keys etc.)
+* [ ] Automatiska scripts för uppdatering och kontroll av databasens innehåll
+* [ ] Skapa/uppdatera system för dataversionering (spårbarhet över tid)
+* [ ] Dokumentera all tabellstruktur och förändringar i kod/metadatafiler
+* [ ] **Demo:** Visa automatisk integritetskontroll och visualisering av tabellstruktur samt exempel på versionshistorik eller datalogg
 
 ---
 

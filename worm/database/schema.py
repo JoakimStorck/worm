@@ -17,7 +17,8 @@ def create_schema(db_path="data/worm.sqlite3"):
             geom_wkt TEXT
         )
     """)
-    c.execute('''
+    # Table: urban areas
+    c.execute("""
         CREATE TABLE IF NOT EXISTS urban_areas (
             object_id INTEGER PRIMARY KEY,
             uuid TEXT,
@@ -36,8 +37,9 @@ def create_schema(db_path="data/worm.sqlite3"):
             geom_wkt TEXT,
             FOREIGN KEY (municipal_code) REFERENCES municipalities(municipal_code)
         )
-    ''')
-    c.execute('''
+    """)
+    # Table: small localities
+    c.execute("""
         CREATE TABLE IF NOT EXISTS small_localities (
             object_id INTEGER PRIMARY KEY,
             uuid TEXT,
@@ -53,7 +55,7 @@ def create_schema(db_path="data/worm.sqlite3"):
             geom_wkt TEXT,
             FOREIGN KEY (municipal_code) REFERENCES municipalities(municipal_code)
         )
-    ''')  
+    """)
     # Table: deso
     c.execute("""
         CREATE TABLE IF NOT EXISTS deso (
@@ -72,7 +74,27 @@ def create_schema(db_path="data/worm.sqlite3"):
             FOREIGN KEY (municipal_code) REFERENCES municipalities(municipal_code)
         )
     """)
-    # SNI-baserad data för arbetsställen
+    # Table: commercial zones
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS commercial_zones (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            municipal_code TEXT,
+            geom_wkt TEXT,
+            FOREIGN KEY (municipal_code) REFERENCES municipalities(municipal_code)
+        )
+    """)
+    # Table: business zones
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS business_zones (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            municipal_code TEXT,
+            geom_wkt TEXT,
+            FOREIGN KEY (municipal_code) REFERENCES municipalities(municipal_code)
+        )
+    """)
+    # SNI-based employment per municipality
     c.execute("""
         CREATE TABLE IF NOT EXISTS employment_municipality_sni (
             municipal_code TEXT,
@@ -83,8 +105,7 @@ def create_schema(db_path="data/worm.sqlite3"):
             PRIMARY KEY (municipal_code, year, sni_code)
         )
     """)
-
-    # Arbetsmarknadsstatus efter bostadens DESO-kod
+    # SNI-based employment per DeSO
     c.execute("""
         CREATE TABLE IF NOT EXISTS employment_deso_sni (
             deso_code TEXT,
@@ -97,4 +118,3 @@ def create_schema(db_path="data/worm.sqlite3"):
     """)
     conn.commit()
     conn.close()
-
