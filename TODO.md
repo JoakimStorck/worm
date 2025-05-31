@@ -27,11 +27,11 @@ Här kommer ett färdigt block anpassat för din TODO-struktur, med checkboxar. 
 
 * [x] Skapa och dokumentera SQLite-struktur (kommuner, DeSO, tätorter, småorter, verksamhetsområden)
 * [x] Importera SCB\:s tabeller för befolkning, arbetsplatser, utbildning, yta
-* [ ] Lagra och länka polygoner/geometrier för alla geografiska nivåer
+* [x] Lagra och länka polygoner/geometrier för alla geografiska nivåer
 * [x] Lägg till arbetsmarknadsdata per SNI på kommun och DeSO
 * [x] Lagra O\*NET–SCB transformationer och cluster-data
-* [ ] Länka samtliga tabeller med relevanta nycklar
-* [ ] **Demo:** Läs in och visa antal kommuner, tätorter, population mm från SQLite; samkör befolknings- och arbetsmarknadsdata, visa SQL-join/exempel
+* [x] Länka samtliga tabeller med relevanta nycklar
+* [x] **Demo:** Läs in och visa antal kommuner, tätorter, population mm från SQLite; samkör befolknings- och arbetsmarknadsdata, visa SQL-join/exempel
 
 ---
 
