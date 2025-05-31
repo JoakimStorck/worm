@@ -178,4 +178,53 @@ def load_employment_municipality_sni(csv_file, db_path="data/worm.sqlite3", year
     df.to_sql("employment_municipality_sni", conn, if_exists="replace", index=False)
     conn.close()
 
+def load_onet_occupations(occupation_path, db_path="data/worm.sqlite3"):
+    df = pd.read_csv(occupation_path, sep='\t', encoding='utf-8')
+    for col in ["O*NET-SOC Code", "Title", "Description"]:
+        if col not in df.columns:
+            df[col] = ""
+    df = df.rename(columns={
+        "O*NET-SOC Code": "onet_code",
+        "Title": "title",
+        "Description": "description"
+    })[["onet_code", "title", "description"]]
+    conn = sqlite3.connect(db_path)
+    df.to_sql("onet_occupations", conn, if_exists="replace", index=False)
+    conn.close()
+    print(f"Loaded {len(df)} occupations into onet_occupations.")
 
+def load_onet_skills(skills_path, db_path="data/worm.sqlite3"):
+    df = pd.read_csv(skills_path, sep='\t', encoding='utf-8')
+    # Skapa tomma kolumner om de saknas
+    for col in ["Element ID", "Element Name", "Domain Source", "Element Type", "Description"]:
+        if col not in df.columns:
+            df[col] = ""
+    skills = df[["Element ID", "Element Name", "Domain Source", "Element Type", "Description"]].drop_duplicates()
+    skills = skills.rename(columns={
+        "Element ID": "skill_id",
+        "Element Name": "skill_name",
+        "Domain Source": "domain",
+        "Element Type": "category",
+        "Description": "description"
+    })[["skill_id", "skill_name", "domain", "category", "description"]]
+    conn = sqlite3.connect(db_path)
+    skills.to_sql("onet_skills", conn, if_exists="replace", index=False)
+    conn.close()
+    print(f"Loaded {len(skills)} skills into onet_skills.")
+
+def load_occupation_skill_link(skills_path, db_path="data/worm.sqlite3"):
+    df = pd.read_csv(skills_path, sep='\t', encoding='utf-8')
+    for col in ["O*NET-SOC Code", "Element ID", "Scale ID", "Data Value"]:
+        if col not in df.columns:
+            df[col] = ""
+    link = df[["O*NET-SOC Code", "Element ID", "Scale ID", "Data Value"]].copy()
+    link = link.rename(columns={
+        "O*NET-SOC Code": "onet_code",
+        "Element ID": "skill_id",
+        "Scale ID": "scale_id",
+        "Data Value": "data_value"
+    })[["onet_code", "skill_id", "scale_id", "data_value"]]
+    conn = sqlite3.connect(db_path)
+    link.to_sql("occupation_skill_link", conn, if_exists="replace", index=False)
+    conn.close()
+    print(f"Loaded {len(link)} rows into occupation_skill_link.")

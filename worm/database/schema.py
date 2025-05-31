@@ -116,5 +116,54 @@ def create_schema(db_path="data/worm.sqlite3"):
             PRIMARY KEY (deso_code, year, sni_code)
         )
     """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS onet_occupations (
+            onet_code TEXT PRIMARY KEY,
+            title TEXT,
+            description TEXT
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS onet_skills (
+            skill_id TEXT PRIMARY KEY,
+            skill_name TEXT,
+            domain TEXT,
+            category TEXT,
+            description TEXT
+        )
+    """)
+    
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS occupation_skill_link (
+            onet_code TEXT,
+            skill_id TEXT,
+            scale_id TEXT,
+            data_value REAL,
+            FOREIGN KEY (onet_code) REFERENCES onet_occupations(onet_code),
+            FOREIGN KEY (skill_id) REFERENCES onet_skills(skill_id)
+        )
+    """)
+
+    # SNI-based employment per DeSO
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS onet_occupation_space (
+            onet_code TEXT,
+            n_clusters INTEGER,
+            title TEXT,
+            pc1 REAL,
+            pc2 REAL,
+            cluster INTEGER,
+            cluster_name TEXT,
+            chi REAL,
+            xi REAL,
+            h REAL,
+            PRIMARY KEY (onet_code, n_clusters),
+            FOREIGN KEY (onet_code) REFERENCES onet_occupations(onet_code)
+        )
+    """)
+
     conn.commit()
     conn.close()

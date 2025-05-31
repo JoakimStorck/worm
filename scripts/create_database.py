@@ -63,7 +63,21 @@ emp_mun_csv = "data/arbetsmarknadsstruktur_2020.csv"
 if file_exists(emp_mun_csv):
     loader.load_employment_municipality_sni(emp_mun_csv, db_path=DB_PATH)
 
-# (Här kan du lägga till fler datakällor om du vill.)
+# Ladda O*NET-data (yrken och skills)
+onet_occ_path = "onet_data/Occupation Data.txt"
+onet_skills_path = "onet_data/Skills.txt"
+
+if file_exists(onet_occ_path):
+    loader.load_onet_occupations(onet_occ_path, db_path=DB_PATH)
+else:
+    print("OBS: Laddar inte onet_occupations, filen saknas.")
+
+if file_exists(onet_skills_path):
+    loader.load_onet_skills(onet_skills_path, db_path=DB_PATH)
+    loader.load_occupation_skill_link(onet_skills_path, db_path=DB_PATH)
+else:
+    print("OBS: Laddar inte onet_skills/occupation_skill_link, filen saknas.")
+
 
 print("Alla laddningar är färdiga.")
 
