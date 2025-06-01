@@ -20,7 +20,7 @@ def create_schema(db_path="data/worm.sqlite3"):
     # Table: urban areas
     c.execute("""
         CREATE TABLE IF NOT EXISTS urban_areas (
-            object_id INTEGER PRIMARY KEY,
+            object_id TEXT PRIMARY KEY,
             uuid TEXT,
             urban_area_id TEXT,
             urban_area TEXT,
@@ -41,7 +41,7 @@ def create_schema(db_path="data/worm.sqlite3"):
     # Table: small localities
     c.execute("""
         CREATE TABLE IF NOT EXISTS small_localities (
-            object_id INTEGER PRIMARY KEY,
+            object_id TEXT PRIMARY KEY,
             uuid TEXT,
             small_locality_id TEXT,
             municipal_code TEXT,
@@ -59,7 +59,7 @@ def create_schema(db_path="data/worm.sqlite3"):
     # Table: deso
     c.execute("""
         CREATE TABLE IF NOT EXISTS deso (
-            object_id INTEGER PRIMARY KEY,
+            object_id TEXT PRIMARY KEY,
             object_identity TEXT,
             deso_code TEXT,
             regso_code TEXT,
@@ -78,22 +78,44 @@ def create_schema(db_path="data/worm.sqlite3"):
     c.execute("""
         CREATE TABLE IF NOT EXISTS commercial_zones (
             id TEXT PRIMARY KEY,
-            name TEXT,
-            municipal_code TEXT,
-            geom_wkt TEXT,
-            FOREIGN KEY (municipal_code) REFERENCES municipalities(municipal_code)
+            uuid TEXT,
+            zone_code TEXT,
+            municipality_code TEXT,
+            municipality TEXT,
+            county_code TEXT,
+            county TEXT,
+            num_employed INTEGER,
+            num_workplaces INTEGER,
+            num_subzones INTEGER,
+            area_ha REAL,
+            year INTEGER,
+            valid_from TEXT,
+            valid_to TEXT,
+            geom_wkt TEXT
         )
     """)
     # Table: business zones
     c.execute("""
         CREATE TABLE IF NOT EXISTS business_zones (
             id TEXT PRIMARY KEY,
-            name TEXT,
-            municipal_code TEXT,
-            geom_wkt TEXT,
-            FOREIGN KEY (municipal_code) REFERENCES municipalities(municipal_code)
+            uuid TEXT,
+            zone_code TEXT,
+            municipality_code TEXT,
+            municipality TEXT,
+            county_code TEXT,
+            county TEXT,
+            zone_type TEXT,
+            num_employed INTEGER,
+            num_workplaces INTEGER,
+            main_industry TEXT,
+            area_ha REAL,
+            year INTEGER,
+            valid_from TEXT,
+            valid_to TEXT,
+            geom_wkt TEXT
         )
     """)
+
     # SNI-based employment per municipality
     c.execute("""
         CREATE TABLE IF NOT EXISTS employment_municipality_sni (

@@ -28,49 +28,157 @@ def load_municipalities_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
 def load_urban_areas_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf = gpd.read_file(gpkg_path)
     print("Urban areas - columns:", gdf.columns)
+
+    # Skapa WKT-polygon
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
-    cols = ["object_id", "uuid", "urban_area_id", "urban_area", "municipal_code", "municipality", "county_code", "county", "area_ha", "area_km2", "population", "year", "valid_from", "valid_to", "geom_wkt"]
+    # Skapa/kopiera rätt kolumner
+    gdf["object_id"] = gdf["objectid"] if "objectid" in gdf.columns else gdf.index.astype(str)
+    gdf["uuid"] = gdf["uuid"] if "uuid" in gdf.columns else None
+    gdf["urban_area_id"] = gdf["tatortskod"] if "tatortskod" in gdf.columns else None
+    gdf["urban_area"] = gdf["tatort"] if "tatort" in gdf.columns else None
+    gdf["municipal_code"] = gdf["kommun"] if "kommun" in gdf.columns else None
+    gdf["municipality"] = gdf["kommunnamn"] if "kommunnamn" in gdf.columns else None
+    gdf["county_code"] = gdf["lan"] if "lan" in gdf.columns else None
+    gdf["county"] = gdf["lannamn"] if "lannamn" in gdf.columns else None
+    gdf["area_ha"] = gdf["area_ha"] if "area_ha" in gdf.columns else None
+    gdf["area_km2"] = gdf["area_ha"]/100 if "area_ha" in gdf.columns else None
+    gdf["population"] = gdf["bef"] if "bef" in gdf.columns else None
+    gdf["year"] = gdf["ar"] if "ar" in gdf.columns else None
+    gdf["valid_from"] = gdf["validfrom"] if "validfrom" in gdf.columns else None
+    gdf["valid_to"] = gdf["validto"] if "validto" in gdf.columns else None
+
+    # Rätt kolumnordning enligt schema.py
+    cols = [
+        "object_id", "uuid", "urban_area_id", "urban_area", "municipal_code", "municipality",
+        "county_code", "county", "area_ha", "area_km2", "population", "year",
+        "valid_from", "valid_to", "geom_wkt"
+    ]
     gdf = gdf[[c for c in cols if c in gdf.columns]]
+
     conn = sqlite3.connect(db_path)
     gdf.to_sql("urban_areas", conn, if_exists="replace", index=False)
     conn.close()
+    print(f"{len(gdf)} urban areas loaded and saved to database.")
+
 
 def load_small_localities_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf = gpd.read_file(gpkg_path)
     print("Small localities - columns:", gdf.columns)
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
-    cols = ["object_id", "uuid", "small_locality_id", "municipal_code", "municipality", "county_code", "county", "area_ha", "area_km2", "population", "year", "geom_wkt"]
+
+    # Mappa och skapa alla kolumner du vill ha i SQL
+    gdf["object_id"] = gdf["objectid"] if "objectid" in gdf.columns else gdf.index.astype(str)
+    gdf["uuid"] = gdf["uuid"] if "uuid" in gdf.columns else None
+    gdf["small_locality_id"] = gdf["smaort"] if "smaort" in gdf.columns else None
+    gdf["municipal_code"] = gdf["kommun"] if "kommun" in gdf.columns else None
+    gdf["municipality"] = gdf["kommunnamn"] if "kommunnamn" in gdf.columns else None
+    gdf["county_code"] = gdf["lan"] if "lan" in gdf.columns else None
+    gdf["county"] = gdf["lannamn"] if "lannamn" in gdf.columns else None
+    gdf["area_ha"] = gdf["area_ha"] if "area_ha" in gdf.columns else None
+    gdf["area_km2"] = gdf["area_ha"]/100 if "area_ha" in gdf.columns else None
+    gdf["population"] = gdf["bef"] if "bef" in gdf.columns else None
+    gdf["year"] = gdf["ar"] if "ar" in gdf.columns else None
+    gdf["valid_from"] = gdf["validfrom"] if "validfrom" in gdf.columns else None
+    gdf["valid_to"] = gdf["validto"] if "validto" in gdf.columns else None
+
+    cols = [
+        "object_id", "uuid", "small_locality_id", "municipal_code", "municipality",
+        "county_code", "county", "area_ha", "area_km2", "population", "year",
+        "valid_from", "valid_to", "geom_wkt"
+    ]
     gdf = gdf[[c for c in cols if c in gdf.columns]]
+
     conn = sqlite3.connect(db_path)
     gdf.to_sql("small_localities", conn, if_exists="replace", index=False)
     conn.close()
+    print(f"{len(gdf)} small localities loaded and saved to database.")
 
 def load_commercial_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf = gpd.read_file(gpkg_path)
     print("Commercial zones - columns:", gdf.columns)
-    # Justera kolumner enligt din Handelsomraden_2020.gpkg
-    gdf["id"] = gdf["ho_kod"].astype(str)
-    gdf["name"] = gdf["kommunnamn"] + " - " + gdf.index.astype(str)
-    gdf["municipal_code"] = gdf["kommunkod"].astype(str)
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
-    cols = ["id", "name", "municipal_code", "geom_wkt"]
+
+    # Se till att id alltid finns
+    gdf["id"] = gdf["ho_kod"].astype(str) if "ho_kod" in gdf.columns else gdf.index.astype(str)
+
+    # Skapa rätt kolumner eller ersätt om de saknas
+    gdf["id"] = gdf["ho_kod"].astype(str)
+    gdf["zone_code"] = gdf["ho_kod"].astype(str)
+    gdf["municipality_code"] = gdf["kommunkod"].astype(str)
+    gdf["municipality"] = gdf["kommunnamn"].astype(str)
+    gdf["county_code"] = gdf["lankod"].astype(str)
+    gdf["county"] = None  # Fyll om det finns länsnamn
+    gdf["num_employed"] = gdf["anst_handel"]
+    gdf["num_workplaces"] = gdf["arbst_handel"]
+    gdf["num_subzones"] = gdf["antal_omr"]
+    gdf["area_ha"] = gdf["area_ha"]
+    gdf["year"] = gdf["ar"]
+    gdf["valid_from"] = gdf["validfrom"]
+    gdf["valid_to"] = gdf["validto"]
+    gdf["geom_wkt"] = gdf.geometry.to_wkt()
+
+    # Ordning enligt nya schemat
+    cols = [
+        "id", "uuid", "zone_code", "municipality_code", "municipality", "county_code", "county",
+        "num_employed", "num_workplaces", "num_subzones", "area_ha", "year", "valid_from", "valid_to", "geom_wkt"
+    ]
     gdf = gdf[cols]
+
     conn = sqlite3.connect(db_path)
     gdf.to_sql("commercial_zones", conn, if_exists="replace", index=False)
     conn.close()
+    print(f"{len(gdf)} commercial zones loaded and saved to database.")
 
 def load_business_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf = gpd.read_file(gpkg_path)
     print("Business zones - columns:", gdf.columns)
-    gdf["id"] = gdf["vo_kod"].astype(str) if "vo_kod" in gdf.columns else gdf.index.astype(str)
-    gdf["name"] = gdf["kommunnamn"] + " - " + gdf.index.astype(str) if "kommunnamn" in gdf.columns else "Business zone " + gdf.index.astype(str)
-    gdf["municipal_code"] = gdf["kommunkod"].astype(str) if "kommunkod" in gdf.columns else None
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
-    cols = ["id", "name", "municipal_code", "geom_wkt"]
+
+    gdf["id"] = gdf["vo_kod"].astype(str)
+    gdf["zone_code"] = gdf["vo_kod"].astype(str)
+    gdf["municipality_code"] = gdf["kommunkod"].astype(str)
+    gdf["municipality"] = gdf["kommunnamn"].astype(str) if "kommunnamn" in gdf.columns else None
+    gdf["county_code"] = gdf["lankod"].astype(str)
+    gdf["county"] = None
+    gdf["zone_type"] = gdf["omradestyp"] if "omradestyp" in gdf.columns else None
+    gdf["num_employed"] = gdf["anstallda"]
+    gdf["num_workplaces"] = gdf["arbetsstallen"]
+    gdf["main_industry"] = gdf["storstabransch"] if "storstabransch" in gdf.columns else None
+    gdf["area_ha"] = gdf["area_ha"]
+    gdf["year"] = gdf["ar"]
+    gdf["valid_from"] = gdf["validfrom"]
+    gdf["valid_to"] = gdf["validto"]
+    gdf["geom_wkt"] = gdf.geometry.to_wkt()
+
+
+    # Rätt kolumnordning enligt schema
+    cols = [
+        "id",               # Primärnyckel (zone_code)
+        "uuid",             # UUID
+        "zone_code",        # Verksamhetsområdeskod (vo_kod)
+        "municipality_code",# Kommunnummer (kommunkod)
+        "municipality",     # Kommunnamn (kommunnamn)
+        "county_code",      # Länskod (lankod)
+        "county",           # Länsnamn (None om det inte finns)
+        "zone_type",        # Områdestyp (omradestyp)
+        "num_employed",     # Antal anställda (anstallda)
+        "num_workplaces",   # Antal arbetsställen (arbetsstallen)
+        "main_industry",    # Största bransch (storstabransch)
+        "area_ha",          # Area i hektar (area_ha)
+        "year",             # Årtal (ar)
+        "valid_from",       # Giltig från (validfrom)
+        "valid_to",         # Giltig till (validto)
+        "geom_wkt"          # Polygon (WKT)
+    ]
+
+
     gdf = gdf[cols]
+
     conn = sqlite3.connect(db_path)
     gdf.to_sql("business_zones", conn, if_exists="replace", index=False)
     conn.close()
+    print(f"{len(gdf)} business zones loaded and saved to database.")
+
 
 def load_leisure_house_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf = gpd.read_file(gpkg_path)
@@ -85,32 +193,41 @@ def load_leisure_house_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf.to_sql("leisure_house_zones", conn, if_exists="replace", index=False)
     conn.close()
 
+
 def load_deso_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf = gpd.read_file(gpkg_path)
     print("DeSO - columns:", gdf.columns)
-    # Vanliga SCB-fält: "deso", "kommun", "kommunkod", "lan", "lankod", "area_ha", "area_km2", "geometry"
-    # Du kan behöva justera denna mappning efter dina faktiska kolumner!
-    gdf["object_id"] = gdf.index.astype(int)
-    gdf["object_identity"] = gdf["deso"] if "deso" in gdf.columns else None
-    gdf["deso_code"] = gdf["deso"] if "deso" in gdf.columns else None
-    gdf["municipal_code"] = gdf["kommunkod"].astype(str) if "kommunkod" in gdf.columns else None
-    gdf["municipality"] = gdf["kommun"] if "kommun" in gdf.columns else None
-    gdf["county_code"] = gdf["lankod"].astype(str) if "lankod" in gdf.columns else None
-    gdf["county"] = gdf["lan"] if "lan" in gdf.columns else None
-    gdf["area_ha"] = gdf["area_ha"] if "area_ha" in gdf.columns else None
-    gdf["area_km2"] = gdf["area_km2"] if "area_km2" in gdf.columns else (gdf["area_ha"]/100 if "area_ha" in gdf.columns else None)
-    gdf["population"] = gdf["befolkning"] if "befolkning" in gdf.columns else None
+
+    # Skapa eller mappa alla kolumner enligt databasens schema
+    gdf["object_id"] = gdf["objectid"] if "objectid" in gdf.columns else gdf.index.astype(str)
+    gdf["object_identity"] = gdf["objektidentitet"] if "objektidentitet" in gdf.columns else None
+    gdf["deso_code"] = gdf["desokod"] if "desokod" in gdf.columns else None
+    gdf["regso_code"] = gdf["regsokod"] if "regsokod" in gdf.columns else None
+    gdf["county_code"] = gdf["lanskod"] if "lanskod" in gdf.columns else None
+    gdf["municipal_code"] = gdf["kommunkod"] if "kommunkod" in gdf.columns else None
+    gdf["municipality"] = gdf["kommunnamn"] if "kommunnamn" in gdf.columns else None
     gdf["version"] = gdf["version"] if "version" in gdf.columns else None
+
+    # Area, population m.fl. finns ej i filen, men skapas som tomma fält för konsistens
+    gdf["area_ha"] = None
+    gdf["area_km2"] = None
+    gdf["population"] = None
+
+    # Skapa WKT-polygon
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
+
+    # Rätt kolumnordning
     cols = [
-        "object_id", "object_identity", "deso_code", "municipal_code", "municipality", "county_code", "county",
-        "version", "area_ha", "area_km2", "population", "geom_wkt"
+        "object_id", "object_identity", "deso_code", "regso_code", "county_code", "municipal_code",
+        "municipality", "version", "area_ha", "area_km2", "population", "geom_wkt"
     ]
-    gdf = gdf[[c for c in cols if c in gdf.columns]]
+    gdf = gdf[cols]
+
     conn = sqlite3.connect(db_path)
     gdf.to_sql("deso", conn, if_exists="replace", index=False)
     conn.close()
     print(f"{len(gdf)} DeSO-zoner inlästa och sparade i databasen.")
+
 
 def extract_sni_code(s):
     if not isinstance(s, str):
