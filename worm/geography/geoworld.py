@@ -94,19 +94,16 @@ class GeoWorld:
         return df.columns.tolist()
 
     def _load_entities(self, table, code_col, name_col, entity_class):
-        import sqlite3
-        import pandas as pd
-        from shapely import wkt
-
         conn = sqlite3.connect(self.db_path)
         df = pd.read_sql(f"SELECT * FROM {table}", conn)
         conn.close()
         entities = {}
         for _, row in df.iterrows():
-            code = row[code_col]
-            name = row[name_col]
-            polygon = wkt.loads(row["geom_wkt"])  # Alltid denna kolumn!
-            entities[code] = entity_class(code, name, polygon)
+            code = str(row[code_col]).strip()
+            name = str(row[name_col]).strip() if row[name_col] is not None else ""
+            polygon = wkt.loads(row["geom_wkt"])
+            extra = {k: row[k] for k in row.index if k not in [code_col, name_col, "geom_wkt"]}
+            entities[code] = entity_class(code, name, polygon, **extra)
         return entities
 
 

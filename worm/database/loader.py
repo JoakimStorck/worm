@@ -94,18 +94,32 @@ def load_small_localities_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     print(f"{len(gdf)} small localities loaded and saved to database.")
 
 def load_commercial_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
+    import geopandas as gpd
+    import pandas as pd
+    import sqlite3
+
     gdf = gpd.read_file(gpkg_path)
     print("Commercial zones - columns:", gdf.columns)
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
 
-    # Se till att id alltid finns
-    gdf["id"] = gdf["ho_kod"].astype(str) if "ho_kod" in gdf.columns else gdf.index.astype(str)
+    # Säkerställ att kommunkod är STRÄNG
+    gdf["kommunkod"] = gdf["kommunkod"].astype(str)
 
-    # Skapa rätt kolumner eller ersätt om de saknas
+    # Ladda kommunregister och säkerställ sträng
+    conn = sqlite3.connect(db_path)
+    municipalities = pd.read_sql("SELECT municipal_code, municipality FROM municipalities", conn)
+    municipalities["municipal_code"] = municipalities["municipal_code"].astype(str)
+    conn.close()
+
+    # Lägg in kommunnamn via merge
+    gdf = gdf.merge(municipalities, how="left", left_on="kommunkod", right_on="municipal_code")
+    print("Efter merge:", gdf[["kommunkod", "municipality"]].head(5))
+
+    # Skapa rätt kolumner
     gdf["id"] = gdf["ho_kod"].astype(str)
     gdf["zone_code"] = gdf["ho_kod"].astype(str)
     gdf["municipality_code"] = gdf["kommunkod"].astype(str)
-    gdf["municipality"] = gdf["kommunnamn"].astype(str)
+    # gdf["municipality"] är nu från merge
     gdf["county_code"] = gdf["lankod"].astype(str)
     gdf["county"] = None  # Fyll om det finns länsnamn
     gdf["num_employed"] = gdf["anst_handel"]
@@ -115,29 +129,57 @@ def load_commercial_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf["year"] = gdf["ar"]
     gdf["valid_from"] = gdf["validfrom"]
     gdf["valid_to"] = gdf["validto"]
-    gdf["geom_wkt"] = gdf.geometry.to_wkt()
 
-    # Ordning enligt nya schemat
+    # Kolumnordning enligt schema
     cols = [
         "id", "uuid", "zone_code", "municipality_code", "municipality", "county_code", "county",
-        "num_employed", "num_workplaces", "num_subzones", "area_ha", "year", "valid_from", "valid_to", "geom_wkt"
+        "num_employed", "num_workplaces", "num_subzones", "area_ha", "year",
+        "valid_from", "valid_to", "geom_wkt"
     ]
+    for c in cols:
+        if c not in gdf.columns:
+            gdf[c] = None
     gdf = gdf[cols]
 
+    # Spara till SQLite
     conn = sqlite3.connect(db_path)
     gdf.to_sql("commercial_zones", conn, if_exists="replace", index=False)
     conn.close()
     print(f"{len(gdf)} commercial zones loaded and saved to database.")
+
 
 def load_business_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf = gpd.read_file(gpkg_path)
     print("Business zones - columns:", gdf.columns)
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
 
+    # Säkerställ STRÄNG och ledande nollor
+    gdf["kommunkod"] = gdf["kommunkod"].astype(str).str.zfill(4)
+
+    # Ladda kommunregister och säkerställ sträng + ledande nollor
+    conn = sqlite3.connect(db_path)
+    municipalities = pd.read_sql("SELECT municipal_code, municipality FROM municipalities", conn)
+    municipalities["municipal_code"] = municipalities["municipal_code"].astype(str).str.zfill(4)
+    conn.close()
+
+    # DEBUG: Skriv ut Faluns kod och namn i båda tabeller innan merge
+    print("\n=== DEBUG: Falun i gdf ===")
+    print(gdf[gdf["kommunkod"] == "2080"][["kommunkod", "vo_kod", "geometry"]].head(3))
+    print("\n=== DEBUG: Falun i municipalities ===")
+    print(municipalities[municipalities["municipal_code"] == "2080"])
+
+    gdf = gdf.merge(municipalities, how="left", left_on="kommunkod", right_on="municipal_code")
+
+    # Efter merge: Skriv ut första rader samt alla rader för Falun
+    print("\nEfter merge, första 5 rader:")
+    print(gdf[["kommunkod", "municipality", "municipal_code"]].head(5))
+
+    print("\nEfter merge, Falun:")
+    print(gdf[gdf["kommunkod"] == "2080"][["kommunkod", "municipality", "municipal_code", "vo_kod"]].head(10))
+
     gdf["id"] = gdf["vo_kod"].astype(str)
     gdf["zone_code"] = gdf["vo_kod"].astype(str)
     gdf["municipality_code"] = gdf["kommunkod"].astype(str)
-    gdf["municipality"] = gdf["kommunnamn"].astype(str) if "kommunnamn" in gdf.columns else None
     gdf["county_code"] = gdf["lankod"].astype(str)
     gdf["county"] = None
     gdf["zone_type"] = gdf["omradestyp"] if "omradestyp" in gdf.columns else None
@@ -148,37 +190,21 @@ def load_business_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf["year"] = gdf["ar"]
     gdf["valid_from"] = gdf["validfrom"]
     gdf["valid_to"] = gdf["validto"]
-    gdf["geom_wkt"] = gdf.geometry.to_wkt()
 
-
-    # Rätt kolumnordning enligt schema
     cols = [
-        "id",               # Primärnyckel (zone_code)
-        "uuid",             # UUID
-        "zone_code",        # Verksamhetsområdeskod (vo_kod)
-        "municipality_code",# Kommunnummer (kommunkod)
-        "municipality",     # Kommunnamn (kommunnamn)
-        "county_code",      # Länskod (lankod)
-        "county",           # Länsnamn (None om det inte finns)
-        "zone_type",        # Områdestyp (omradestyp)
-        "num_employed",     # Antal anställda (anstallda)
-        "num_workplaces",   # Antal arbetsställen (arbetsstallen)
-        "main_industry",    # Största bransch (storstabransch)
-        "area_ha",          # Area i hektar (area_ha)
-        "year",             # Årtal (ar)
-        "valid_from",       # Giltig från (validfrom)
-        "valid_to",         # Giltig till (validto)
-        "geom_wkt"          # Polygon (WKT)
+        "id", "uuid", "zone_code", "municipality_code", "municipality", "county_code", "county",
+        "zone_type", "num_employed", "num_workplaces", "main_industry",
+        "area_ha", "year", "valid_from", "valid_to", "geom_wkt"
     ]
-
-
+    for c in cols:
+        if c not in gdf.columns:
+            gdf[c] = None
     gdf = gdf[cols]
 
     conn = sqlite3.connect(db_path)
     gdf.to_sql("business_zones", conn, if_exists="replace", index=False)
     conn.close()
     print(f"{len(gdf)} business zones loaded and saved to database.")
-
 
 def load_leisure_house_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf = gpd.read_file(gpkg_path)

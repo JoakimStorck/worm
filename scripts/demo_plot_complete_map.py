@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon as MplPolygon
 from shapely.geometry import Polygon, MultiPolygon
 
-def plot_geoworld_layers(geoworld, layers=("municipalities", "urban_areas", "business_zones")):
+def plot_geoworld_layers(geoworld, layers=("municipalities","urban_areas", "business_zones")):
     fig, ax = plt.subplots(figsize=(10, 10))
 
     colors = {
@@ -19,10 +19,12 @@ def plot_geoworld_layers(geoworld, layers=("municipalities", "urban_areas", "bus
 
     for layer in layers:
         if not hasattr(geoworld, layer):
+            print("Warning: GeoWorld does not have layer '%s'." % layer)
             continue
         for entity in getattr(geoworld, layer).values():
             poly = entity.polygon
             if poly is None:
+                print("Warning: Entity %s in layer %s has no polygon data." % (entity.id, layer))
                 continue
             if isinstance(poly, (MultiPolygon,)):
                 for subpoly in poly.geoms:
@@ -45,4 +47,6 @@ def plot_geoworld_layers(geoworld, layers=("municipalities", "urban_areas", "bus
 # --- ANVÄNDNING ---
 from worm.geography.geoworld import GeoWorld
 gw = GeoWorld("data/worm.sqlite3")
-plot_geoworld_layers(gw, layers=("municipalities", "urban_areas", "business_zones"))
+
+plot_geoworld_layers(gw, layers=("municipalities",))
+
