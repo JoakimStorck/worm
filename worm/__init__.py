@@ -1,4 +1,3 @@
-
 """
 WORM – Worker-Occupation-Region Model
 
@@ -8,10 +7,13 @@ Ett forskningspaket för simulering av arbetsmarknader med fokus på:
 - Matchning
 
 Moduler:
-- agents
-- geo
+- agents (Worker)
+- jobs (Job)
+- employers (Employer)
+- places (Place, Residence, Workplace)
 - occupation
 - matching
+- generate
 - plotting
 """
 
@@ -19,8 +21,17 @@ import os
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
-from .agents import Worker, Job, Employer, generate_workers, generate_employers
-from .geo import Geography
+# Individer (arbetstagare)
+from .agents import Worker
+# Jobb
+from .jobs import Job
+# Arbetsgivare
+from .employers import Employer
+# Genereringsfunktioner
+from .generate import generate_employers, generate_jobs, generate_workers
+# Platser/geografi
+from .geography.places import Place, Residence, Workplace
+# Yrkesrelaterade funktioner (exempel)
 from .occupation import compute_utility
+# Matchning
 from .matching import match_workers_to_jobs
-

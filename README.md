@@ -12,6 +12,38 @@ The project bridges the gap between real-world labor market data and agent-based
 
 ---
 
+## Scalability Metrics & Performance Goals
+
+WORM är utformat för att **hantera simuleringar med 100 000–1 000 000 agenter** på en vanlig workstation/server. Projektets infrastruktur och kodstruktur är explicit anpassad för att möjliggöra effektiv simulering av stora, event-drivna arbetsmarknadsmodeller – både vad gäller minne, processor och IO.
+
+### **Övergripande mål**
+
+* **Minnesanvändning:**
+  Optimerad datamodell (pandas DataFrames, numpy-arrayer, ID-baserad länkning) ska möjliggöra att 1e5–1e6 agenter kan laddas och hanteras i RAM på en dator med 16–32 GB RAM.
+* **Eventhantering:**
+  Event queue och simulering ska klara av att processa >10 000 events/sekund (batchvis) i typiska scenarion, även för storleksordningen 1e6 events.
+* **Lagring & export:**
+  Allt data (agenter, events, resultat) ska kunna exporteras och laddas in snabbt via kolumnformat (t.ex. Parquet), utan flaskhalsar från Python-objekt.
+* **Simuleringstid:**
+  Exempelsimulering med 100 000 agenter och 1 000 000 events ska kunna genomföras på < 15 minuter på modern workstation (2024 standard).
+
+### **Mätpunkter och tester**
+
+* **Memory footprint:**
+  Redovisas och testas vid varje release för populationsstorlekar 1e4, 1e5 och 1e6 (se AP10c i TODO).
+* **Batch/event throughput:**
+  Resultat från prestandatester dokumenteras i \[AP10b/AP10c] och loggas i repo/wikis.
+* **Demo scripts:**
+  Exempelsimuleringar, benchmarks och visualiseringar publiceras som demo-notebooks och scripts (se AP10e).
+* **Testsvit:**
+  Alla centrala datamodeller, agentbatcher, eventhantering och IO testas med pytest eller motsvarande.
+
+### **Plan för fortsatt optimering**
+
+Se \[AP10: Simulation Infrastructure & Scalability] i TODO för detaljer om parallellisering, distribuerad körning och batchhantering. **Vid behov av större skala kan simulering delas upp batchvis per region eller tidsintervall, och optimeras för multiprocessor/multicore.**
+
+---
+
 ## 📐 Scope
 
 * **Synthetic labor market modeling:** Simulate workers, jobs, workplaces, and commuting at the level of municipalities, regions, and user-defined zones.
@@ -108,3 +140,7 @@ Contributions are welcome! Please open an issue or submit a pull request.
 ## 📬 Contact
 
 For questions or suggestions, please contact [Joakim Storck](https://github.com/JoakimStorck).
+
+---
+
+*Senast uppdaterad: 2025-06-02. Se TODO.md för aktuell status och detaljer per arbetspaket.*

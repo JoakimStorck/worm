@@ -1,7 +1,8 @@
 
 import numpy as np
 import math
-from .agents import Worker, Job
+from worm.agents import Worker
+from worm.jobs import Job
 
 def angular_distance(xi1, xi2):
     diff = abs(xi1 - xi2)

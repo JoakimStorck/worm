@@ -8,6 +8,9 @@
 * Store all data and results in a local SQLite database for reproducibility
 * Provide tools for matching, commuting, and analysis of labor market dynamics
 * Support scenario testing and stepwise demos for each core function
+* All modellering och simulering utformas så att 1e5–1e6 agenter kan hanteras effektivt med pandas/numpy och event queue.
+* Händelsedriven simulering bygger på ID-baserade länkar och batchbearbetning.
+
 
 ---
 
@@ -61,14 +64,15 @@ Här kommer ett färdigt block anpassat för din TODO-struktur, med checkboxar. 
 
 ### **a) Grund**
 
-* [ ] Ersätt rutnät med verklig geografi på alla nivåer: kommun, DeSO, tätort, småort, verksamhetsområde
-* [ ] Definiera klasser/SQL-schema för samtliga entiteter (med polygon/centroid)
-* [ ] Läs in och visualisera polygoner från SCB för Falun
-* [ ] **Demo:** Plot overlay av alla geografier i Falun (kommun, DeSO, urban area, workplace area)
+* [x] Ersätt rutnät med verklig geografi på alla nivåer: kommun, DeSO, tätort, småort, verksamhetsområde
+* [x] Definiera klasser/SQL-schema för samtliga entiteter (med polygon/centroid)
+* [x] Läs in och visualisera polygoner från SCB för Falun
+* [x] **Demo:** Plot overlay av alla geografier i Falun (kommun, DeSO, urban area, workplace area)
 
 ### **b) Utbyggnad**
 
 * [ ] Implementera Place-klass: unikt id, (x, y), länkar till överordnad geografi
+* [ ] Optimera platser, *Place*, för effektiv simulering genom vektorisering och ID-länkning.
 * [ ] Slumpa/placera punkter för bostad/jobb inom polygon via point-in-polygon
 * [ ] Koppla jobb till verksamhetsområden efter SNI om möjligt
 * [ ] **Demo:** Visualisera samtliga Place-objekt (punkter) för en kommun och deras kopplingar
@@ -81,7 +85,28 @@ Här kommer ett färdigt block anpassat för din TODO-struktur, med checkboxar. 
 
 ---
 
-## **AP3. Generation of Typmunicipalities and Regions**
+## **AP3. Visualization & GUI**
+
+### **a) Grund**
+
+* [ ] Skapa visualiseringar: karta med platser, matchning, pendlingsflöden (matplotlib/plotly)
+* [ ] **Demo:** Visa karta och enkel nätverksgraf för en kommun
+
+### **b) Flexibel visualisering**
+
+* [ ] Implementera occupation space polar plots för valda zoner/områden
+* [ ] Utveckla plattform-oberoende plot-interface: stöd för karta/nätverk/polar vy
+* [ ] **Demo:** Byt vy mellan karta, nätverk och occupation polar plot för valfritt urval
+
+### **c) Dashboard och export**
+
+* [ ] Bygg GUI/web-app med interaktiv vyväxling (Dash/Streamlit/Panel)
+* [ ] Exportera resultat och bilder till PNG, SVG, GeoJSON, CSV
+* [ ] **Demo:** Byt vy “live”, spara och ladda urval/resultat från GUI
+
+---
+
+## **AP4. Generation of Typmunicipalities and Regions**
 
 ### **a) Grund**
 
@@ -102,7 +127,7 @@ Här kommer ett färdigt block anpassat för din TODO-struktur, med checkboxar. 
 
 ---
 
-## **AP4. Allocation of Workplaces and Residences**
+## **AP5. Allocation of Workplaces and Residences**
 
 ### **a) Grund**
 
@@ -122,7 +147,7 @@ Här kommer ett färdigt block anpassat för din TODO-struktur, med checkboxar. 
 
 ---
 
-## **AP5. Spatial Query & Efficient Search**
+## **AP6. Spatial Query & Efficient Search**
 
 ### **a) Grund**
 
@@ -141,7 +166,7 @@ Här kommer ett färdigt block anpassat för din TODO-struktur, med checkboxar. 
 
 ---
 
-## **AP6. Matchning & Statisk Simulering**
+## **AP7. Matchning & Statisk Simulering**
 
 ### **a) Grund**
 
@@ -163,11 +188,14 @@ Här kommer ett färdigt block anpassat för din TODO-struktur, med checkboxar. 
 
 ---
 
-## **AP7. Dynamisk Simulering (Event-driven)**
+## **AP8. Dynamisk Simulering (Event-driven)**
 
 ### **a) Infrastruktur & grundläggande events**
 
 * [ ] Implementera enkel event loop/simulationsmotor (SimPy eller egen)
+* [ ] Alla agent- och företagstillstånd hanteras primärt i DataFrame/tabell
+* [ ] Agentobjekt skapas endast “on demand” för event. 
+* [ ] Event queue är ID-baserad och minimerar objektpersistens i minnet.
 * [ ] Skapa loggning av alla events till fil/konsol (eventtyp, tid, agent/företag, plats)
 * [ ] Definiera och implementera *individ-event*:
 
@@ -213,7 +241,7 @@ Här kommer ett färdigt block anpassat för din TODO-struktur, med checkboxar. 
 
 ---
 
-## **AP8. Commuting & Flows**
+## **AP9. Commuting & Flows**
 
 ### **a) Grund**
 
@@ -234,26 +262,34 @@ Här kommer ett färdigt block anpassat för din TODO-struktur, med checkboxar. 
 
 ---
 
-## **AP9. Visualization & GUI**
+## **AP10. Simulation Infrastructure & Scalability**
 
-### **a) Grund**
+### **a) Datamodell och agenthantering**
+- [ ] Utforma agent-tillstånd för att kunna lagras i DataFrame/tabell (alla agenter har unik ID, tillstånd i kolumner)
+- [ ] Designa Place-tabell och indexering för snabb access
+- [ ] Säkerställ att alla relationer mellan agenter, företag, platser och event är ID-baserade (inte direkta objektlänkar)
 
-* [ ] Skapa visualiseringar: karta med platser, matchning, pendlingsflöden (matplotlib/plotly)
-* [ ] **Demo:** Visa karta och enkel nätverksgraf för en kommun
+### **b) Händelsehantering**
+- [ ] Implementera event queue som heap/priority queue
+- [ ] Definiera datastruktur för event: (tid, agent_id/org_id, eventtyp, metadata)
+- [ ] Benchmarka exekveringstid för 1e4, 1e5, 1e6 events i testmiljö
 
-### **b) Flexibel visualisering**
+### **c) Prestanda och minne**
+- [ ] Testa minnesfotavtryck och bearbetningstid för 1e5 och 1e6 agenter med numpy/pandas
+- [ ] Definiera och dokumentera checkpoints och lagring (Parquet/HDF5)
+- [ ] Lägg till stöd för batchvis eller partiell laddning vid riktigt stora populationer
 
-* [ ] Implementera occupation space polar plots för valda zoner/områden
-* [ ] Utveckla plattform-oberoende plot-interface: stöd för karta/nätverk/polar vy
-* [ ] **Demo:** Byt vy mellan karta, nätverk och occupation polar plot för valfritt urval
+### **d) Parallellisering och distribuerad körning**
+- [ ] Förbered kodbasen för möjlig delning av agenter mellan flera trådar/processer
+- [ ] Utforska möjligheter till enklare parallellsimulering på batch-nivå (t.ex. per kommun)
+- [ ] Dokumentera vilka delar som kan optimeras vidare för multiprocess/stor skala
 
-### **c) Dashboard och export**
-
-* [ ] Bygg GUI/web-app med interaktiv vyväxling (Dash/Streamlit/Panel)
-* [ ] Exportera resultat och bilder till PNG, SVG, GeoJSON, CSV
-* [ ] **Demo:** Byt vy “live”, spara och ladda urval/resultat från GUI
+### **e) Skalbarhet: Demo och stresstest**
+- [ ] **Demo:** Skapa och exekvera simulering med 100 000 agenter, logga tid/minnesanvändning
+- [ ] **Demo:** Visa exempelflöde för större simulering (t.ex. alla individer i tre kommuner)
 
 ---
+
 
 **Tips:**
 
@@ -263,5 +299,5 @@ Här kommer ett färdigt block anpassat för din TODO-struktur, med checkboxar. 
 
 ---
 
-**Senast uppdaterad: 2025-05-31**
+**Senast uppdaterad: 2025-06-02**
 
