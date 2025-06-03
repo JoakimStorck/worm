@@ -1,18 +1,17 @@
 
 from dataclasses import dataclass, field
 from typing import List, Tuple
-import numpy as np
-import uuid
+from typing import Optional, Dict
 
-from dataclasses import dataclass
-from typing import Optional
 
 @dataclass
 class Worker:
     id: str
     chi: float
     xi: float
-    residence_id: str                 # FK till Residence/Place
-    workplace_id: Optional[str] = None  # FK till Workplace/Place, None=arbetslös
-    work_status: str = 'unemployed'     # 'employed' eller 'unemployed'
-
+    h: float = 0.0
+    residence_id: str                 # FK till Residence
+    workplace_id: Optional[str] = None
+    occupation_code: Optional[str] = None   # Om du vill ange “yrkesbakgrund”
+    skill_profile: Optional[Dict[str, float]] = None
+    work_status: str = 'unemployed'

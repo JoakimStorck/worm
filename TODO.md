@@ -85,12 +85,45 @@ Här kommer ett färdigt block anpassat för din TODO-struktur, med checkboxar. 
 
 ---
 
+Absolut! Här är en **uppdaterad och mer detaljerad TODO för AP3a – Visualisering** med konkreta delmoment och demos, utifrån var du står nu:
+
+---
+
+
+---
+
 ## **AP3. Visualization & GUI**
 
-### **a) Grund**
+### **a) Grund – Steg-för-steg**
 
-* [ ] Skapa visualiseringar: karta med platser, matchning, pendlingsflöden (matplotlib/plotly)
-* [ ] **Demo:** Visa karta och enkel nätverksgraf för en kommun
+1. **Slumpa och placera platser inom kommunpolygon**
+
+   * [x] Slumpa och placera *Residence* och *Workplace* inom vald kommuns polygon (ex: Falun) med hjälp av GeoPandas/Shapely.
+   * [x] Visualisera dessa punkter ovanpå kommunpolygonen (matplotlib).
+   * [x] Demo: *Plotta kommunpolygon + bostäder + arbetsplatser.*
+
+2. **Generera och koppla agenter och jobb**
+
+   * [x] Skapa *Workers* kopplade till Residence.
+   * [x] Skapa *Jobs* kopplade till Workplace.
+   * [x] Matcha (exempelvis 1:1) Workers till Jobs, koppla genom ID.
+   * [x] Demo: *Plotta karta med pendlingslinjer (bostad → arbetsplats).*
+
+3. **Utveckla fler lager och kartlager**
+
+   * [ ] Lägg till andra lager: urban\_areas, business\_zones, tätorter osv.
+   * [ ] Visualisera overlay av flera geografiska lager tillsammans med punkter och linjer.
+   * [ ] Demo: *Plotta flera lager samtidigt med tydliga färger och labels.*
+
+4. **Utbyggnad och interaktivitet**
+
+   * [ ] Lägg till interaktivitet: filtrering på agenttyp, hover med info, färgkoder för olika occupation clusters.
+   * [ ] Skapa wrapper-funktion så att hela kedjan går att återanvända för andra kommuner/scenarier.
+
+5. **Analys och statistik**
+
+   * [ ] Räkna och visualisera statistik: antal pendlare per arbetsplats, arbetslöshet, geografisk klustring m.m.
+   * [ ] Demo: *Visa enklare diagram/kartor med summeringar.*
 
 ### **b) Flexibel visualisering**
 

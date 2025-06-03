@@ -1,7 +1,7 @@
 
 from worm.agents import Worker
 from worm.employers import Employer
-from worm.occupation import compute_utility
+from worm.occupations import compute_utility
 from typing import List, Tuple
 
 def match_workers_to_jobs(workers: List[Worker], employers: List[Employer], alpha=1.0) -> List[Tuple[Worker, object, float]]:

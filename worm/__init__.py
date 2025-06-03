@@ -32,6 +32,6 @@ from .generate import generate_employers, generate_jobs, generate_workers
 # Platser/geografi
 from .geography.places import Place, Residence, Workplace
 # Yrkesrelaterade funktioner (exempel)
-from .occupation import compute_utility
+from .occupations import compute_utility
 # Matchning
 from .matching import match_workers_to_jobs

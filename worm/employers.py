@@ -9,3 +9,13 @@ class Employer:
     workplace_ids: List[str]
     job_profile: dict
 
+
+@dataclass
+class Employment:
+    id: str
+    worker_id: str
+    job_id: str
+    employer_id: str
+    start_time: int                   # Tidssteg eller datetime
+    end_time: Optional[int] = None
+
