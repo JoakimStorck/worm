@@ -118,20 +118,20 @@ def plot_full_occupation_space_polar(
     fig, ax = plt.subplots(figsize=figsize, subplot_kw={'projection': 'polar'})
 
     cmap = get_cmap('tab20')
-    clusters = sorted(df['Cluster'].unique())
+    clusters = sorted(df['cluster'].unique())
     colors = {cluster: cmap(cluster % 20) for cluster in clusters}
 
     # Plot each occupation as a small dot
     for cluster in clusters:
-        sub_df = df[df['Cluster'] == cluster]
-        ax.scatter(sub_df['Xi'], sub_df['Chi'], s=10, color=colors[cluster], alpha=0.8)
+        sub_df = df[df['cluster'] == cluster]
+        ax.scatter(sub_df['xi'], sub_df['chi'], s=10, color=colors[cluster], alpha=0.8)
 
     if clusterlabels:
         # Display cluster ID near visual centroid
         for cluster in clusters:
-            sub_df = df[df['Cluster'] == cluster]
-            mean_xi = sub_df['Xi'].mean()
-            mean_chi = sub_df['Chi'].mean()
+            sub_df = df[df['cluster'] == cluster]
+            mean_xi = sub_df['xi'].mean()
+            mean_chi = sub_df['chi'].mean()
             ax.text(mean_xi, mean_chi, str(cluster), fontsize=8, ha='center', va='center', color='gray')
 
     if not show_axes:
@@ -144,7 +144,7 @@ def plot_full_occupation_space_polar(
     legend_elements = [
         Line2D([0], [0], marker='o', color='w',
                markerfacecolor=colors[cluster], markersize=6,
-               label=f"{cluster}: {df[df['Cluster'] == cluster]['Cluster Name'].iloc[0]}")
+               label=f"{cluster}: {df[df['cluster'] == cluster]['cluster_name'].iloc[0]}")
         for cluster in clusters
     ]
 

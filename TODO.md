@@ -71,8 +71,8 @@ Här kommer ett färdigt block anpassat för din TODO-struktur, med checkboxar. 
 
 ### **b) Utbyggnad**
 
-* [ ] Implementera Place-klass: unikt id, (x, y), länkar till överordnad geografi
-* [ ] Optimera platser, *Place*, för effektiv simulering genom vektorisering och ID-länkning.
+* [x] Implementera Place-klass: unikt id, (x, y), länkar till överordnad geografi
+* [/] Optimera platser, *Place*, för effektiv simulering genom vektorisering och ID-länkning.
 * [ ] Slumpa/placera punkter för bostad/jobb inom polygon via point-in-polygon
 * [ ] Koppla jobb till verksamhetsområden efter SNI om möjligt
 * [ ] **Demo:** Visualisera samtliga Place-objekt (punkter) för en kommun och deras kopplingar
@@ -127,7 +127,7 @@ Absolut! Här är en **uppdaterad och mer detaljerad TODO för AP3a – Visualis
 
 ### **b) Flexibel visualisering**
 
-* [ ] Implementera occupation space polar plots för valda zoner/områden
+* [x] Implementera occupation space polar plots för valda zoner/områden
 * [ ] Utveckla plattform-oberoende plot-interface: stöd för karta/nätverk/polar vy
 * [ ] **Demo:** Byt vy mellan karta, nätverk och occupation polar plot för valfritt urval
 
@@ -164,8 +164,8 @@ Absolut! Här är en **uppdaterad och mer detaljerad TODO för AP3a – Visualis
 
 ### **a) Grund**
 
-* [ ] Fördela arbetsplatser/bostäder slumpmässigt i varje zon (Dirichlet/random)
-* [ ] **Demo:** Visa karta med slumpfördelade jobb/bostäder för Falun
+* [x] Fördela arbetsplatser/bostäder slumpmässigt i varje zon (Dirichlet/random)
+* [x] **Demo:** Visa karta med slumpfördelade jobb/bostäder för Falun
 
 ### **b) Utbyggnad**
 
