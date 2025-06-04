@@ -101,6 +101,7 @@ Absolut! Här är en **uppdaterad och mer detaljerad TODO för AP3a – Visualis
    * [x] Slumpa och placera *Residence* och *Workplace* inom vald kommuns polygon (ex: Falun) med hjälp av GeoPandas/Shapely.
    * [x] Visualisera dessa punkter ovanpå kommunpolygonen (matplotlib).
    * [x] Demo: *Plotta kommunpolygon + bostäder + arbetsplatser.*
+   * [ ] Implementera “wrapper-funktion” för "plot\_falun" eller liknande.
 
 2. **Generera och koppla agenter och jobb**
 
@@ -111,19 +112,19 @@ Absolut! Här är en **uppdaterad och mer detaljerad TODO för AP3a – Visualis
 
 3. **Utveckla fler lager och kartlager**
 
-   * [ ] Lägg till andra lager: urban\_areas, business\_zones, tätorter osv.
-   * [ ] Visualisera overlay av flera geografiska lager tillsammans med punkter och linjer.
-   * [ ] Demo: *Plotta flera lager samtidigt med tydliga färger och labels.*
+   * [ ] Lägg till overlay av urban\_areas
+   * [ ] Lägg till overlay av business\_zones
+   * [ ] Lägg till tätorter och andra lager (kan markeras avklarat vartefter du lägger till lager)
+   * [ ] Visualisera färgkoder för olika occupation clusters på karta *(denna kan ibland komma efter statistik, men kan även bakas in här)*
+   * [ ] **Demo:** Plotta flera lager samtidigt med tydliga färger och labels.
 
-4. **Utbyggnad och interaktivitet**
+4. **Analys och statistik**
 
-   * [ ] Lägg till interaktivitet: filtrering på agenttyp, hover med info, färgkoder för olika occupation clusters.
-   * [ ] Skapa wrapper-funktion så att hela kedjan går att återanvända för andra kommuner/scenarier.
-
-5. **Analys och statistik**
-
-   * [ ] Räkna och visualisera statistik: antal pendlare per arbetsplats, arbetslöshet, geografisk klustring m.m.
-   * [ ] Demo: *Visa enklare diagram/kartor med summeringar.*
+  * [ ] Beräkna antal pendlare per arbetsplats *(statistik)*
+  * [ ] Beräkna arbetslöshet per område *(statistik)*
+  * [ ] Visualisera fördelning av arbetslöshet/pendling *(diagram/histogram/map)*
+  * [ ] Beräkna/visa geografisk klustring (exempel: heatmap eller spatial autocorrelation)
+  * [ ] Demo: *Sammanställ och visa summeringar, både i tabell och karta*
 
 ### **b) Flexibel visualisering**
 
@@ -133,6 +134,9 @@ Absolut! Här är en **uppdaterad och mer detaljerad TODO för AP3a – Visualis
 
 ### **c) Dashboard och export**
 
+* [ ] Lägg till interaktivitet: filtrering på agenttyp, hover med info.
+* [ ] Skapa wrapper-funktion så att hela kedjan går att återanvända för andra kommuner/scenarier.
+* [ ] **Demo:** Plotta karta med filtrering och interaktivitet.
 * [ ] Bygg GUI/web-app med interaktiv vyväxling (Dash/Streamlit/Panel)
 * [ ] Exportera resultat och bilder till PNG, SVG, GeoJSON, CSV
 * [ ] **Demo:** Byt vy “live”, spara och ladda urval/resultat från GUI
@@ -204,6 +208,7 @@ Absolut! Här är en **uppdaterad och mer detaljerad TODO för AP3a – Visualis
 ### **a) Grund**
 
 * [ ] Implementera grundläggande matching mellan arbetssökande och jobb på samma plats (statisk snapshot)
+
 * [ ] **Demo:** Visa matchningsresultat för Falun (antal matchade/omatchade per plats)
 * [ ] Lägg till egenskapsbaserad matchning (skills, occupation, preferenser – men statiskt)
 * [ ] **Demo:** Visa egenskapsbaserad matchning för Falun, jämför olika algoritmer

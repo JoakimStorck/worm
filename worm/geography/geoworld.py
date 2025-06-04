@@ -1,4 +1,8 @@
+# geoworld.py
+
+
 import sqlite3
+import geopandas as gpd
 import pandas as pd
 from shapely import wkt
 
@@ -27,16 +31,53 @@ def pick_first_existing(columns, candidates, fallback_idx=0):
             return col
     return columns[fallback_idx]
 
-
+# GeoWorld-klass som hanterar geografiska data från en SQLite-databas
+# och tillhandahåller metoder för att hämta olika geografiska lager.
 class GeoWorld:
     def __init__(self, db_path):
         self.db_path = db_path
-        self.municipalities = self._load_municipalities()
-        self.urban_areas = self._load_urban_areas()
-        self.small_localities = self._load_small_localities()
-        self.deso_zones = self._load_deso_zones()
-        self.business_zones = self._load_business_zones()
-        self.commercial_zones = self._load_commercial_zones()
+        self._cache = {}
+
+    def get_layer(self, table_name, wkt_col="geom_wkt"):
+        """
+        Hämtar ett geografiskt lager som GeoDataFrame.
+        Laddas från databas första gången, därefter från cache.
+        """
+        import sqlite3
+        query = f"SELECT * FROM {table_name}"
+        conn = sqlite3.connect(self.db_path)      # Skapa connection-objekt!
+        df = pd.read_sql(query, conn)             # Skicka connection till read_sql!
+        conn.close()
+        gdf = gpd.GeoDataFrame(df, geometry=gpd.GeoSeries.from_wkt(df[wkt_col]))
+        self._cache[table_name] = gdf
+        return gdf
+
+
+    # Snygg wrapper för att få attributstil, om du vill:
+    @property
+    def municipalities(self):
+        return self.get_layer("municipalities")
+
+    @property
+    def urban_areas(self):
+        return self.get_layer("urban_areas")
+
+    @property
+    def small_localities(self):
+        return self.get_layer("small_localities")
+
+    @property
+    def deso_zones(self):
+        return self.get_layer("deso")
+
+    @property
+    def business_zones(self):
+        return self.get_layer("business_zones")
+
+    @property
+    def commercial_zones(self):
+        return self.get_layer("commercial_zones")
+
 
     def _load_municipalities(self):
         return self._load_entities(
