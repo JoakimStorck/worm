@@ -80,7 +80,7 @@ def create_schema(db_path="data/worm.sqlite3"):
             id TEXT PRIMARY KEY,
             uuid TEXT,
             zone_code TEXT,
-            municipality_code TEXT,
+            municipal_code TEXT,
             municipality TEXT,
             county_code TEXT,
             county TEXT,
@@ -100,7 +100,7 @@ def create_schema(db_path="data/worm.sqlite3"):
             id TEXT PRIMARY KEY,
             uuid TEXT,
             zone_code TEXT,
-            municipality_code TEXT,
+            municipal_code TEXT,
             municipality TEXT,
             county_code TEXT,
             county TEXT,
@@ -186,6 +186,7 @@ def create_schema(db_path="data/worm.sqlite3"):
             FOREIGN KEY (onet_code) REFERENCES onet_occupations(onet_code)
         )
     """)
+
 
     conn.commit()
     conn.close()

@@ -1,0 +1,35 @@
+scenario_name: "Falun gradual transition"
+municipalities: ["2081"]
+start_year: 2024
+end_year: 2030
+
+n_workers:
+  by_year: {2024: 5000, 2026: 5400, 2028: 6000}
+
+education_levels:
+  low:
+    curve: "linear"
+    start: 0.30
+    end: 0.20
+  medium: 0.50
+  high:
+    by_year: {2024: 0.20, 2027: 0.25, 2030: 0.30}
+
+sex_ratio: {curve: "step", changes: [{year: 2027, value: 0.55}] }
+occupation_distribution: "realistic"
+job_spatial_distribution: "urban_area"
+seed: 12345
+
+hiring_policy: "seniority_first"
+wage_policy: "market_adjust"
+
+events:
+  - year: 2026
+    type: firm_entry
+    employer:
+      name: "Gigafabriken"
+      size: 800
+      sni_code: "29"
+  - year: 2028
+    type: firm_exit
+    employer_name: "Lilla Verkstan AB"

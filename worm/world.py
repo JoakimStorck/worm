@@ -4,39 +4,39 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-
 import pandas as pd
 from worm.geography.geoworld import GeoWorld
+from worm.plotting.plot_selected_municipalities import plot_selected_municipalities
 
 class World:
-    def __init__(self, db_path, scope=None):
+    def __init__(self, db_path, geoworld=None, scope=None, workers=None, jobs=None, employers=None, events=None):
         """
-        World samlar all kärndata och hanterar simulering för valfri region.
-        scope: kommun- eller regionkod (str, lista eller None för allt).
+        World samlar all kärndata och hanterar simulering för valfri region eller scenario.
+        - scope: kommun- eller regionkod (str, lista eller None för allt).
+        - workers, jobs, employers: DataFrames från ScenarioBuilder eller genererade direkt
+        - events: event queue (t.ex. från ScenarioBuilder/scenariofil)
         """
         self.db_path = db_path
         self.scope = scope  # T.ex. ["2081", "2086"] för Falun+Borlänge, None för hela landet
 
         # Geografi (navet för spatiala frågor)
-        self.geoworld = GeoWorld(db_path)
+        self.geoworld = geoworld if geoworld is not None else GeoWorld(db_path)
 
-        # DataFrames för alla agenter/entiteter (batch, snabbt, skalbart)
-        self.workers = self.load_workers_df()
-        self.jobs = self.load_jobs_df()
-        self.employers = self.load_employers_df()
+        # Agentdata – läs från scenario om det finns, annars från db (tom sim = ingen agentdata)
+        self.workers = workers if workers is not None else self.load_workers_df()
+        self.jobs = jobs if jobs is not None else self.load_jobs_df()
+        self.employers = employers if employers is not None else self.load_employers_df()
 
-        # Event queue (AP8) – tomt i början, men grunden är lagd
-        self.events = pd.DataFrame(columns=["time", "agent_id", "event_type", "params"])
-        self.current_time = 0  # Starttid i simuleringen, kan vara t.ex. dagar, månader...
+        # Event queue (AP8) – från scenario, eller tom DataFrame
+        self.events = events if events is not None else pd.DataFrame(columns=["time", "agent_id", "event_type", "params"])
+        self.current_time = 0  # Starttid i simuleringen, kan vara t.ex. dagar, månader, år
 
         # Output/resultat – samlas/uppdateras löpande
         self.matchings = pd.DataFrame()
 
     def load_workers_df(self):
-        # Här skriver du effektiv SQL till DataFrame, gärna scope-filtrerat
         query = "SELECT * FROM workers"
         if self.scope:
-            # Antag att workers har kolumn 'municipal_code'
             codes = ','.join([f"'{c}'" for c in self.scope]) if isinstance(self.scope, (list, tuple)) else f"'{self.scope}'"
             query += f" WHERE municipal_code IN ({codes})"
         import sqlite3
@@ -67,19 +67,31 @@ class World:
         conn.close()
         return df
 
+    def set_scenario_data(self, workers=None, jobs=None, employers=None, events=None):
+        """
+        Ersätt agent- och eventdata med data från ScenarioBuilder.
+        """
+        if workers is not None:
+            self.workers = workers
+        if jobs is not None:
+            self.jobs = jobs
+        if employers is not None:
+            self.employers = employers
+        if events is not None:
+            self.events = events
+
     def match_workers_to_jobs(self, mode="utility"):
         """
         Batch-matchning mellan workers och jobs. 
         Byt ut logiken till utility/random/geografisk efter behov.
         """
-        # Stub/logik – byt till din matchningsfunktion!
         n = min(len(self.workers), len(self.jobs))
         matched_workers = self.workers.sample(n).reset_index(drop=True)
         matched_jobs = self.jobs.sample(n).reset_index(drop=True)
         self.matchings = pd.DataFrame({
             "worker_id": matched_workers["worker_id"],
             "job_id": matched_jobs["job_id"],
-            # Fler attribut/statistik kan fyllas på här
+            # Lägg till fler attribut/statistik om du vill
         })
         return self.matchings
 
@@ -93,7 +105,6 @@ class World:
     def process_events(self, until_time=None):
         """
         Kör igenom event queue fram till given tidpunkt.
-        (Stub – utbyggs med din eventlogik per event_type!)
         """
         if self.events.empty:
             return
@@ -118,28 +129,29 @@ class World:
         }
         return stats
 
-    def plot(self, layers=("municipalities",)):
+    def plot(self, layers=("municipalities",), municipal_codes_or_names=None):
         """
-        Enkel wrapper för att plotta karta med GeoWorld och overlay.
+        Wrapper som plottar med utvalt scenario.
+        Om municipal_codes_or_names ges (lista av koder eller namn), plottas bara dessa.
         """
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(figsize=(10, 10))
-        for layer in layers:
-            gdf = getattr(self.geoworld, layer)
-            gdf.plot(ax=ax, alpha=0.6, edgecolor="gray", linewidth=0.5, label=layer)
-        ax.set_aspect("equal")
-        ax.axis("off")
-        plt.legend()
-        plt.tight_layout()
-        plt.show()
+        plot_selected_municipalities(
+            self.geoworld,
+            codes_or_names=municipal_codes_or_names if municipal_codes_or_names else [],
+            layers=layers
+        )
 
-# Exempel på användning:
+
+# --- Exempel på användning ---
 if __name__ == "__main__":
-    world = World("data/worm.sqlite3", scope=["2081", "2086"])  # Falun+Borlänge
+    # Antingen "klassisk": läs data från db (scope kan vara kommunkod, t.ex. Falun)
+    world = World("data/worm.sqlite3", scope=["2081", "2086"])
     print("Laddat:", world.analyze())
     world.plot(layers=("municipalities", "urban_areas"))
     world.match_workers_to_jobs()
     print("Efter matchning:", world.analyze())
-    # Lägg till ett event:
-    world.add_event(time=1, agent_id=42, event_type="job_change", params={"new_job_id": 17})
-    print("Event queue:", world.events.head())
+    # ...eller: ladda in från scenario
+    # from worm.scenario_builder import ScenarioBuilder
+    # builder = ScenarioBuilder("scenarios/scenario_falun_baseline.yml", world.geoworld)
+    # workers, jobs, employers = builder.generate()
+    # world.set_scenario_data(workers, jobs, employers)
+    # world.analyze()

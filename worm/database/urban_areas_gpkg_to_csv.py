@@ -13,7 +13,7 @@ with fiona.open("data/Tatorter_2023.gpkg", layer="Tatorter_2023") as src:
             "uuid": p["uuid"],
             "urban_area_id": p["tatortskod"],
             "urban_area": p["tatort"],
-            "municipality_code": p["kommun"],
+            "municipal_code": p["kommun"],
             "municipality": p["kommunnamn"],
             "county_code": p["lan"],
             "county": p["lannamn"],

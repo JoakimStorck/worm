@@ -1,12 +1,10 @@
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# plotting/plot_selected_municipalities.py
 
 import matplotlib.pyplot as plt
 import geopandas as gpd
 from worm.geography.geoworld import GeoWorld
 
-def plot_selected_municipalities(geoworld, codes_or_names, layers=("municipalities",)):
+def plot_selected_municipalities(geoworld, codes_or_names, layers=("municipalities",), save_path=None, dpi=200, file_format=None):
     """
     Rita en eller flera kommuner, och overlaya andra lager för samma kommun(er).
     All matchning sker på kommunnummer (municipal_code) om möjligt.
@@ -81,12 +79,13 @@ def plot_selected_municipalities(geoworld, codes_or_names, layers=("municipaliti
     by_label = dict(zip(labels, handles))
     ax.legend(by_label.values(), by_label.keys(), loc="upper right")
     plt.tight_layout()
-    plt.show()
 
-# --- Användning ---
-gw = GeoWorld("data/worm.sqlite3")
-plot_selected_municipalities(
-    gw,
-    ["Falun", "Borlänge"],
-    layers=("municipalities","urban_areas","small_localities","commercial_zones","business_zones")
-)
+    # --- NYTT: Spara till fil om angivet ---
+    if save_path:
+        if file_format:
+            plt.savefig(save_path, format=file_format, dpi=dpi)
+        else:
+            plt.savefig(save_path, dpi=dpi)
+        print(f"Karta sparad till {save_path}")
+    else:
+        plt.show()

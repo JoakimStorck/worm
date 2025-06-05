@@ -9,7 +9,7 @@ def load_commuting_matrix(csv_path, db_path="data/worm.sqlite3", year=2020):
     
     # 2. Extrahera hemkommun-kod (från radetikett)
     df = df.rename(columns={df.columns[0]: "home_municipality"})
-    df["home_municipality_code"] = df["home_municipality"].str.extract(r"(\d{4})")
+    df["home_municipal_code"] = df["home_municipality"].str.extract(r"(\d{4})")
 
     # 3. Extrahera arbetskommun-kod (från kolumnnamn)
     col_map = {}
@@ -17,18 +17,18 @@ def load_commuting_matrix(csv_path, db_path="data/worm.sqlite3", year=2020):
         code = re.match(r"(\d{4})", col)
         if code:
             col_map[col] = code.group(1)
-    df_long = df.melt(id_vars=["home_municipality", "home_municipality_code"], 
+    df_long = df.melt(id_vars=["home_municipality", "home_municipal_code"], 
                       value_vars=list(col_map.keys()), 
                       var_name="work_municipality", value_name="employed")
-    df_long["work_municipality_code"] = df_long["work_municipality"].map(col_map)
+    df_long["work_municipal_code"] = df_long["work_municipality"].map(col_map)
     df_long["employed"] = df_long["employed"].astype(int)
     df_long["year"] = year
 
     # 4. Behåll bara kommunkoder och relevanta kolumner
-    df_final = df_long[["home_municipality_code", "work_municipality_code", "employed", "year"]]
+    df_final = df_long[["home_municipal_code", "work_municipal_code", "employed", "year"]]
     df_final = df_final.rename(columns={
-        "home_municipality_code": "home_municipality",
-        "work_municipality_code": "work_municipality"
+        "home_municipal_code": "home_municipality",
+        "work_municipal_code": "work_municipality"
     })
 
     # 5. Skriv till SQLite

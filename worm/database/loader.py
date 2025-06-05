@@ -118,7 +118,7 @@ def load_commercial_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     # Skapa rätt kolumner
     gdf["id"] = gdf["ho_kod"].astype(str)
     gdf["zone_code"] = gdf["ho_kod"].astype(str)
-    gdf["municipality_code"] = gdf["kommunkod"].astype(str)
+    gdf["municipal_code"] = gdf["kommunkod"].astype(str)
     # gdf["municipality"] är nu från merge
     gdf["county_code"] = gdf["lankod"].astype(str)
     gdf["county"] = None  # Fyll om det finns länsnamn
@@ -132,7 +132,7 @@ def load_commercial_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
 
     # Kolumnordning enligt schema
     cols = [
-        "id", "uuid", "zone_code", "municipality_code", "municipality", "county_code", "county",
+        "id", "uuid", "zone_code", "municipal_code", "municipality", "county_code", "county",
         "num_employed", "num_workplaces", "num_subzones", "area_ha", "year",
         "valid_from", "valid_to", "geom_wkt"
     ]
@@ -179,7 +179,7 @@ def load_business_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
 
     gdf["id"] = gdf["vo_kod"].astype(str)
     gdf["zone_code"] = gdf["vo_kod"].astype(str)
-    gdf["municipality_code"] = gdf["kommunkod"].astype(str)
+    gdf["municipal_code"] = gdf["kommunkod"].astype(str)
     gdf["county_code"] = gdf["lankod"].astype(str)
     gdf["county"] = None
     gdf["zone_type"] = gdf["omradestyp"] if "omradestyp" in gdf.columns else None
@@ -192,7 +192,7 @@ def load_business_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf["valid_to"] = gdf["validto"]
 
     cols = [
-        "id", "uuid", "zone_code", "municipality_code", "municipality", "county_code", "county",
+        "id", "uuid", "zone_code", "municipal_code", "municipality", "county_code", "county",
         "zone_type", "num_employed", "num_workplaces", "main_industry",
         "area_ha", "year", "valid_from", "valid_to", "geom_wkt"
     ]

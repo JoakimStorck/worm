@@ -1,0 +1,51 @@
+# scenarios/scenario_falun_baseline.yml
+
+scenario_name: "Falun multi-layer baseline"
+year: 2024
+seed: 42
+municipalities: ["2080"]  # Falun, men byt kod för annan kommun
+
+n_workers: 5000
+n_jobs: 4700
+
+# Du kan göra dessa årsbundna om du vill, t.ex.
+# n_workers:
+#   by_year:
+#     "2024": 5000
+#     "2026": 5100
+
+age_range: [20, 64]
+sex_ratio: 0.52
+
+education_levels:
+  low: 0.28
+  medium: 0.55
+  high: 0.17
+
+employer_distribution:
+  n_employers: auto      # eller ett explicit tal, t.ex. 120
+  sni_source: municipality
+  # Möjlighet att ange custom storleksfördelning om så önskas:
+  # size_distribution:
+  #   bins: [1, 5, 10, 20, 50, 100, 250, 500]
+  #   probs: [0.5, 0.3, 0.1, 0.05, 0.03, 0.015, 0.004, 0.001]
+  layers:
+    - name: business_zones
+      weight_field: num_workplaces
+    - name: urban_areas
+      weight_field: population
+
+  # Valfritt: override för visst antal i en zon
+  # zone_overrides:
+  #   "BZ_12345": 15
+
+# Om du i framtiden vill ha spatial/socioekonomisk fördelning på workers:
+# worker_distribution:
+#   layers:
+#     - name: urban_areas
+#       weight_field: population
+#     - name: small_localities
+#       weight_field: population
+#   method: proportional
+
+# Fler parametrar/scenariologik kan enkelt läggas till.
