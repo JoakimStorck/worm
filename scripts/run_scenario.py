@@ -18,6 +18,8 @@ if __name__ == "__main__":
     # Generera scenario-agentdata (workers, jobs, employers, events...)
     workers, jobs, employers, events = builder.generate()
 
+    print(f"Antal genererade arbetsgivare: {len(employers)}")
+
     # Skapa World och injicera scenariodata
     world = World(db_path, workers=workers, jobs=jobs, employers=employers, events=events)
 

@@ -8,10 +8,18 @@ import geopandas as gpd
 from shapely import wkt
 from shapely.geometry import Point
 from worm.database.utils import fetch_with_fallback
-
 import time
 
 class ScenarioBuilder:
+    # Här mappas lager mot typiska weight_fields (prövas i turordning)
+    DEFAULT_WEIGHT_FIELDS = {
+        "business_zones": ["num_workplaces", "num_employed", "population", "area_ha"],
+        "commercial_zones": ["num_workplaces", "num_employed", "population", "area_ha"],
+        "small_localities": ["num_workplaces", "num_employed", "population", "area_ha"],
+        "urban_areas": ["num_workplaces", "num_employed", "population", "area_ha"],
+        # "rural": ["area_ha"]  # Hanteras separat, inte explicit tabell
+    }
+
     def __init__(self, config_path, db_path=None, geoworld=None):
         with open(config_path, "r") as f:
             self.config = yaml.safe_load(f)
@@ -24,9 +32,9 @@ class ScenarioBuilder:
         self.rng = np.random.default_rng(self.seed)
         self.start_year = self.config.get("start_year", 2024)
         self.end_year = self.config.get("end_year", 2024)
-        self.size_distribution_by_sni = self.load_size_distributions()
 
-    # --- Allmän parameter- och interpoleringslogik ---
+    # --- Allmän parameterhantering och interpolation ---
+    # (Ingen förändring mot tidigare. Behåll om du använder yearly-parametrar)
     @staticmethod
     def interpolate_linear(start, end, start_year, end_year, year):
         if year <= start_year:
@@ -75,7 +83,7 @@ class ScenarioBuilder:
         sex_ratio = float(self.get_param_value(self.config.get("sex_ratio"), year, default=0.5))
         age_range = self.config.get("age_range", [20, 64])
         occupation_distribution = self.config.get("occupation_distribution", "random")
-        params = {
+        return {
             "n_workers": n_workers,
             "n_jobs": n_jobs,
             "municipalities": municipalities,
@@ -84,24 +92,29 @@ class ScenarioBuilder:
             "age_range": age_range,
             "occupation_distribution": occupation_distribution,
         }
-        return params
 
-    # --- Storleksfördelning per SNI/bransch ---
-    def load_size_distributions(self):
-        # TODO: Ladda från fil, databas eller byggs på här
-        # Exempel: SNI-kod: bins/probs
-        return {
-            "10": {"bins": [1, 5, 10, 20], "probs": [0.5, 0.3, 0.15, 0.05]},
-            "47": {"bins": [1, 3, 7, 15], "probs": [0.7, 0.2, 0.08, 0.02]},
-            "default": {"bins": [1, 5, 10, 20], "probs": [0.5, 0.3, 0.15, 0.05]},
-        }
+    def get_size_distribution_from_config(self):
+        """
+        Bygger bins/probs-listor från employer_size_distribution i config.
+        bins: [(min_size, max_size), ...]
+        probs: [ratio, ...] summerar till 1.
+        """
+        size_cfg = self.config['employer_distribution']['employer_size_distribution']
+        bins = []
+        probs = []
+        for klass in size_cfg.values():
+            min_size = klass.get('min_size', 1)
+            max_size = klass['max_size']
+            ratio = klass['ratio']
+            bins.append((min_size, max_size))
+            probs.append(ratio)
+        total = sum(probs)
+        if not np.isclose(total, 1.0):
+            probs = [p / total for p in probs]  # Normalisera
+        return bins, probs
 
-    def get_size_distribution(self, sni_code=None):
-        if sni_code and sni_code in self.size_distribution_by_sni:
-            return self.size_distribution_by_sni[sni_code]
-        return self.size_distribution_by_sni["default"]
 
-    # --- Zoner (lager), spatial logik ---
+    # --- Lager och spatial logik ---
     def fetch_zones(self, layer_name, weight_field, municipal_code, year=None):
         cursor = self.conn.execute(f"PRAGMA table_info({layer_name})")
         columns = [row[1] for row in cursor.fetchall()]
@@ -136,17 +149,26 @@ class ScenarioBuilder:
         df['geometry'] = df['geom_wkt'].apply(wkt.loads)
         gdf = gpd.GeoDataFrame(df, geometry='geometry')
         gdf['layer'] = layer_name
+        if weight_field not in gdf.columns:
+            gdf[weight_field] = 0
         gdf['weight_field'] = gdf[weight_field].fillna(0)
         return gdf
 
-    # --- SNI-fördelning: DeSO eller kommunnivå beroende på lager ---
+
+    def pick_weight_field(self, gdf, layer_name):
+        """Returnera första weight_field i gdf enligt DEFAULT_WEIGHT_FIELDS för lager."""
+        for candidate in self.DEFAULT_WEIGHT_FIELDS.get(layer_name, []):
+            if candidate in gdf.columns:
+                return candidate
+        raise ValueError(f"Inget weight_field funnet för {layer_name}")
+
+    # --- SNI-fördelning ---
     def fetch_sni_distribution(self, municipal_code, year, deso_code=None, sni_source="municipality"):
         # Skapa cache-nyckel
         cache_key = (deso_code, year) if deso_code else (municipal_code, year)
         if cache_key in self._sni_cache:
             return self._sni_cache[cache_key]
         if deso_code:
-            # SNI på DeSO-nivå
             sni_df, used_year = fetch_with_fallback(
                 self.conn,
                 table="employment_deso_sni",
@@ -162,9 +184,7 @@ class ScenarioBuilder:
                 sni_df['prob'] = 1.0 / len(sni_df)
             if used_year != year:
                 print(f"Varning: DeSO-SNI saknas för {deso_code} år {year}. Fallback till år {used_year}.")
-            return sni_df
         else:
-            # Kommunnivå
             sni_df, used_year = fetch_with_fallback(
                 self.conn,
                 table="employment_municipality_sni",
@@ -180,133 +200,140 @@ class ScenarioBuilder:
                 sni_df['prob'] = 1.0 / len(sni_df)
             if used_year != year:
                 print(f"Varning: SNI-data saknas för {municipal_code} år {year}. Fallback till år {used_year}.")
-            return sni_df
+        self._sni_cache[cache_key] = sni_df
+        return sni_df
 
-    # --- Spatial join mot DeSO ---
-    def spatial_join_zones_to_deso(self, gdf):
-        # Spatial join: hitta deso_code för varje zon (polygon-in-polygon)
-        deso_gdf = pd.read_sql("SELECT deso_code, geom_wkt FROM deso", self.conn)
-        deso_gdf['geometry'] = deso_gdf['geom_wkt'].apply(wkt.loads)
-        deso_gdf = gpd.GeoDataFrame(deso_gdf, geometry='geometry')
-        return gpd.sjoin(gdf, deso_gdf[['deso_code', 'geometry']], how='left', predicate='intersects')
-
-    import geopandas as gpd
-
+    # --- Random punkter inom polygon (snabb GeoPandas) ---
     def random_points_in_polygon(self, polygon, n_points):
-        # polygon är ett shapely-objekt
         gdf = gpd.GeoSeries([polygon])
-        # Detta är snabbt och fungerar även för svåra former
-        multipoint = gdf.sample_points(n_points)[0]  # returns MultiPoint
-        points = list(multipoint.geoms)
-        return points
+        result = gdf.sample_points(n_points)[0]  # Kan vara Point eller MultiPoint
+        if result.geom_type == "Point":
+            return [result]
+        elif result.geom_type == "MultiPoint":
+            return list(result.geoms)
+        else:
+            raise ValueError(f"Oväntad geometri från sample_points: {result.geom_type}")
 
 
-    import time
+    # --- Totalt antal arbetsställen för kommunen ---
+    def get_total_workplaces_for_municipality(self, municipal_code, year):
+        filters = {"municipal_code": municipal_code}
+        df, fallback_year = fetch_with_fallback(
+            self.conn,
+            table="employment_municipality_sni",
+            filters=filters,
+            year_col="year",
+            desired_year=year,
+            columns="workplaces"
+        )
+        total_workplaces = df['workplaces'].sum()
+        if total_workplaces == 0:
+            raise ValueError(f"Inga arbetsställen hittades för kommun {municipal_code}, år {fallback_year} (ursprungligen {year})")
+        return int(total_workplaces), fallback_year
 
     def generate_employers(self, year=None):
         t0 = time.time()
-        year = year if year else self.config.get("year", self.start_year)
-        municipalities = self.config.get("municipalities", [])
-        all_employers = []
+        year = year or self.config.get("year", self.start_year)
+        municipal_code = self.config['municipalities'][0]
+        population = self.config.get("population")
+        emp_dist_cfg = self.config['employer_distribution']
 
-        # Summeringsvariabler
-        sum_fetch_sni = 0.0
-        sum_points = 0.0
-        sum_size = 0.0
-        sum_zon = 0.0
+        # 1. Antal arbetsgivare
+        n_employers = emp_dist_cfg.get('n_employers', 'auto')
+        if n_employers == 'auto':
+            ratio = emp_dist_cfg.get('employer_ratio_per_population', 0.09)
+            n_employers = int(population * ratio)
+        else:
+            n_employers = int(n_employers)
 
-        for municipal_code in municipalities:
-            employer_cfg = self.config['employer_distribution']
-            layers_cfg = employer_cfg['layers'] if 'layers' in employer_cfg else [employer_cfg]
-            all_zones = []
-            total_weight = 0
-            deso_layers = {"urban_areas", "small_localities", "business_zones"}
-            use_deso = any((l['name'] if 'name' in l else l['layer']) in deso_layers for l in layers_cfg)
-            for layer_cfg in layers_cfg:
-                layer_name = layer_cfg['name'] if 'name' in layer_cfg else layer_cfg['layer']
-                weight_field = layer_cfg.get('weight_field', 'num_workplaces')
-                gdf = self.fetch_zones(layer_name, weight_field, municipal_code, year)
-                if use_deso and 'deso_code' not in gdf.columns:
-                    gdf = self.spatial_join_zones_to_deso(gdf)
-                all_zones.append(gdf)
-                total_weight += gdf[weight_field].sum()
-            all_zones_gdf = pd.concat(all_zones, ignore_index=True)
-            all_zones_gdf['weight_field'] = all_zones_gdf['weight_field'].fillna(0)
-            total_weight = all_zones_gdf['weight_field'].sum()
+        # 2. Storleksklasser från config och generera storlekar
+        bins, probs = self.get_size_distribution_from_config()
+        size_cfg = self.config['employer_distribution']['employer_size_distribution']
+
+        # Fördela arbetsgivare på klasser
+        class_indices = self.rng.choice(len(bins), size=n_employers, p=probs)
+        sizes_list = [self.rng.integers(low=bins[i][0], high=bins[i][1] + 1) for i in class_indices]
+
+        # Statistik per klass (före zonallokering)
+        class_names = list(size_cfg.keys())
+        class_ranges = [(klass.get('min_size', 1), klass['max_size']) for klass in size_cfg.values()]
+        counts = {name: 0 for name in class_names}
+        for size in sizes_list:
+            for name, (min_s, max_s) in zip(class_names, class_ranges):
+                if min_s <= size <= max_s:
+                    counts[name] += 1
+                    break
+
+        print("Storleksfördelning (antal arbetsgivare per klass):")
+        for name, (min_s, max_s) in zip(class_names, class_ranges):
+            print(f"  {name:12}: {counts[name]:5d} st ({min_s}-{max_s} anställda)")
+
+        # 3. Hämta lagerdata
+        allocation_order = emp_dist_cfg['allocation_order']
+        layer_configs = emp_dist_cfg['layer_configs']
+        layer_gdfs = {}
+        for layer in allocation_order:
+            gdf = self.fetch_zones(layer, layer_configs[layer]['weight_field'], municipal_code, year)
+            layer_gdfs[layer] = gdf
+
+        # 4. Allokera arbetsgivare till zoner
+        remaining = n_employers
+        allocation = {}
+        for layer in allocation_order:
+            gdf = layer_gdfs[layer]
+            weight_field = layer_configs[layer]['weight_field']
+            gdf[weight_field] = gdf[weight_field].fillna(0)
+            total_weight = gdf[weight_field].sum()
             if total_weight == 0:
-                raise ValueError("Summan av weight_field är 0 – kan inte fördela arbetsgivare proportionellt! Kontrollera data.")
-            all_zones_gdf['prob'] = all_zones_gdf['weight_field'] / total_weight
-            all_zones_gdf['prob'] = all_zones_gdf['prob'].fillna(0)
+                allocation[layer] = [0] * len(gdf)
+                continue
+            n_this_layer = min(remaining, int(total_weight))
+            probs_z = gdf[weight_field] / total_weight
+            n_per_zone = (probs_z * n_this_layer).round().astype(int)
+            allocation[layer] = n_per_zone
+            remaining -= n_per_zone.sum()
+            if remaining <= 0:
+                break
 
-            n_employers = employer_cfg.get('n_employers', 'auto')
-            if n_employers == 'auto':
-                n_employers = int(total_weight)
-            zone_overrides = employer_cfg.get('zone_overrides', {})
-            n_per_zone = (all_zones_gdf['prob'] * n_employers).round().astype(int)
-            for zone_code, n in zone_overrides.items():
-                mask = all_zones_gdf['zone_code'] == zone_code
-                n_per_zone[mask] = n
-
-            employers = []
-            for idx, row in all_zones_gdf.iterrows():
-                t_zon_start = time.time()
-                n_zone = n_per_zone.iloc[idx]
+        # 5. Placera arbetsgivare, tilldela storlek och SNI
+        employers = []
+        sni_source = emp_dist_cfg.get('sni_source', 'municipality')
+        size_idx = 0
+        for layer in allocation_order:
+            gdf = layer_gdfs[layer]
+            n_per_zone = allocation[layer]
+            for idx, row in gdf.iterrows():
+                n_zone = n_per_zone.iloc[idx] if hasattr(n_per_zone, "iloc") else n_per_zone[idx]
                 if n_zone == 0:
                     continue
-                deso_code = row.get('deso_code') if use_deso else None
-
-                t_fetch_sni0 = time.time()
-                sni_dist = self.fetch_sni_distribution(municipal_code, year, deso_code if use_deso else None)
-                t_fetch_sni1 = time.time()
-                fetch_sni_time = t_fetch_sni1 - t_fetch_sni0
-                sum_fetch_sni += fetch_sni_time
-
-                t_points0 = time.time()
                 points = self.random_points_in_polygon(row.geometry, n_zone)
-                t_points1 = time.time()
-                points_time = t_points1 - t_points0
-                sum_points += points_time
-
-                t_size0 = time.time()
+                deso_code = row.get('deso_code', None)
+                if sni_source == 'deso' and deso_code is not None:
+                    sni_dist = self.fetch_sni_distribution(municipal_code, year, deso_code=deso_code, sni_source='deso')
+                else:
+                    sni_dist = self.fetch_sni_distribution(municipal_code, year, sni_source='municipality')
                 sni_codes = self.rng.choice(sni_dist['sni_code'], size=n_zone, p=sni_dist['prob'])
-
-                # Cache storleksfördelning per SNI-kod för att undvika upprepade anrop
-                size_dist_cache = {}
-                sizes = []
-                for sni in sni_codes:
-                    if sni not in size_dist_cache:
-                        size_dist_cache[sni] = self.get_size_distribution(sni)
-                    dist = size_dist_cache[sni]
-                    sizes.append(self.rng.choice(dist['bins'], p=dist['probs']))
-
-                #sizes = [self.rng.choice(self.get_size_distribution(sni)['bins'], p=self.get_size_distribution(sni)['probs']) for sni in sni_codes]
-                t_size1 = time.time()
-                size_time = t_size1 - t_size0
-                sum_size += size_time
-
-                for point, sni_code, size in zip(points, sni_codes, sizes):
+                # Tilldela storlekar från sizes_list (redan dragen, ingen ny sampling!)
+                zone_sizes = sizes_list[size_idx:size_idx + n_zone]
+                size_idx += n_zone
+                for point, sni_code, size in zip(points, sni_codes, zone_sizes):
                     employers.append({
                         'municipal_code': municipal_code,
-                        'layer': row['layer'],
-                        'zone_code': row['zone_code'],
-                        'deso_code': deso_code,
+                        'layer': layer,
+                        'zone_code': row.get('zone_code', None),
                         'geometry': point,
-                        'sni_code': sni_code,
-                        'size': size
+                        'size': size,
+                        'sni_code': sni_code
                     })
-                t_zon_slut = time.time()
-                zon_time = t_zon_slut - t_zon_start
-                sum_zon += zon_time
 
-                print(f"[TIMER] zon {idx}: total {zon_time:.2f}s | fetch_sni {fetch_sni_time:.2f}s | points {points_time:.2f}s | size {size_time:.2f}s")
-            employer_gdf = gpd.GeoDataFrame(employers, geometry='geometry')
-            all_employers.append(employer_gdf)
         t1 = time.time()
         print(f"[TIMER] generate_employers totalt {t1-t0:.2f} s")
-        print(f"[TIMER] SUMMA zoner: {sum_zon:.2f} s | fetch_sni: {sum_fetch_sni:.2f} s | points: {sum_points:.2f} s | size: {sum_size:.2f} s")
-        return pd.concat(all_employers, ignore_index=True) if all_employers else gpd.GeoDataFrame()
+        employers_df = gpd.GeoDataFrame(employers, geometry='geometry')
+        print(f"Antal arbetsgivare: {len(employers_df)}")
+        print(f"Total antal jobb (summa storlek): {employers_df['size'].sum()}")
+        return employers_df
 
-    # --- Arbetare och jobb: samma logik som tidigare ---
+    # --- Arbetare och jobb ---
     def generate_workers(self, year, n_workers, municipalities, education_levels, sex_ratio):
         sexes = self.rng.choice(["F", "M"], size=n_workers, p=[sex_ratio, 1-sex_ratio])
         education = self.rng.choice(
@@ -326,12 +353,24 @@ class ScenarioBuilder:
         })
         return workers
 
-    def generate_jobs(self, year, n_jobs, municipalities):
-        jobs = pd.DataFrame({
-            "job_id": [f"J{i:05d}" for i in range(n_jobs)],
-            "municipal_code": self.rng.choice(municipalities, n_jobs),
-        })
-        return jobs
+    def generate_jobs_from_employers(self, employers_df):
+        jobs = []
+        job_id = 0
+        for idx, row in employers_df.iterrows():
+            for i in range(int(row['size'])):
+                jobs.append({
+                    "job_id": f"J{job_id:05d}",
+                    "employer_id": idx,  # eller row['employer_id'] om du har det
+                    "municipal_code": row['municipal_code'],
+                    "layer": row['layer'],
+                    "zone_code": row['zone_code'],
+                    "sni_code": row['sni_code'],
+                    "geometry": row['geometry'],
+                    # lägg till andra fält om du vill
+                })
+                job_id += 1
+        return pd.DataFrame(jobs)
+
 
     def generate(self, year=None):
         t0 = time.time()
@@ -345,10 +384,12 @@ class ScenarioBuilder:
         workers = self.generate_workers(
             year, params["n_workers"], params["municipalities"], params["education_levels"], params["sex_ratio"]
         )
-        jobs = self.generate_jobs(year, params["n_jobs"], params["municipalities"])
-        events = pd.DataFrame(columns=["time", "agent_id", "event_type", "params"])
+        jobs = self.generate_jobs_from_employers(employers)
         t3 = time.time()
-        print(f"[TIMER] generate totalt {t3-t0:.2f} s")
+        print(f"[TIMER] generate_jobs_from_employers tog {t3-t2:.2f} s")
+        events = pd.DataFrame(columns=["time", "agent_id", "event_type", "params"])
+        t4 = time.time()
+        print(f"[TIMER] generate totalt {t4-t0:.2f} s")
         return workers, jobs, employers, events
 
 # --- Slut på ScenarioBuilder ---

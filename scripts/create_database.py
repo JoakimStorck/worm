@@ -59,9 +59,11 @@ if file_exists(deso_gpkg):
     loader.load_deso_gpkg(deso_gpkg, db_path=DB_PATH)
 
 # Ladda arbetsmarknadsdata på kommunnivå (CSV)
-emp_mun_csv = "data/arbetsmarknadsstruktur_2020.csv"
+emp_mun_csv = "data/employment_municipality_sni_2020.csv"
 if file_exists(emp_mun_csv):
     loader.load_employment_municipality_sni(emp_mun_csv, db_path=DB_PATH)
+else:
+    print("OBS: Laddar inte arbetsmarknadsdata på kommunnivå, filen saknas.")
 
 # Ladda arbetsmarknadsdata på DeSO-nivå (CSV, om fil finns)
 deso_emp_csv = "data/scb_sysselsatta_deso.csv"
