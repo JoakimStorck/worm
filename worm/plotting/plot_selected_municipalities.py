@@ -1,6 +1,7 @@
 # plotting/plot_selected_municipalities.py
 
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import geopandas as gpd
 from worm.geography.geoworld import GeoWorld
 
@@ -75,9 +76,19 @@ def plot_selected_municipalities(geoworld, codes_or_names, layers=("municipaliti
     ax.axis("off")
     plt.title("Valda kommuner och lager")
     # Endast unika labels i legend
-    handles, labels = ax.get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
-    ax.legend(by_label.values(), by_label.keys(), loc="upper right")
+
+    legend_handles = [
+        mpatches.Patch(color=colors["municipalities"], label="Municipality"),
+    ]
+    for layer in layers:
+        if layer == "municipalities":
+            continue
+        if layer in colors:
+            legend_handles.append(
+                mpatches.Patch(color=colors[layer], label=layer.replace("_", " ").capitalize())
+            )
+    ax.legend(handles=legend_handles, loc="upper right")
+
     plt.tight_layout()
 
     # --- NYTT: Spara till fil om angivet ---

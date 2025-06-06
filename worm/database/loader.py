@@ -269,7 +269,7 @@ def extract_sni_description(s):
 
 def load_employment_deso_sni(csv_file, db_path="data/worm.sqlite3", year=2023):
     # Läs in med rätt encoding
-    df = pd.read_csv(csv_file, sep=";", skiprows=2, encoding="latin1")
+    df = pd.read_csv(csv_file, sep=",", skiprows=0, encoding="latin1")
     df["sni_code"] = df["näringsgren SNI 2007"].apply(extract_sni_code)
     df["sni_description"] = df["näringsgren SNI 2007"].apply(extract_sni_description)
     df["year"] = year

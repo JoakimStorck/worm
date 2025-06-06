@@ -169,7 +169,7 @@ def create_schema(db_path="data/worm.sqlite3"):
         )
     """)
 
-    # SNI-based employment per DeSO
+    # Table for O*NET occupation space clustering
     c.execute("""
         CREATE TABLE IF NOT EXISTS onet_occupation_space (
             onet_code TEXT,

@@ -63,6 +63,13 @@ emp_mun_csv = "data/arbetsmarknadsstruktur_2020.csv"
 if file_exists(emp_mun_csv):
     loader.load_employment_municipality_sni(emp_mun_csv, db_path=DB_PATH)
 
+# Ladda arbetsmarknadsdata på DeSO-nivå (CSV, om fil finns)
+deso_emp_csv = "data/scb_sysselsatta_deso.csv"
+if file_exists(deso_emp_csv):
+    loader.load_employment_deso_sni(deso_emp_csv, db_path=DB_PATH, year=2023)
+else:
+    print("OBS: Laddar inte sysselsatta per DeSO, filen saknas.")
+
 # Ladda O*NET-data (yrken och skills)
 onet_occ_path = "onet_data/Occupation Data.txt"
 onet_skills_path = "onet_data/Skills.txt"
