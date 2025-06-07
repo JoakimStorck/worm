@@ -129,16 +129,31 @@ class World:
         }
         return stats
 
-    def plot(self, layers=("municipalities",), municipal_codes_or_names=None):
+
+    def plot(
+        self,
+        layers=("municipalities",),
+        municipal_codes_or_names=None,
+        **kwargs  # fångar employers_gdf=..., workers_gdf=..., etc
+    ):
         """
-        Wrapper som plottar med utvalt scenario.
-        Om municipal_codes_or_names ges (lista av koder eller namn), plottas bara dessa.
+        Wrapper som plottar valda lager.
+        Stödjer även punktlager, t.ex. employers_gdf, workers_gdf.
+
+        Exempel:
+            world.plot(
+                layers=("municipalities", "urban_areas", "employers"),
+                municipal_codes_or_names=["2080"],
+                employers_gdf=employers
+            )
         """
         plot_selected_municipalities(
             self.geoworld,
             codes_or_names=municipal_codes_or_names if municipal_codes_or_names else [],
-            layers=layers
+            layers=layers,
+            **kwargs
         )
+
 
 
 # --- Exempel på användning ---

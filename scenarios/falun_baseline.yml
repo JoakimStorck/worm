@@ -1,13 +1,13 @@
 scenario_name: "Falun auto employers"
 year: 2024
 seed: 42
-municipalities: ["2080"]
+municipalities: ["2080","2081"]  # Falun kommun och dess grannkommuner
 population: 58000
-workforce_ratio: 0.52
+workforce_ratio: 0.52    # Andel av befolkningen i arbetskraft
 
 employer_distribution:
   n_employers: auto
-  employer_ratio_per_population: 0.09  # 9 per 100 invånare
+  employer_ratio_per_population: 0.09  # ca 9 arbetsgivare per 100 invånare
   allocation_order:
     - business_zones
     - commercial_zones
@@ -38,3 +38,25 @@ employer_distribution:
       min_size: 251
       max_size: 1000
       ratio: 0.005
+
+# Exempel på specialfall: Falu kommun med explicit flera arbetsställen
+special_employers:
+  - name: "Falu kommun"
+    sni_code: "O"
+    type: "offentlig"
+    n_employees: 5000
+    workplaces:
+      - name: "Gruvrisskolan"
+        n_employees: 80
+        zone_code: "UA_001"
+      - name: "Kristinegymnasiet"
+        n_employees: 100
+        zone_code: "UA_003"
+      # ...fler kan anges, eller lämnas tomt för att lägga ut automatiskt
+  - name: "Region Dalarna"
+    sni_code: "Q"
+    type: "offentlig"
+    n_employees: 3600
+    # workplaces kan anges vid behov, annars en arbetsställe
+
+# Resten genereras automatiskt som tidigare, ett arbetsställe per arbetsgivare.

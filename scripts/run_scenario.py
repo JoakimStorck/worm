@@ -19,6 +19,10 @@ if __name__ == "__main__":
     workers, jobs, employers, events = builder.generate()
 
     print(f"Antal genererade arbetsgivare: {len(employers)}")
+    print("\nTopp 10 största arbetsgivare (storlek, SNI, zon):")
+    print(employers.nlargest(10, "size")[["size", "sni_code", "layer", "zone_code"]])
+    print("\nTopp 10 SNI-koder (arbetsgivare):")
+    print(employers["sni_code"].value_counts().head(10))
 
     # Skapa World och injicera scenariodata
     world = World(db_path, workers=workers, jobs=jobs, employers=employers, events=events)
@@ -32,7 +36,12 @@ if __name__ == "__main__":
 
     # Hämta urval från scenario:
     municipalities = builder.config["municipalities"]
-    world.plot(layers=("municipalities", "urban_areas", "business_zones"), municipal_codes_or_names=municipalities)
 
+    world.plot(
+        layers=("municipalities", "urban_areas", "business_zones", "employers", "workers"), 
+        municipal_codes_or_names=municipalities, 
+        employers_gdf=employers,
+        #workers_gdf=workers
+    )
 
 
