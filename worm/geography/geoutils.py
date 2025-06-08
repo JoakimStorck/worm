@@ -1,5 +1,24 @@
 import numpy as np
+
+import geopandas as gpd
 from shapely.geometry import Point
+
+def assign_deso_code(df, deso_gdf, x_col="x", y_col="y"):
+    points = gpd.GeoSeries([Point(x, y) for x, y in zip(df[x_col], df[y_col])], crs=deso_gdf.crs)
+    df = df.copy()
+    df["geometry"] = points
+    points_gdf = gpd.GeoDataFrame(df, geometry="geometry", crs=deso_gdf.crs)
+
+    print("Exempel på individer:", df.head())
+    print("Exempel på DeSO-zoner:", deso_gdf.head())
+    print("Individers min/max x/y:", df["x"].min(), df["x"].max(), df["y"].min(), df["y"].max())
+    print("DeSO min/max x/y:", deso_gdf.geometry.bounds.min(), deso_gdf.geometry.bounds.max())
+
+    # Spatial join: vilket DeSO hör punkten till?
+    joined = gpd.sjoin(points_gdf, deso_gdf[["deso_code", "geometry"]], how="left", predicate="within")
+    print("Kolumner i joined efter spatial join:", joined.columns)
+
+    return joined["deso_code"].values  # returnerar en array/serie med deso_code
 
 def random_points_in_polygon(polygon, n_points):
     points = []

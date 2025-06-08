@@ -9,6 +9,11 @@ seed: 12345
 
 municipalities:
   - 2080   # Falun
+  - 2081   # Borlänge
+  - 2026   # Gagnef
+  - 2082   # Säter
+  - 2031   # Rättvik
+  - 2104   # Hofors
 
 # === Globalt default för alla kommuner ===
 defaults:
@@ -62,9 +67,52 @@ municipality_overrides:
       medium: 0.63
       high: {by_year: {2024: 0.14, 2027: 0.18, 2030: 0.19}}
     workforce_ratio: 0.56
+  2081: # Borlänge
+    workforce_ratio: 0.53
+    education_levels:
+      low: 0.28
+      medium: 0.60
+      high: 0.12
+  2026: # Gagnef
+    workforce_ratio: 0.49
+    education_levels:
+      low: 0.33
+      medium: 0.59
+      high: 0.08
+  2082: # Säter
+    workforce_ratio: 0.50
+    education_levels:
+      low: 0.30
+      medium: 0.58
+      high: 0.12
+  2031: # Rättvik
+    workforce_ratio: 0.48
+    education_levels:
+      low: 0.34
+      medium: 0.58
+      high: 0.08
+  2104: # Hofors
+    workforce_ratio: 0.46
+    education_levels:
+      low: 0.35
+      medium: 0.57
+      high: 0.08
 
 # === Policyregler (exempel, kan kompletteras) ===
 hiring_policy: "random"
 wage_policy: "market_adjust"
 
+# === Händelser (exempel) ===
+events:
+  - year: 2026
+    type: firm_entry
+    municipality: 2081
+    employer:
+      name: "Gigafabriken Borlänge"
+      size: 950
+      sni_code: "29"
+  - year: 2028
+    type: firm_exit
+    municipality: 2031
+    employer_name: "Dala Verkstad AB"
 

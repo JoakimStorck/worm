@@ -2,10 +2,10 @@
 
 def plot_selected_municipalities(
     geoworld,
-    codes_or_names,
+    municipal_codes_or_names,
     layers=("municipalities",),
     employers_gdf=None,
-    workers_gdf=None,
+    individuals_gdf=None,
     save_path=None,
     dpi=200,
     file_format=None,
@@ -14,15 +14,15 @@ def plot_selected_municipalities(
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
 
-    if isinstance(codes_or_names, str):
-        codes_or_names = [codes_or_names]
+    if isinstance(municipal_codes_or_names, str):
+        municipal_codes_or_names = [municipal_codes_or_names]
+    municipal_codes_or_names = [str(v) for v in municipal_codes_or_names]
 
     muni_gdf = geoworld.municipalities
 
-    # Matcha på kod eller namn
     selected = muni_gdf[
-        muni_gdf["municipal_code"].isin(codes_or_names) |
-        muni_gdf["municipality"].str.lower().str.contains('|'.join([v.lower() for v in codes_or_names]))
+        muni_gdf["municipal_code"].isin(municipal_codes_or_names) |
+        muni_gdf["municipality"].str.lower().str.contains('|'.join([v.lower() for v in municipal_codes_or_names]))
     ]
     if selected.empty:
         print("Inga matchande kommuner hittades!")
@@ -41,7 +41,7 @@ def plot_selected_municipalities(
         "commercial_zones": "#2CA02C",
         "leisure_house_zones": "#9467BD",
         "employers": "#1f77b4",
-        "workers": "#000000",
+        "individuals": "#000000",
     }
 
     # Rita polygonlager
@@ -49,7 +49,6 @@ def plot_selected_municipalities(
     for layer in layers:
         if layer == "municipalities":
             continue
-        # Hantera polygonlager
         if hasattr(geoworld, layer):
             gdf = getattr(geoworld, layer)
             if gdf.empty:
@@ -61,17 +60,15 @@ def plot_selected_municipalities(
                 hits = gdf
             if not hits.empty:
                 hits.plot(ax=ax, color=colors.get(layer, "#88888844"), edgecolor="#444444", linewidth=0.5, label=layer)
-        # Hantera punktlager
         if layer == "employers" and employers_gdf is not None:
             employers_gdf.plot(ax=ax, color=colors["employers"], markersize=6, alpha=0.7, label="Employers", zorder=10)
-        if layer == "workers" and workers_gdf is not None:
-            workers_gdf.plot(ax=ax, color=colors["workers"], markersize=2, alpha=0.5, label="Workers", zorder=11)
+        if layer == "individuals" and individuals_gdf is not None:
+            individuals_gdf.plot(ax=ax, color=colors["individuals"], markersize=2, alpha=0.5, label="Individuals", zorder=11)
 
     ax.set_aspect("equal")
     ax.axis("off")
     plt.title("Valda kommuner och lager")
 
-    # Bygg legend med unika labels
     legend_handles = [
         mpatches.Patch(color=colors["municipalities"], label="Municipality"),
     ]
@@ -79,8 +76,7 @@ def plot_selected_municipalities(
         if layer == "municipalities":
             continue
         if layer in colors:
-            if layer in ["employers", "workers"]:
-                # Punkt
+            if layer in ["employers", "individuals"]:
                 legend_handles.append(
                     mpatches.Patch(color=colors[layer], label=layer.capitalize())
                 )

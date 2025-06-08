@@ -255,6 +255,59 @@ def load_deso_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     print(f"{len(gdf)} DeSO-zoner inlästa och sparade i databasen.")
 
 
+# def update_deso_population_from_csv(pop_csv, db_path="data/worm.sqlite3"):
+#     # Läs in befolkningsdata
+#     df = pd.read_csv(pop_csv, encoding="latin1")
+#     # Filtrera: endast totalbefolkning per DeSO
+#     df_total = df[(df['ålder'] == 'totalt') & (df['kön'] == 'totalt')]
+
+#     # Rensa kolumnernas citationstecken om det behövs
+#     df_total.columns = [col.replace('"', '') for col in df_total.columns]
+#     df_total['region'] = df_total['region'].astype(str)
+#     df_total = df_total.rename(columns={"region": "deso_code", "2024": "population"})
+#     df_total['population'] = df_total['population'].astype(int)
+
+#     # Koppla mot SQLite
+#     conn = sqlite3.connect(db_path)
+#     cur = conn.cursor()
+
+#     # Loopa och uppdatera population för varje DeSO
+#     for _, row in df_total.iterrows():
+#         cur.execute(
+#             "UPDATE deso SET population = ? WHERE deso_code = ?",
+#             (row['population'], row['deso_code'])
+#         )
+#     conn.commit()
+#     conn.close()
+#     print(f"Uppdaterade population för {len(df_total)} DeSO-zoner.")
+
+
+def update_deso_population_from_csv(pop_csv, db_path="data/worm.sqlite3"):
+    # Läs in populationsfilen
+    pop = pd.read_csv(pop_csv, encoding="latin1")
+    # Filtrera: endast totalbefolkning per DeSO
+    pop = pop[(pop['ålder'] == 'totalt') & (pop['kön'] == 'totalt')]
+    pop = pop.rename(columns={"region": "deso_code", "2024": "population"})
+    pop['deso_code'] = pop['deso_code'].astype(str)
+    pop['population'] = pop['population'].astype(int)
+
+    # Koppla mot SQLite och ladda DeSO-tabellen
+    conn = sqlite3.connect(db_path)
+    deso = pd.read_sql("SELECT * FROM deso", conn)
+    deso['deso_code'] = deso['deso_code'].astype(str)
+
+    # Slå ihop/uppdatera population
+    deso = deso.merge(pop[['deso_code', 'population']], on="deso_code", how="left", suffixes=('', '_new'))
+    deso['population'] = deso['population_new'].combine_first(deso['population'])
+    deso = deso.drop(columns=['population_new'])
+
+    # Skriv tillbaka hela tabellen på en gång
+    deso.to_sql("deso", conn, if_exists="replace", index=False)
+    conn.close()
+    print(f"Uppdaterade population för {len(pop)} DeSO-zoner (skrev om hela tabellen).")
+
+
+
 def extract_sni_code(s):
     if not isinstance(s, str):
         return ""

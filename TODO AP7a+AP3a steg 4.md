@@ -105,4 +105,58 @@ Vill du ha denna kodmall (eller en mer utförlig version) direkt, eller vill du 
 
 ---
 
-Vill du att jag utvecklar kodmallar för något eller flera av dessa steg direkt? Eller vill du börja själv och komma tillbaka med frågor/problem?
+# FORTSÄTTNING 2025-06-07
+
+Här är **att-göra-listan sorterad efter förväntad “payoff”** – alltså vad som snabbast ger nytta, insikt och vidare fart i utvecklingen av projektet. Jag har delat upp den i fyra prio-grupper och tagit hänsyn till beroenden. Säg till om du vill ha ännu tuffare prioritering!
+
+---
+
+## **A. Hög payoff, direkt effekt**
+
+1. **Multi-kommun-stöd i config och i kod**
+
+   * Möjliggör både generella och kommun-specifika parametrar i YAML för t.ex. utbildningsnivåer, workforce\_ratio, befolkning.
+   * Läs in befolkning och arbetskraft från databas där det saknas i config.
+   * Se till att arbetsgivare, jobb och workers genereras separat för varje kommun med rätt parametrar.
+2. **Inför workforce participation rate (`workforce_ratio`) och använd för att beräkna antal workers automatiskt från befolkning.**
+3. **Utöka statistik och kontrollutskrifter/rapporter:**
+
+   * Fördelning arbetsgivare, jobb, arbetskraft och arbetsmarknadsstatus per kommun.
+   * Utskrift av nyckeltal vid generering.
+4. **Robust hantering av saknade data och fallback i config/databas.**
+5. **Kommentera/refaktorera kodbasen kring scenariohantering och arbetsgivargenerering där det behövs för tydlighet.**
+
+---
+
+## **B. Nästa steg – visualisering, analys, riktiga data**
+
+6. **Utöka plottingfunktionerna:**
+
+   * Möjlighet att plocka fram arbetsgivare, workers och ev. pendlingsflöden på karta.
+   * Kontrollera och förbättra stöd för flera kommuner i både generering och plotting.
+7. **Lägg in och testa nya tabeller (pendlingsströmmar, arbetsmarknadsstatus, ev. vatten) separat i databasen.**
+8. **Smart filtrering i kartdata (t.ex. exkludera vatten) för bättre visualisering och analyser.**
+9. **Uppdatera README och TODO med nuvarande arbetsflöde, tips, typfall.**
+
+---
+
+## **C. Teoretisk och modellutveckling**
+
+10. **Koppling SNI ↔ O\*NET/occupation space:**
+
+    * Skapa pipeline/mappning SNI–>O\*NET och lagra xi/chi för arbetsgivare/yrken i arbetsgivartabellen.
+    * Börja visualisera företag (och/eller individer) i occupation space, och visa exempel på klustring/matchning.
+    * Fundera över och ev. implementera spridning på xi/chi för jobb inom samma arbetsgivare.
+11. **Implementera arbetsmarknadsstatus (sysselsatt, arbetslös etc) som fördelning i workers/jobbgenerering.**
+
+---
+
+## **D. Avancerad funktionalitet och framtida utveckling**
+
+12. **Förbered händelsedriven simulering (event queue) med dag som minsta tidsenhet, och logik för eventgenerering.**
+13. **Utöka modellen för att simulera och matcha pendlingsflöden mellan kommuner (använd tabellerna för pendling).**
+14. **Utveckla/parametrisera tidsberoende parametrar och scenario över flera år i YAML och kod.**
+
+---
+
+Vill du ha ett konkret “nästa steg” för direkt kodande, eller ska vi formulera YAML och default-laddning av data för fler kommuner först?

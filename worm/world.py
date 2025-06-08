@@ -7,25 +7,27 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import pandas as pd
 from worm.geography.geoworld import GeoWorld
 from worm.plotting.plot_selected_municipalities import plot_selected_municipalities
+from worm.matching import greedy_deso_matching
 
 class World:
-    def __init__(self, db_path, geoworld=None, scope=None, workers=None, jobs=None, employers=None, events=None):
+    def __init__(self, db_path, geoworld=None, scope=None, individuals=None, jobs=None, employers=None, events=None):
         """
         World samlar all kärndata och hanterar simulering för valfri region eller scenario.
-        - scope: kommun- eller regionkod (str, lista eller None för allt).
-        - workers, jobs, employers: DataFrames från ScenarioBuilder eller genererade direkt
-        - events: event queue (t.ex. från ScenarioBuilder/scenariofil)
+        Om DataFrames anges (individuals, jobs, employers) används de direkt – annars blir de tomma.
         """
         self.db_path = db_path
-        self.scope = scope  # T.ex. ["2081", "2086"] för Falun+Borlänge, None för hela landet
+        self.scope = scope
 
-        # Geografi (navet för spatiala frågor)
         self.geoworld = geoworld if geoworld is not None else GeoWorld(db_path)
 
-        # Agentdata – läs från scenario om det finns, annars från db (tom sim = ingen agentdata)
-        self.workers = workers if workers is not None else self.load_workers_df()
-        self.jobs = jobs if jobs is not None else self.load_jobs_df()
-        self.employers = employers if employers is not None else self.load_employers_df()
+        # Använd bara explicit skickade DataFrames, annars skapa tomma
+        self.individuals = individuals if individuals is not None else pd.DataFrame()
+        self.jobs = jobs if jobs is not None else pd.DataFrame()
+        self.employers = employers if employers is not None else pd.DataFrame()
+        self.events = events if events is not None else pd.DataFrame(columns=["time", "agent_id", "event_type", "params"])
+        self.current_time = 0
+
+        self.matchings = pd.DataFrame()
 
         # Event queue (AP8) – från scenario, eller tom DataFrame
         self.events = events if events is not None else pd.DataFrame(columns=["time", "agent_id", "event_type", "params"])
@@ -34,45 +36,12 @@ class World:
         # Output/resultat – samlas/uppdateras löpande
         self.matchings = pd.DataFrame()
 
-    def load_workers_df(self):
-        query = "SELECT * FROM workers"
-        if self.scope:
-            codes = ','.join([f"'{c}'" for c in self.scope]) if isinstance(self.scope, (list, tuple)) else f"'{self.scope}'"
-            query += f" WHERE municipal_code IN ({codes})"
-        import sqlite3
-        conn = sqlite3.connect(self.db_path)
-        df = pd.read_sql(query, conn)
-        conn.close()
-        return df
-
-    def load_jobs_df(self):
-        query = "SELECT * FROM jobs"
-        if self.scope:
-            codes = ','.join([f"'{c}'" for c in self.scope]) if isinstance(self.scope, (list, tuple)) else f"'{self.scope}'"
-            query += f" WHERE municipal_code IN ({codes})"
-        import sqlite3
-        conn = sqlite3.connect(self.db_path)
-        df = pd.read_sql(query, conn)
-        conn.close()
-        return df
-
-    def load_employers_df(self):
-        query = "SELECT * FROM employers"
-        if self.scope:
-            codes = ','.join([f"'{c}'" for c in self.scope]) if isinstance(self.scope, (list, tuple)) else f"'{self.scope}'"
-            query += f" WHERE municipal_code IN ({codes})"
-        import sqlite3
-        conn = sqlite3.connect(self.db_path)
-        df = pd.read_sql(query, conn)
-        conn.close()
-        return df
-
-    def set_scenario_data(self, workers=None, jobs=None, employers=None, events=None):
+    def set_scenario_data(self, individuals=None, jobs=None, employers=None, events=None):
         """
         Ersätt agent- och eventdata med data från ScenarioBuilder.
         """
-        if workers is not None:
-            self.workers = workers
+        if individuals is not None:
+            self.individuals = individuals
         if jobs is not None:
             self.jobs = jobs
         if employers is not None:
@@ -80,93 +49,87 @@ class World:
         if events is not None:
             self.events = events
 
-    def match_workers_to_jobs(self, mode="utility"):
+    def match_individuals_to_jobs(self, mode="deso_greedy", **kwargs):
         """
-        Batch-matchning mellan workers och jobs. 
-        Byt ut logiken till utility/random/geografisk efter behov.
+        Matchar individer till jobb enligt valt läge.
+        Stödjer nu:
+        - mode="deso_greedy": Hierarkisk DeSO-matchning
+        (lägg till fler metoder vid behov)
         """
-        n = min(len(self.workers), len(self.jobs))
-        matched_workers = self.workers.sample(n).reset_index(drop=True)
-        matched_jobs = self.jobs.sample(n).reset_index(drop=True)
-        self.matchings = pd.DataFrame({
-            "worker_id": matched_workers["worker_id"],
-            "job_id": matched_jobs["job_id"],
-            # Lägg till fler attribut/statistik om du vill
-        })
-        return self.matchings
 
-    def add_event(self, time, agent_id, event_type, params=None):
-        """
-        Lägg till en rad i event queue.
-        """
-        new_event = {"time": time, "agent_id": agent_id, "event_type": event_type, "params": params}
-        self.events = pd.concat([self.events, pd.DataFrame([new_event])], ignore_index=True)
+        self.matchings = greedy_deso_matching(
+            individuals=self.individuals,
+            jobs=self.jobs,
+            alpha=1.0,           # eller vad du vill
+            batch_size=1000,     # kan användas i optimeringar senare
+            verbose=True
+        )
 
-    def process_events(self, until_time=None):
+
+    def update_after_matching(self):
         """
-        Kör igenom event queue fram till given tidpunkt.
+        Uppdaterar både individer och jobb efter matchning:
+        - Sätter status och job_id på individer som fått jobb
+        - Sätter individual_id på jobb som blivit tillsatta
+        Kräver att self.matchings innehåller 'individual_id' och 'job_id'
         """
-        if self.events.empty:
-            return
-        to_process = self.events if until_time is None else self.events[self.events["time"] <= until_time]
-        for _, event in to_process.iterrows():
-            # Här skriver du logik för vad som händer vid varje event
-            pass
-        # Efter körning: ta bort processade events (om du vill)
-        if until_time is not None:
-            self.events = self.events[self.events["time"] > until_time]
+        matchings = self.matchings
+
+        # Uppdatera individer
+        matched = matchings.set_index('individual_id')['job_id']
+        idx = self.individuals['individual_id'].isin(matched.index)
+        self.individuals.loc[idx, 'status'] = 'employed'
+        self.individuals.loc[idx, 'job_id'] = self.individuals.loc[idx, 'individual_id'].map(matched)
+
+        # Uppdatera jobb
+        # Förbered lookup: job_id → individual_id
+        job_to_ind = matchings.set_index('job_id')['individual_id']
+        job_idx = self.jobs['job_id'].isin(job_to_ind.index)
+        self.jobs.loc[job_idx, 'individual_id'] = self.jobs.loc[job_idx, 'job_id'].map(job_to_ind)
 
     def analyze(self):
         """
-        Sammanställ och returnera grundläggande statistik.
-        Utbyggs successivt efter behov.
+        Returnerar enkel statistik över nuvarande värld.
         """
         stats = {
-            "total_workers": len(self.workers),
+            "total_individuals": len(self.individuals),
             "total_jobs": len(self.jobs),
             "matched": len(self.matchings),
-            # ... fyll på!
         }
         return stats
-
 
     def plot(
         self,
         layers=("municipalities",),
         municipal_codes_or_names=None,
-        **kwargs  # fångar employers_gdf=..., workers_gdf=..., etc
+        **kwargs  # fångar employers_gdf=..., individuals_gdf=..., etc
     ):
         """
         Wrapper som plottar valda lager.
-        Stödjer även punktlager, t.ex. employers_gdf, workers_gdf.
+        Stödjer även punktlager, t.ex. employers_gdf, individuals_gdf.
 
         Exempel:
-            world.plot(
-                layers=("municipalities", "urban_areas", "employers"),
-                municipal_codes_or_names=["2080"],
-                employers_gdf=employers
-            )
+        world.plot(layers=("municipalities", "urban_areas"), individuals_gdf=world.individuals)
         """
         plot_selected_municipalities(
             self.geoworld,
-            codes_or_names=municipal_codes_or_names if municipal_codes_or_names else [],
             layers=layers,
+            municipal_codes_or_names=municipal_codes_or_names,
             **kwargs
         )
 
-
-
-# --- Exempel på användning ---
+# Test/demo (kan tas bort vid import)
 if __name__ == "__main__":
-    # Antingen "klassisk": läs data från db (scope kan vara kommunkod, t.ex. Falun)
-    world = World("data/worm.sqlite3", scope=["2081", "2086"])
+    # Exempel
+    db_path = "data/example.db"
+    world = World(db_path)
     print("Laddat:", world.analyze())
     world.plot(layers=("municipalities", "urban_areas"))
-    world.match_workers_to_jobs()
+    world.match_individuals_to_jobs()
     print("Efter matchning:", world.analyze())
     # ...eller: ladda in från scenario
     # from worm.scenario_builder import ScenarioBuilder
     # builder = ScenarioBuilder("scenarios/scenario_falun_baseline.yml", world.geoworld)
-    # workers, jobs, employers = builder.generate()
-    # world.set_scenario_data(workers, jobs, employers)
+    # individuals, jobs, employers = builder.generate()
+    # world.set_scenario_data(individuals, jobs, employers)
     # world.analyze()

@@ -58,6 +58,8 @@ deso_gpkg = "data/DeSO_2025.gpkg"
 if file_exists(deso_gpkg):
     loader.load_deso_gpkg(deso_gpkg, db_path=DB_PATH)
 
+loader.update_deso_population_from_csv("data/scb_population_deso_2024.csv", db_path=DB_PATH)
+
 # Ladda arbetsmarknadsdata på kommunnivå (CSV)
 emp_mun_csv = "data/employment_municipality_sni_2020.csv"
 if file_exists(emp_mun_csv):
