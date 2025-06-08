@@ -7,6 +7,7 @@ import time
 from shapely import wkt
 
 from worm.geography.geoutils import assign_deso_code, random_points_in_polygon
+from worm.statistics.log import log
 
 class ScenarioBuilder:
     DEFAULT_WEIGHT_FIELDS = {
@@ -39,9 +40,9 @@ class ScenarioBuilder:
                 if min_s <= size <= max_s:
                     counts[name] += 1
                     break
-        print("Storleksfördelning (antal arbetsgivare per klass):")
+        log("Storleksfördelning (antal arbetsgivare per klass):")
         for name, (min_s, max_s) in zip(class_names, class_ranges):
-            print(f"  {name:12}: {counts[name]:5d} st ({min_s}-{max_s} anställda)")
+            log(f"  {name:12}: {counts[name]:5d} st ({min_s}-{max_s} anställda)")
 
     def fetch_zones(self, layer_name, weight_field, municipal_code, year=None):
         cursor = self.conn.execute(f"PRAGMA table_info({layer_name})")
@@ -160,7 +161,7 @@ class ScenarioBuilder:
                 gdf = self.fetch_zones(layer, layer_configs[layer]['weight_field'], municipal_code, year)
                 layer_gdfs[layer] = gdf
             except ValueError as e:
-                print(f"[VARNING] {e} -- Lager '{layer}' hoppas över för kommun {municipal_code}.")
+                log(f"[VARNING] {e} -- Lager '{layer}' hoppas över för kommun {municipal_code}.")
                 continue
 
         bins, probs, class_names = self.get_size_distribution_from_config(employer_dist_cfg)
@@ -203,8 +204,8 @@ class ScenarioBuilder:
             employers[-1]['size'] -= overflow
 
         employers_df = gpd.GeoDataFrame(employers, geometry='geometry')
-        print(f"Antal arbetsgivare: {len(employers_df)} (mål: {target_jobs} jobb)")
-        print(f"Total antal jobb (summa storlek): {employers_df['size'].sum()}")
+        log(f"Antal arbetsgivare: {len(employers_df)} (mål: {target_jobs} jobb)")
+        log(f"Total antal jobb (summa storlek): {employers_df['size'].sum()}")
         return employers_df
 
     def generate_jobs_from_employers(self, employers_df):
@@ -301,7 +302,7 @@ class ScenarioBuilder:
 
     def generate(self, year=None):
         t0 = time.time()
-        print(f"[TIMER] generate: startat")
+        log(f"[TIMER] generate: startat")
         municipalities = self.config.get("municipalities", [])
         if not municipalities:
             raise ValueError("Inga kommuner angivna i scenariot.")
@@ -317,10 +318,10 @@ class ScenarioBuilder:
 
         for municipal_code in municipalities:
             t1 = time.time()
-            print(f"\n--- Kommun {municipal_code} ---")
+            log(f"\n--- Kommun {municipal_code} ---")
             population = self.cfg.get_population(municipal_code)[0]
             workforce_ratio = self.cfg.get_workforce_ratio(municipal_code)[0]
-            local_unemployment_rate = unemployment_rate
+            local_unemployment_rate = self.cfg.get_unemployment_rate(municipal_code, year)[0]
 
             # Individer
             t_ind0 = time.time()
@@ -331,7 +332,7 @@ class ScenarioBuilder:
                 local_unemployment_rate
             )
             t_ind1 = time.time()
-            print(f"[TIMER]  ...generera individer: {t_ind1-t_ind0:.2f} s")
+            log(f"[TIMER]  ...generera individer: {t_ind1-t_ind0:.2f} s")
 
             # Arbetsgivare
             t_emp0 = time.time()
@@ -347,20 +348,20 @@ class ScenarioBuilder:
                 employer_dist_cfg
             )
             t_emp1 = time.time()
-            print(f"[TIMER]  ...generera arbetsgivare: {t_emp1-t_emp0:.2f} s")
+            log(f"[TIMER]  ...generera arbetsgivare: {t_emp1-t_emp0:.2f} s")
 
             # Jobb
             t_job0 = time.time()
             jobs = self.generate_jobs_from_employers(employers)
             t_job1 = time.time()
-            print(f"[TIMER]  ...generera jobb: {t_job1-t_job0:.2f} s")
+            log(f"[TIMER]  ...generera jobb: {t_job1-t_job0:.2f} s")
 
             self.print_employer_size_stats(employers, employer_dist_cfg)
 
             all_individuals.append(individuals)
             all_employers.append(employers)
             all_jobs.append(jobs)
-            print(f"[TIMER] Kommun {municipal_code} totalt: {time.time()-t1:.2f} s")
+            log(f"[TIMER] Kommun {municipal_code} totalt: {time.time()-t1:.2f} s")
 
         t2 = time.time()
         all_individuals = pd.concat(all_individuals, ignore_index=True)
@@ -369,8 +370,8 @@ class ScenarioBuilder:
         events = pd.DataFrame(columns=["time", "agent_id", "event_type", "params"])
         t3 = time.time()
 
-        print(f"[TIMER] Sammanfogning/efterarbete: {t3-t2:.2f} s")
-        print(f"[TIMER] generate totalt {t3-t0:.2f} s")
+        log(f"[TIMER] Sammanfogning/efterarbete: {t3-t2:.2f} s")
+        log(f"[TIMER] generate totalt {t3-t0:.2f} s")
         return all_individuals, all_jobs, all_employers, events
 
 

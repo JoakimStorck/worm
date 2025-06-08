@@ -1,6 +1,7 @@
 # database/utils.py
 
 import pandas as pd
+from worm.statistics.log import log 
 
 def fetch_with_fallback(conn, table, filters, year_col='year', desired_year=None, columns='*'):
     """
@@ -38,6 +39,6 @@ def fetch_with_fallback(conn, table, filters, year_col='year', desired_year=None
     if df.empty:
         raise ValueError(f"Ingen data i {table} för år {fallback_year} med filter {filters}")
     if desired_year is not None and fallback_year != desired_year:
-        print(f"Varning: Fallback till år {fallback_year} i {table} för filter {filters} (önskat år var {desired_year})")
+        log(f"Varning: Fallback till år {fallback_year} i {table} för filter {filters} (önskat år var {desired_year})")
     return df, fallback_year
 

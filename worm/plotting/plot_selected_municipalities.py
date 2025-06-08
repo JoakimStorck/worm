@@ -1,5 +1,7 @@
 # plotting/plot_selected_municipalities.py
 
+from worm.statistics.log import log
+
 def plot_selected_municipalities(
     geoworld,
     municipal_codes_or_names,
@@ -25,11 +27,11 @@ def plot_selected_municipalities(
         muni_gdf["municipality"].str.lower().str.contains('|'.join([v.lower() for v in municipal_codes_or_names]))
     ]
     if selected.empty:
-        print("Inga matchande kommuner hittades!")
+        log("Inga matchande kommuner hittades!")
         return
 
-    print("VALDA KOMMUNER:")
-    print(selected[["municipal_code", "municipality"]])
+    log("VALDA KOMMUNER:")
+    log(selected[["municipal_code", "municipality"]])
 
     fig, ax = plt.subplots(figsize=(10, 10))
 
@@ -92,6 +94,6 @@ def plot_selected_municipalities(
             plt.savefig(save_path, format=file_format, dpi=dpi)
         else:
             plt.savefig(save_path, dpi=dpi)
-        print(f"Karta sparad till {save_path}")
+        log(f"Karta sparad till {save_path}")
     if show:
         plt.show()

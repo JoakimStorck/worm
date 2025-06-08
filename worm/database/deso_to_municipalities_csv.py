@@ -51,4 +51,4 @@ for col in df.select_dtypes(include="object").columns:
 
 # Spara som UTF-8 CSV
 df.to_csv(csv_path, index=False, encoding="utf-8", quoting=csv.QUOTE_NONNUMERIC)
-print(f"{len(df)} kommuner sparade till {csv_path}")
+log(f"{len(df)} kommuner sparade till {csv_path}")

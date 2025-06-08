@@ -24,11 +24,11 @@ def plot_selected_municipalities(geoworld, codes_or_names, layers=("municipaliti
     ]
 
     if selected.empty:
-        print("Inga matchande kommuner hittades!")
+        log("Inga matchande kommuner hittades!")
         return
 
-    print("VALDA KOMMUNER:")
-    print(selected[["municipal_code", "municipality"]])
+    log("VALDA KOMMUNER:")
+    log(selected[["municipal_code", "municipality"]])
 
     fig, ax = plt.subplots(figsize=(8, 8))
 
@@ -49,11 +49,11 @@ def plot_selected_municipalities(geoworld, codes_or_names, layers=("municipaliti
         if layer == "municipalities":
             continue
         if not hasattr(geoworld, layer):
-            print(f"Warning: GeoWorld does not have layer '{layer}'.")
+            log(f"Warning: GeoWorld does not have layer '{layer}'.")
             continue
         gdf = getattr(geoworld, layer)
         if gdf.empty:
-            print(f"Layer '{layer}' är tom.")
+            log(f"Layer '{layer}' är tom.")
             continue
 
         # Försök hitta rätt kommunnummerkolumn
@@ -65,9 +65,9 @@ def plot_selected_municipalities(geoworld, codes_or_names, layers=("municipaliti
 
         if muni_col:
             hits = gdf[gdf[muni_col].isin(selected["municipal_code"])]
-            print(f"Layer: {layer}, hittade {len(hits)} objekt för valda kommuner.")
+            log(f"Layer: {layer}, hittade {len(hits)} objekt för valda kommuner.")
         else:
-            print(f"Layer '{layer}' saknar kolumn för kommunnummer – ritar hela lagret!")
+            log(f"Layer '{layer}' saknar kolumn för kommunnummer – ritar hela lagret!")
             hits = gdf
 
         if not hits.empty:

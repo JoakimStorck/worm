@@ -25,7 +25,7 @@ def fetch_and_parse_scb_data(query_path=None, save_to_csv=False):
     response.raise_for_status()
     data = response.json()
 
-    print(f"Antal observationer: {len(data['data'])}")
+    log(f"Antal observationer: {len(data['data'])}")
 
     records = []
     for obs in data["data"]:
@@ -37,7 +37,7 @@ def fetch_and_parse_scb_data(query_path=None, save_to_csv=False):
             arbetsstallen = int(values[1]) if values[1] != ".." else None
             records.append((region, sni, year, anstallda, arbetsstallen))
         except Exception as e:
-            print(f"Fel i datapunkt: {obs} — {e}")
+            log(f"Fel i datapunkt: {obs} — {e}")
 
     df = pd.DataFrame(records, columns=["Region", "SNI2007", "Year", "Antal_Anstallda", "Antal_Arbetsstallen"])
 

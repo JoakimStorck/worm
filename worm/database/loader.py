@@ -14,7 +14,7 @@ def load_municipalities(csv_path, db_path="data/worm.sqlite3"):
 
 def load_municipalities_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf = gpd.read_file(gpkg_path)
-    print("Municipalities - columns:", gdf.columns)
+    log("Municipalities - columns:", gdf.columns)
     # Exempel: ["municipal_code", "municipality", "county_code", "county", "population", "area_ha", "area_km2", "geometry"]
     # Skapa WKT-kolumn
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
@@ -27,7 +27,7 @@ def load_municipalities_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
 
 def load_urban_areas_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf = gpd.read_file(gpkg_path)
-    print("Urban areas - columns:", gdf.columns)
+    log("Urban areas - columns:", gdf.columns)
 
     # Skapa WKT-polygon
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
@@ -58,12 +58,12 @@ def load_urban_areas_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     conn = sqlite3.connect(db_path)
     gdf.to_sql("urban_areas", conn, if_exists="replace", index=False)
     conn.close()
-    print(f"{len(gdf)} urban areas loaded and saved to database.")
+    log(f"{len(gdf)} urban areas loaded and saved to database.")
 
 
 def load_small_localities_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf = gpd.read_file(gpkg_path)
-    print("Small localities - columns:", gdf.columns)
+    log("Small localities - columns:", gdf.columns)
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
 
     # Mappa och skapa alla kolumner du vill ha i SQL
@@ -91,7 +91,7 @@ def load_small_localities_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     conn = sqlite3.connect(db_path)
     gdf.to_sql("small_localities", conn, if_exists="replace", index=False)
     conn.close()
-    print(f"{len(gdf)} small localities loaded and saved to database.")
+    log(f"{len(gdf)} small localities loaded and saved to database.")
 
 def load_commercial_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     import geopandas as gpd
@@ -99,7 +99,7 @@ def load_commercial_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     import sqlite3
 
     gdf = gpd.read_file(gpkg_path)
-    print("Commercial zones - columns:", gdf.columns)
+    log("Commercial zones - columns:", gdf.columns)
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
 
     # Säkerställ att kommunkod är STRÄNG
@@ -113,7 +113,7 @@ def load_commercial_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
 
     # Lägg in kommunnamn via merge
     gdf = gdf.merge(municipalities, how="left", left_on="kommunkod", right_on="municipal_code")
-    print("Efter merge:", gdf[["kommunkod", "municipality"]].head(5))
+    log("Efter merge:", gdf[["kommunkod", "municipality"]].head(5))
 
     # Skapa rätt kolumner
     gdf["id"] = gdf["ho_kod"].astype(str)
@@ -145,12 +145,12 @@ def load_commercial_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     conn = sqlite3.connect(db_path)
     gdf.to_sql("commercial_zones", conn, if_exists="replace", index=False)
     conn.close()
-    print(f"{len(gdf)} commercial zones loaded and saved to database.")
+    log(f"{len(gdf)} commercial zones loaded and saved to database.")
 
 
 def load_business_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf = gpd.read_file(gpkg_path)
-    print("Business zones - columns:", gdf.columns)
+    log("Business zones - columns:", gdf.columns)
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
 
     # Säkerställ STRÄNG och ledande nollor
@@ -163,19 +163,19 @@ def load_business_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     conn.close()
 
     # DEBUG: Skriv ut Faluns kod och namn i båda tabeller innan merge
-    print("\n=== DEBUG: Falun i gdf ===")
-    print(gdf[gdf["kommunkod"] == "2080"][["kommunkod", "vo_kod", "geometry"]].head(3))
-    print("\n=== DEBUG: Falun i municipalities ===")
-    print(municipalities[municipalities["municipal_code"] == "2080"])
+    log("\n=== DEBUG: Falun i gdf ===")
+    log(gdf[gdf["kommunkod"] == "2080"][["kommunkod", "vo_kod", "geometry"]].head(3))
+    log("\n=== DEBUG: Falun i municipalities ===")
+    log(municipalities[municipalities["municipal_code"] == "2080"])
 
     gdf = gdf.merge(municipalities, how="left", left_on="kommunkod", right_on="municipal_code")
 
     # Efter merge: Skriv ut första rader samt alla rader för Falun
-    print("\nEfter merge, första 5 rader:")
-    print(gdf[["kommunkod", "municipality", "municipal_code"]].head(5))
+    log("\nEfter merge, första 5 rader:")
+    log(gdf[["kommunkod", "municipality", "municipal_code"]].head(5))
 
-    print("\nEfter merge, Falun:")
-    print(gdf[gdf["kommunkod"] == "2080"][["kommunkod", "municipality", "municipal_code", "vo_kod"]].head(10))
+    log("\nEfter merge, Falun:")
+    log(gdf[gdf["kommunkod"] == "2080"][["kommunkod", "municipality", "municipal_code", "vo_kod"]].head(10))
 
     gdf["id"] = gdf["vo_kod"].astype(str)
     gdf["zone_code"] = gdf["vo_kod"].astype(str)
@@ -204,11 +204,11 @@ def load_business_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     conn = sqlite3.connect(db_path)
     gdf.to_sql("business_zones", conn, if_exists="replace", index=False)
     conn.close()
-    print(f"{len(gdf)} business zones loaded and saved to database.")
+    log(f"{len(gdf)} business zones loaded and saved to database.")
 
 def load_leisure_house_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf = gpd.read_file(gpkg_path)
-    print("Leisure house zones - columns:", gdf.columns)
+    log("Leisure house zones - columns:", gdf.columns)
     gdf["id"] = gdf["fo_kod"].astype(str) if "fo_kod" in gdf.columns else gdf.index.astype(str)
     gdf["name"] = gdf["kommunnamn"] + " - " + gdf.index.astype(str) if "kommunnamn" in gdf.columns else "Leisure house zone " + gdf.index.astype(str)
     gdf["municipal_code"] = gdf["kommunkod"].astype(str) if "kommunkod" in gdf.columns else None
@@ -222,7 +222,7 @@ def load_leisure_house_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
 
 def load_deso_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf = gpd.read_file(gpkg_path)
-    print("DeSO - columns:", gdf.columns)
+    log("DeSO - columns:", gdf.columns)
 
     # Skapa eller mappa alla kolumner enligt databasens schema
     gdf["object_id"] = gdf["objectid"] if "objectid" in gdf.columns else gdf.index.astype(str)
@@ -252,7 +252,7 @@ def load_deso_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     conn = sqlite3.connect(db_path)
     gdf.to_sql("deso", conn, if_exists="replace", index=False)
     conn.close()
-    print(f"{len(gdf)} DeSO-zoner inlästa och sparade i databasen.")
+    log(f"{len(gdf)} DeSO-zoner inlästa och sparade i databasen.")
 
 
 # def update_deso_population_from_csv(pop_csv, db_path="data/worm.sqlite3"):
@@ -279,7 +279,7 @@ def load_deso_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
 #         )
 #     conn.commit()
 #     conn.close()
-#     print(f"Uppdaterade population för {len(df_total)} DeSO-zoner.")
+#     log(f"Uppdaterade population för {len(df_total)} DeSO-zoner.")
 
 
 def update_deso_population_from_csv(pop_csv, db_path="data/worm.sqlite3"):
@@ -304,7 +304,7 @@ def update_deso_population_from_csv(pop_csv, db_path="data/worm.sqlite3"):
     # Skriv tillbaka hela tabellen på en gång
     deso.to_sql("deso", conn, if_exists="replace", index=False)
     conn.close()
-    print(f"Uppdaterade population för {len(pop)} DeSO-zoner (skrev om hela tabellen).")
+    log(f"Uppdaterade population för {len(pop)} DeSO-zoner (skrev om hela tabellen).")
 
 
 
@@ -387,7 +387,7 @@ def load_onet_occupations(occupation_path, db_path="data/worm.sqlite3"):
     conn = sqlite3.connect(db_path)
     df.to_sql("onet_occupations", conn, if_exists="replace", index=False)
     conn.close()
-    print(f"Loaded {len(df)} occupations into onet_occupations.")
+    log(f"Loaded {len(df)} occupations into onet_occupations.")
 
 def load_onet_skills(skills_path, db_path="data/worm.sqlite3"):
     df = pd.read_csv(skills_path, sep='\t', encoding='utf-8')
@@ -406,7 +406,7 @@ def load_onet_skills(skills_path, db_path="data/worm.sqlite3"):
     conn = sqlite3.connect(db_path)
     skills.to_sql("onet_skills", conn, if_exists="replace", index=False)
     conn.close()
-    print(f"Loaded {len(skills)} skills into onet_skills.")
+    log(f"Loaded {len(skills)} skills into onet_skills.")
 
 def load_occupation_skill_link(skills_path, db_path="data/worm.sqlite3"):
     df = pd.read_csv(skills_path, sep='\t', encoding='utf-8')
@@ -423,4 +423,4 @@ def load_occupation_skill_link(skills_path, db_path="data/worm.sqlite3"):
     conn = sqlite3.connect(db_path)
     link.to_sql("occupation_skill_link", conn, if_exists="replace", index=False)
     conn.close()
-    print(f"Loaded {len(link)} rows into occupation_skill_link.")
+    log(f"Loaded {len(link)} rows into occupation_skill_link.")

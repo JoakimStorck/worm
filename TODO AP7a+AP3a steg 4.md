@@ -81,7 +81,7 @@ plot_matching_on_map(workers, jobs, matched, kommun_polygon)
 
 # Steg 3: Statistik
 stats = compute_matching_stats(workers, jobs, matched)
-print(stats)
+log(stats)
 
 # Steg 4: Demo/rapport
 save_demo_results(stats, "falun_random_demo.md")

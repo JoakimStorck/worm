@@ -1,0 +1,724 @@
+[TIMER] generate: startat
+
+--- Kommun 2080 ---
+[TIMER]  ...generera individer: 1.80 s
+Varning: Fallback till år 2020 i employment_municipality_sni för filter {'municipal_code': 2080} (önskat år var 2024)
+Antal arbetsgivare: 2240 (mål: 33569 jobb)
+Total antal jobb (summa storlek): 33569
+[TIMER]  ...generera arbetsgivare: 2.05 s
+Exempel på individer:
+   job_id  employer_id individual_id  municipal_code  ...       chi        xi              x             y
+0  J00000            0          None            2080  ...  0.946764  2.535153  542846.526551  6.731061e+06
+1  J00001            0          None            2080  ...  0.946764  2.535153  542846.526551  6.731061e+06
+2  J00002            0          None            2080  ...  0.946764  2.535153  542846.526551  6.731061e+06
+3  J00003            0          None            2080  ...  0.946764  2.535153  542846.526551  6.731061e+06
+4  J00004            0          None            2080  ...  0.946764  2.535153  542846.526551  6.731061e+06
+
+[5 rows x 12 columns]
+Exempel på DeSO-zoner: 
+   object_id  ...                                           geometry
+0          1  ...  POLYGON ((398220.208 6136028.939, 398131.277 6...
+1          2  ...  POLYGON ((385026.453 6138309.345, 385034.006 6...
+2          3  ...  POLYGON ((384150.992 6138331.01, 384220.768 61...
+3          4  ...  POLYGON ((383184.933 6138362.314, 383335.536 6...
+4          5  ...  POLYGON ((388751.769 6136871.608, 388793.831 6...
+
+[5 rows x 13 columns]
+Individers min/max x/y: 514926.5648184329, 569418.4724271108, 6704687.329459769, 6751891.6147381645
+DeSO min/max x/y: minx    2.452092e+05
+miny    6.111269e+06
+maxx    2.806998e+05
+maxy    6.136203e+06
+dtype: float64, minx    9.149900e+05
+miny    7.540813e+06
+maxx    9.211774e+05
+maxy    7.671055e+06
+dtype: float64
+Kolumner i joined efter spatial join: Index(['job_id', 'employer_id', 'individual_id', 'municipal_code', 'layer',
+       'zone_code', 'sni_code', 'geometry', 'chi', 'xi', 'x', 'y',
+       'index_right', 'deso_code'],
+      dtype='object')
+[TIMER]  ...generera jobb: 1.41 s
+Storleksfördelning (antal arbetsgivare per klass):
+  micro       :  1887 st (1-9 anställda)
+  small       :   289 st (10-49 anställda)
+  medium_large:    51 st (50-250 anställda)
+  very_large  :    13 st (251-1000 anställda)
+[TIMER] Kommun 2080 totalt: 5.28 s
+[TIMER] Sammanfogning/efterarbete: 0.00 s
+[TIMER] generate totalt 5.28 s
+Scenario: scenarios/falun_baseline.yml
+Statistik före matchning: {'total_individuals': 59945, 'individual_status_counts': {'unemployed': 33569, 'not_in_labor_force': 26376}, 'total_jobs': 33569, 'matched_pairs': 0, 'unique_matched_individuals': 0, 'unique_matched_jobs': 0, 'unmatched_individuals_in_workforce': 33569, 'unmatched_jobs': 33569}
+
+[ROUND 1] DeSO batch matching, zones: 37
+    - DeSO 2080C1060: matched 10, left: 33559 individuals, 33559 jobs.
+    - DeSO 2080C1040: matched 161, left: 33398 individuals, 33398 jobs.
+    - DeSO 2080C1190: matched 22, left: 33376 individuals, 33376 jobs.
+    - DeSO 2080C1010: matched 92, left: 33284 individuals, 33284 jobs.
+    - DeSO 2080A0020: matched 249, left: 33035 individuals, 33035 jobs.
+    - DeSO 2080A0010: matched 209, left: 32826 individuals, 32826 jobs.
+    - DeSO 2080C1020: matched 58, left: 32768 individuals, 32768 jobs.
+    - DeSO 2080C1030: matched 188, left: 32580 individuals, 32580 jobs.
+    - DeSO 2080A0030: matched 208, left: 32372 individuals, 32372 jobs.
+    - DeSO 2080C1050: matched 134, left: 32238 individuals, 32238 jobs.
+    - DeSO 2080C1090: matched 68, left: 32170 individuals, 32170 jobs.
+    - DeSO 2080C1110: matched 44, left: 32126 individuals, 32126 jobs.
+    - DeSO 2080C1080: matched 47, left: 32079 individuals, 32079 jobs.
+    - DeSO 2080C1130: matched 10, left: 32069 individuals, 32069 jobs.
+    - DeSO 2080C1100: matched 45, left: 32024 individuals, 32024 jobs.
+    - DeSO 2080C1140: matched 146, left: 31878 individuals, 31878 jobs.
+    - DeSO 2080C1160: matched 24, left: 31854 individuals, 31854 jobs.
+    - DeSO 2080C1070: matched 138, left: 31716 individuals, 31716 jobs.
+    - DeSO 2080C1150: matched 122, left: 31594 individuals, 31594 jobs.
+    - DeSO 2080C1120: matched 127, left: 31467 individuals, 31467 jobs.
+    - DeSO 2080C1200: matched 12, left: 31455 individuals, 31455 jobs.
+    - DeSO 2080C1220: matched 69, left: 31386 individuals, 31386 jobs.
+    - DeSO 2080C1260: matched 264, left: 31122 individuals, 31122 jobs.
+    - DeSO 2080C1250: matched 111, left: 31011 individuals, 31011 jobs.
+    - DeSO 2080B5010: matched 219, left: 30792 individuals, 30792 jobs.
+    - DeSO 2080B4010: matched 205, left: 30587 individuals, 30587 jobs.
+    - DeSO 2080B2020: matched 12, left: 30575 individuals, 30575 jobs.
+    - DeSO 2080B2010: matched 118, left: 30457 individuals, 30457 jobs.
+    - DeSO 2080B3010: matched 230, left: 30227 individuals, 30227 jobs.
+    - DeSO 2080A0040: matched 150, left: 30077 individuals, 30077 jobs.
+    - DeSO 2080A0050: matched 169, left: 29908 individuals, 29908 jobs.
+    - DeSO 2080A0060: matched 128, left: 29780 individuals, 29780 jobs.
+
+[ROUND 1] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 2978, left: 26802 individuals, 26802 jobs.
+
+[ROUND 1] Global batch matching
+    - Global: matched 1340, left: 25462 individuals, 25462 jobs.
+[END OF ROUND 1] Matched this round: 8107, total matched: 8107. Time: 1.30 s
+
+[ROUND 2] DeSO batch matching, zones: 37
+    - DeSO 2080C1040: matched 110, left: 25352 individuals, 25352 jobs.
+    - DeSO 2080C1190: matched 16, left: 25336 individuals, 25336 jobs.
+    - DeSO 2080C1010: matched 63, left: 25273 individuals, 25273 jobs.
+    - DeSO 2080A0020: matched 171, left: 25102 individuals, 25102 jobs.
+    - DeSO 2080A0010: matched 142, left: 24960 individuals, 24960 jobs.
+    - DeSO 2080C1020: matched 40, left: 24920 individuals, 24920 jobs.
+    - DeSO 2080C1030: matched 128, left: 24792 individuals, 24792 jobs.
+    - DeSO 2080A0030: matched 144, left: 24648 individuals, 24648 jobs.
+    - DeSO 2080C1050: matched 93, left: 24555 individuals, 24555 jobs.
+    - DeSO 2080C1090: matched 47, left: 24508 individuals, 24508 jobs.
+    - DeSO 2080C1110: matched 30, left: 24478 individuals, 24478 jobs.
+    - DeSO 2080C1080: matched 32, left: 24446 individuals, 24446 jobs.
+    - DeSO 2080C1130: matched 6, left: 24440 individuals, 24440 jobs.
+    - DeSO 2080C1100: matched 30, left: 24410 individuals, 24410 jobs.
+    - DeSO 2080C1140: matched 102, left: 24308 individuals, 24308 jobs.
+    - DeSO 2080C1160: matched 17, left: 24291 individuals, 24291 jobs.
+    - DeSO 2080C1070: matched 94, left: 24197 individuals, 24197 jobs.
+    - DeSO 2080C1150: matched 85, left: 24112 individuals, 24112 jobs.
+    - DeSO 2080C1120: matched 86, left: 24026 individuals, 24026 jobs.
+    - DeSO 2080C1200: matched 10, left: 24016 individuals, 24016 jobs.
+    - DeSO 2080C1220: matched 49, left: 23967 individuals, 23967 jobs.
+    - DeSO 2080C1260: matched 180, left: 23787 individuals, 23787 jobs.
+    - DeSO 2080C1250: matched 75, left: 23712 individuals, 23712 jobs.
+    - DeSO 2080B5010: matched 152, left: 23560 individuals, 23560 jobs.
+    - DeSO 2080B4010: matched 138, left: 23422 individuals, 23422 jobs.
+    - DeSO 2080B2020: matched 10, left: 23412 individuals, 23412 jobs.
+    - DeSO 2080B2010: matched 81, left: 23331 individuals, 23331 jobs.
+    - DeSO 2080B3010: matched 155, left: 23176 individuals, 23176 jobs.
+    - DeSO 2080A0040: matched 103, left: 23073 individuals, 23073 jobs.
+    - DeSO 2080A0050: matched 114, left: 22959 individuals, 22959 jobs.
+    - DeSO 2080A0060: matched 91, left: 22868 individuals, 22868 jobs.
+
+[ROUND 2] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 2286, left: 20582 individuals, 20582 jobs.
+
+[ROUND 2] Global batch matching
+    - Global: matched 1029, left: 19553 individuals, 19553 jobs.
+[END OF ROUND 2] Matched this round: 5909, total matched: 14016. Time: 0.85 s
+
+[ROUND 3] DeSO batch matching, zones: 37
+    - DeSO 2080C1040: matched 75, left: 19478 individuals, 19478 jobs.
+    - DeSO 2080C1190: matched 10, left: 19468 individuals, 19468 jobs.
+    - DeSO 2080C1010: matched 44, left: 19424 individuals, 19424 jobs.
+    - DeSO 2080A0020: matched 117, left: 19307 individuals, 19307 jobs.
+    - DeSO 2080A0010: matched 97, left: 19210 individuals, 19210 jobs.
+    - DeSO 2080C1020: matched 28, left: 19182 individuals, 19182 jobs.
+    - DeSO 2080C1030: matched 86, left: 19096 individuals, 19096 jobs.
+    - DeSO 2080A0030: matched 97, left: 18999 individuals, 18999 jobs.
+    - DeSO 2080C1050: matched 63, left: 18936 individuals, 18936 jobs.
+    - DeSO 2080C1090: matched 33, left: 18903 individuals, 18903 jobs.
+    - DeSO 2080C1110: matched 21, left: 18882 individuals, 18882 jobs.
+    - DeSO 2080C1080: matched 21, left: 18861 individuals, 18861 jobs.
+    - DeSO 2080C1100: matched 20, left: 18841 individuals, 18841 jobs.
+    - DeSO 2080C1140: matched 70, left: 18771 individuals, 18771 jobs.
+    - DeSO 2080C1160: matched 11, left: 18760 individuals, 18760 jobs.
+    - DeSO 2080C1070: matched 65, left: 18695 individuals, 18695 jobs.
+    - DeSO 2080C1150: matched 56, left: 18639 individuals, 18639 jobs.
+    - DeSO 2080C1120: matched 59, left: 18580 individuals, 18580 jobs.
+    - DeSO 2080C1200: matched 10, left: 18570 individuals, 18570 jobs.
+    - DeSO 2080C1220: matched 33, left: 18537 individuals, 18537 jobs.
+    - DeSO 2080C1260: matched 121, left: 18416 individuals, 18416 jobs.
+    - DeSO 2080C1250: matched 51, left: 18365 individuals, 18365 jobs.
+    - DeSO 2080B5010: matched 107, left: 18258 individuals, 18258 jobs.
+    - DeSO 2080B4010: matched 99, left: 18159 individuals, 18159 jobs.
+    - DeSO 2080B2020: matched 10, left: 18149 individuals, 18149 jobs.
+    - DeSO 2080B2010: matched 58, left: 18091 individuals, 18091 jobs.
+    - DeSO 2080B3010: matched 107, left: 17984 individuals, 17984 jobs.
+    - DeSO 2080A0040: matched 68, left: 17916 individuals, 17916 jobs.
+    - DeSO 2080A0050: matched 78, left: 17838 individuals, 17838 jobs.
+    - DeSO 2080A0060: matched 65, left: 17773 individuals, 17773 jobs.
+
+[ROUND 3] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 1777, left: 15996 individuals, 15996 jobs.
+
+[ROUND 3] Global batch matching
+    - Global: matched 799, left: 15197 individuals, 15197 jobs.
+[END OF ROUND 3] Matched this round: 4356, total matched: 18372. Time: 0.58 s
+
+[ROUND 4] DeSO batch matching, zones: 37
+    - DeSO 2080C1040: matched 51, left: 15146 individuals, 15146 jobs.
+    - DeSO 2080C1190: matched 10, left: 15136 individuals, 15136 jobs.
+    - DeSO 2080C1010: matched 29, left: 15107 individuals, 15107 jobs.
+    - DeSO 2080A0020: matched 80, left: 15027 individuals, 15027 jobs.
+    - DeSO 2080A0010: matched 68, left: 14959 individuals, 14959 jobs.
+    - DeSO 2080C1020: matched 18, left: 14941 individuals, 14941 jobs.
+    - DeSO 2080C1030: matched 58, left: 14883 individuals, 14883 jobs.
+    - DeSO 2080A0030: matched 64, left: 14819 individuals, 14819 jobs.
+    - DeSO 2080C1050: matched 44, left: 14775 individuals, 14775 jobs.
+    - DeSO 2080C1090: matched 23, left: 14752 individuals, 14752 jobs.
+    - DeSO 2080C1110: matched 15, left: 14737 individuals, 14737 jobs.
+    - DeSO 2080C1080: matched 14, left: 14723 individuals, 14723 jobs.
+    - DeSO 2080C1100: matched 14, left: 14709 individuals, 14709 jobs.
+    - DeSO 2080C1140: matched 46, left: 14663 individuals, 14663 jobs.
+    - DeSO 2080C1160: matched 10, left: 14653 individuals, 14653 jobs.
+    - DeSO 2080C1070: matched 44, left: 14609 individuals, 14609 jobs.
+    - DeSO 2080C1150: matched 38, left: 14571 individuals, 14571 jobs.
+    - DeSO 2080C1120: matched 38, left: 14533 individuals, 14533 jobs.
+    - DeSO 2080C1200: matched 10, left: 14523 individuals, 14523 jobs.
+    - DeSO 2080C1220: matched 25, left: 14498 individuals, 14498 jobs.
+    - DeSO 2080C1260: matched 82, left: 14416 individuals, 14416 jobs.
+    - DeSO 2080C1250: matched 36, left: 14380 individuals, 14380 jobs.
+    - DeSO 2080B5010: matched 73, left: 14307 individuals, 14307 jobs.
+    - DeSO 2080B4010: matched 69, left: 14238 individuals, 14238 jobs.
+    - DeSO 2080B2020: matched 10, left: 14228 individuals, 14228 jobs.
+    - DeSO 2080B2010: matched 40, left: 14188 individuals, 14188 jobs.
+    - DeSO 2080B3010: matched 71, left: 14117 individuals, 14117 jobs.
+    - DeSO 2080A0040: matched 46, left: 14071 individuals, 14071 jobs.
+    - DeSO 2080A0050: matched 55, left: 14016 individuals, 14016 jobs.
+    - DeSO 2080A0060: matched 46, left: 13970 individuals, 13970 jobs.
+
+[ROUND 4] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 1397, left: 12573 individuals, 12573 jobs.
+
+[ROUND 4] Global batch matching
+    - Global: matched 628, left: 11945 individuals, 11945 jobs.
+[END OF ROUND 4] Matched this round: 3252, total matched: 21624. Time: 0.45 s
+
+[ROUND 5] DeSO batch matching, zones: 37
+    - DeSO 2080C1040: matched 35, left: 11910 individuals, 11910 jobs.
+    - DeSO 2080C1190: matched 10, left: 11900 individuals, 11900 jobs.
+    - DeSO 2080C1010: matched 20, left: 11880 individuals, 11880 jobs.
+    - DeSO 2080A0020: matched 56, left: 11824 individuals, 11824 jobs.
+    - DeSO 2080A0010: matched 48, left: 11776 individuals, 11776 jobs.
+    - DeSO 2080C1020: matched 12, left: 11764 individuals, 11764 jobs.
+    - DeSO 2080C1030: matched 40, left: 11724 individuals, 11724 jobs.
+    - DeSO 2080A0030: matched 43, left: 11681 individuals, 11681 jobs.
+    - DeSO 2080C1050: matched 29, left: 11652 individuals, 11652 jobs.
+    - DeSO 2080C1090: matched 16, left: 11636 individuals, 11636 jobs.
+    - DeSO 2080C1110: matched 10, left: 11626 individuals, 11626 jobs.
+    - DeSO 2080C1080: matched 10, left: 11616 individuals, 11616 jobs.
+    - DeSO 2080C1100: matched 10, left: 11606 individuals, 11606 jobs.
+    - DeSO 2080C1140: matched 31, left: 11575 individuals, 11575 jobs.
+    - DeSO 2080C1160: matched 10, left: 11565 individuals, 11565 jobs.
+    - DeSO 2080C1070: matched 29, left: 11536 individuals, 11536 jobs.
+    - DeSO 2080C1150: matched 26, left: 11510 individuals, 11510 jobs.
+    - DeSO 2080C1120: matched 26, left: 11484 individuals, 11484 jobs.
+    - DeSO 2080C1200: matched 2, left: 11482 individuals, 11482 jobs.
+    - DeSO 2080C1220: matched 19, left: 11463 individuals, 11463 jobs.
+    - DeSO 2080C1260: matched 57, left: 11406 individuals, 11406 jobs.
+    - DeSO 2080C1250: matched 25, left: 11381 individuals, 11381 jobs.
+    - DeSO 2080B5010: matched 50, left: 11331 individuals, 11331 jobs.
+    - DeSO 2080B4010: matched 47, left: 11284 individuals, 11284 jobs.
+    - DeSO 2080B2020: matched 5, left: 11279 individuals, 11279 jobs.
+    - DeSO 2080B2010: matched 28, left: 11251 individuals, 11251 jobs.
+    - DeSO 2080B3010: matched 49, left: 11202 individuals, 11202 jobs.
+    - DeSO 2080A0040: matched 32, left: 11170 individuals, 11170 jobs.
+    - DeSO 2080A0050: matched 37, left: 11133 individuals, 11133 jobs.
+    - DeSO 2080A0060: matched 32, left: 11101 individuals, 11101 jobs.
+
+[ROUND 5] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 1110, left: 9991 individuals, 9991 jobs.
+
+[ROUND 5] Global batch matching
+    - Global: matched 499, left: 9492 individuals, 9492 jobs.
+[END OF ROUND 5] Matched this round: 2453, total matched: 24077. Time: 0.34 s
+
+[ROUND 6] DeSO batch matching, zones: 37
+    - DeSO 2080C1040: matched 24, left: 9468 individuals, 9468 jobs.
+    - DeSO 2080C1190: matched 9, left: 9459 individuals, 9459 jobs.
+    - DeSO 2080C1010: matched 15, left: 9444 individuals, 9444 jobs.
+    - DeSO 2080A0020: matched 38, left: 9406 individuals, 9406 jobs.
+    - DeSO 2080A0010: matched 32, left: 9374 individuals, 9374 jobs.
+    - DeSO 2080C1020: matched 10, left: 9364 individuals, 9364 jobs.
+    - DeSO 2080C1030: matched 27, left: 9337 individuals, 9337 jobs.
+    - DeSO 2080A0030: matched 28, left: 9309 individuals, 9309 jobs.
+    - DeSO 2080C1050: matched 20, left: 9289 individuals, 9289 jobs.
+    - DeSO 2080C1090: matched 11, left: 9278 individuals, 9278 jobs.
+    - DeSO 2080C1110: matched 10, left: 9268 individuals, 9268 jobs.
+    - DeSO 2080C1080: matched 10, left: 9258 individuals, 9258 jobs.
+    - DeSO 2080C1100: matched 10, left: 9248 individuals, 9248 jobs.
+    - DeSO 2080C1140: matched 21, left: 9227 individuals, 9227 jobs.
+    - DeSO 2080C1160: matched 10, left: 9217 individuals, 9217 jobs.
+    - DeSO 2080C1070: matched 19, left: 9198 individuals, 9198 jobs.
+    - DeSO 2080C1150: matched 19, left: 9179 individuals, 9179 jobs.
+    - DeSO 2080C1120: matched 17, left: 9162 individuals, 9162 jobs.
+    - DeSO 2080C1220: matched 13, left: 9149 individuals, 9149 jobs.
+    - DeSO 2080C1260: matched 39, left: 9110 individuals, 9110 jobs.
+    - DeSO 2080C1250: matched 17, left: 9093 individuals, 9093 jobs.
+    - DeSO 2080B5010: matched 34, left: 9059 individuals, 9059 jobs.
+    - DeSO 2080B4010: matched 32, left: 9027 individuals, 9027 jobs.
+    - DeSO 2080B2010: matched 19, left: 9008 individuals, 9008 jobs.
+    - DeSO 2080B3010: matched 36, left: 8972 individuals, 8972 jobs.
+    - DeSO 2080A0040: matched 22, left: 8950 individuals, 8950 jobs.
+    - DeSO 2080A0050: matched 24, left: 8926 individuals, 8926 jobs.
+    - DeSO 2080A0060: matched 22, left: 8904 individuals, 8904 jobs.
+
+[ROUND 6] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 890, left: 8014 individuals, 8014 jobs.
+
+[ROUND 6] Global batch matching
+    - Global: matched 400, left: 7614 individuals, 7614 jobs.
+[END OF ROUND 6] Matched this round: 1878, total matched: 25955. Time: 0.28 s
+
+[ROUND 7] DeSO batch matching, zones: 37
+    - DeSO 2080C1040: matched 16, left: 7598 individuals, 7598 jobs.
+    - DeSO 2080C1010: matched 10, left: 7588 individuals, 7588 jobs.
+    - DeSO 2080A0020: matched 26, left: 7562 individuals, 7562 jobs.
+    - DeSO 2080A0010: matched 22, left: 7540 individuals, 7540 jobs.
+    - DeSO 2080C1020: matched 10, left: 7530 individuals, 7530 jobs.
+    - DeSO 2080C1030: matched 18, left: 7512 individuals, 7512 jobs.
+    - DeSO 2080A0030: matched 19, left: 7493 individuals, 7493 jobs.
+    - DeSO 2080C1050: matched 13, left: 7480 individuals, 7480 jobs.
+    - DeSO 2080C1090: matched 10, left: 7470 individuals, 7470 jobs.
+    - DeSO 2080C1110: matched 10, left: 7460 individuals, 7460 jobs.
+    - DeSO 2080C1080: matched 10, left: 7450 individuals, 7450 jobs.
+    - DeSO 2080C1100: matched 10, left: 7440 individuals, 7440 jobs.
+    - DeSO 2080C1140: matched 15, left: 7425 individuals, 7425 jobs.
+    - DeSO 2080C1160: matched 4, left: 7421 individuals, 7421 jobs.
+    - DeSO 2080C1070: matched 13, left: 7408 individuals, 7408 jobs.
+    - DeSO 2080C1150: matched 13, left: 7395 individuals, 7395 jobs.
+    - DeSO 2080C1120: matched 11, left: 7384 individuals, 7384 jobs.
+    - DeSO 2080C1220: matched 10, left: 7374 individuals, 7374 jobs.
+    - DeSO 2080C1260: matched 27, left: 7347 individuals, 7347 jobs.
+    - DeSO 2080C1250: matched 12, left: 7335 individuals, 7335 jobs.
+    - DeSO 2080B5010: matched 23, left: 7312 individuals, 7312 jobs.
+    - DeSO 2080B4010: matched 22, left: 7290 individuals, 7290 jobs.
+    - DeSO 2080B2010: matched 13, left: 7277 individuals, 7277 jobs.
+    - DeSO 2080B3010: matched 24, left: 7253 individuals, 7253 jobs.
+    - DeSO 2080A0040: matched 14, left: 7239 individuals, 7239 jobs.
+    - DeSO 2080A0050: matched 16, left: 7223 individuals, 7223 jobs.
+    - DeSO 2080A0060: matched 16, left: 7207 individuals, 7207 jobs.
+
+[ROUND 7] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 720, left: 6487 individuals, 6487 jobs.
+
+[ROUND 7] Global batch matching
+    - Global: matched 324, left: 6163 individuals, 6163 jobs.
+[END OF ROUND 7] Matched this round: 1451, total matched: 27406. Time: 0.22 s
+
+[ROUND 8] DeSO batch matching, zones: 37
+    - DeSO 2080C1040: matched 11, left: 6152 individuals, 6152 jobs.
+    - DeSO 2080C1010: matched 10, left: 6142 individuals, 6142 jobs.
+    - DeSO 2080A0020: matched 17, left: 6125 individuals, 6125 jobs.
+    - DeSO 2080A0010: matched 16, left: 6109 individuals, 6109 jobs.
+    - DeSO 2080C1020: matched 10, left: 6099 individuals, 6099 jobs.
+    - DeSO 2080C1030: matched 12, left: 6087 individuals, 6087 jobs.
+    - DeSO 2080A0030: matched 14, left: 6073 individuals, 6073 jobs.
+    - DeSO 2080C1050: matched 10, left: 6063 individuals, 6063 jobs.
+    - DeSO 2080C1090: matched 10, left: 6053 individuals, 6053 jobs.
+    - DeSO 2080C1110: matched 10, left: 6043 individuals, 6043 jobs.
+    - DeSO 2080C1080: matched 8, left: 6035 individuals, 6035 jobs.
+    - DeSO 2080C1100: matched 6, left: 6029 individuals, 6029 jobs.
+    - DeSO 2080C1140: matched 10, left: 6019 individuals, 6019 jobs.
+    - DeSO 2080C1070: matched 10, left: 6009 individuals, 6009 jobs.
+    - DeSO 2080C1150: matched 10, left: 5999 individuals, 5999 jobs.
+    - DeSO 2080C1120: matched 10, left: 5989 individuals, 5989 jobs.
+    - DeSO 2080C1220: matched 10, left: 5979 individuals, 5979 jobs.
+    - DeSO 2080C1260: matched 18, left: 5961 individuals, 5961 jobs.
+    - DeSO 2080C1250: matched 10, left: 5951 individuals, 5951 jobs.
+    - DeSO 2080B5010: matched 16, left: 5935 individuals, 5935 jobs.
+    - DeSO 2080B4010: matched 15, left: 5920 individuals, 5920 jobs.
+    - DeSO 2080B2010: matched 10, left: 5910 individuals, 5910 jobs.
+    - DeSO 2080B3010: matched 15, left: 5895 individuals, 5895 jobs.
+    - DeSO 2080A0040: matched 10, left: 5885 individuals, 5885 jobs.
+    - DeSO 2080A0050: matched 12, left: 5873 individuals, 5873 jobs.
+    - DeSO 2080A0060: matched 11, left: 5862 individuals, 5862 jobs.
+
+[ROUND 8] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 586, left: 5276 individuals, 5276 jobs.
+
+[ROUND 8] Global batch matching
+    - Global: matched 263, left: 5013 individuals, 5013 jobs.
+[END OF ROUND 8] Matched this round: 1150, total matched: 28556. Time: 0.17 s
+
+[ROUND 9] DeSO batch matching, zones: 37
+    - DeSO 2080C1040: matched 10, left: 5003 individuals, 5003 jobs.
+    - DeSO 2080C1010: matched 10, left: 4993 individuals, 4993 jobs.
+    - DeSO 2080A0020: matched 12, left: 4981 individuals, 4981 jobs.
+    - DeSO 2080A0010: matched 12, left: 4969 individuals, 4969 jobs.
+    - DeSO 2080C1020: matched 7, left: 4962 individuals, 4962 jobs.
+    - DeSO 2080C1030: matched 10, left: 4952 individuals, 4952 jobs.
+    - DeSO 2080A0030: matched 10, left: 4942 individuals, 4942 jobs.
+    - DeSO 2080C1050: matched 10, left: 4932 individuals, 4932 jobs.
+    - DeSO 2080C1090: matched 10, left: 4922 individuals, 4922 jobs.
+    - DeSO 2080C1110: matched 4, left: 4918 individuals, 4918 jobs.
+    - DeSO 2080C1140: matched 10, left: 4908 individuals, 4908 jobs.
+    - DeSO 2080C1070: matched 10, left: 4898 individuals, 4898 jobs.
+    - DeSO 2080C1150: matched 10, left: 4888 individuals, 4888 jobs.
+    - DeSO 2080C1120: matched 10, left: 4878 individuals, 4878 jobs.
+    - DeSO 2080C1220: matched 10, left: 4868 individuals, 4868 jobs.
+    - DeSO 2080C1260: matched 13, left: 4855 individuals, 4855 jobs.
+    - DeSO 2080C1250: matched 10, left: 4845 individuals, 4845 jobs.
+    - DeSO 2080B5010: matched 11, left: 4834 individuals, 4834 jobs.
+    - DeSO 2080B4010: matched 10, left: 4824 individuals, 4824 jobs.
+    - DeSO 2080B2010: matched 10, left: 4814 individuals, 4814 jobs.
+    - DeSO 2080B3010: matched 10, left: 4804 individuals, 4804 jobs.
+    - DeSO 2080A0040: matched 10, left: 4794 individuals, 4794 jobs.
+    - DeSO 2080A0050: matched 10, left: 4784 individuals, 4784 jobs.
+    - DeSO 2080A0060: matched 10, left: 4774 individuals, 4774 jobs.
+
+[ROUND 9] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 477, left: 4297 individuals, 4297 jobs.
+
+[ROUND 9] Global batch matching
+    - Global: matched 214, left: 4083 individuals, 4083 jobs.
+[END OF ROUND 9] Matched this round: 930, total matched: 29486. Time: 0.16 s
+
+[ROUND 10] DeSO batch matching, zones: 37
+    - DeSO 2080C1040: matched 10, left: 4073 individuals, 4073 jobs.
+    - DeSO 2080C1010: matched 10, left: 4063 individuals, 4063 jobs.
+    - DeSO 2080A0020: matched 10, left: 4053 individuals, 4053 jobs.
+    - DeSO 2080A0010: matched 10, left: 4043 individuals, 4043 jobs.
+    - DeSO 2080C1030: matched 10, left: 4033 individuals, 4033 jobs.
+    - DeSO 2080A0030: matched 10, left: 4023 individuals, 4023 jobs.
+    - DeSO 2080C1050: matched 10, left: 4013 individuals, 4013 jobs.
+    - DeSO 2080C1090: matched 1, left: 4012 individuals, 4012 jobs.
+    - DeSO 2080C1140: matched 10, left: 4002 individuals, 4002 jobs.
+    - DeSO 2080C1070: matched 10, left: 3992 individuals, 3992 jobs.
+    - DeSO 2080C1150: matched 10, left: 3982 individuals, 3982 jobs.
+    - DeSO 2080C1120: matched 10, left: 3972 individuals, 3972 jobs.
+    - DeSO 2080C1220: matched 9, left: 3963 individuals, 3963 jobs.
+    - DeSO 2080C1260: matched 10, left: 3953 individuals, 3953 jobs.
+    - DeSO 2080C1250: matched 10, left: 3943 individuals, 3943 jobs.
+    - DeSO 2080B5010: matched 10, left: 3933 individuals, 3933 jobs.
+    - DeSO 2080B4010: matched 10, left: 3923 individuals, 3923 jobs.
+    - DeSO 2080B2010: matched 10, left: 3913 individuals, 3913 jobs.
+    - DeSO 2080B3010: matched 10, left: 3903 individuals, 3903 jobs.
+    - DeSO 2080A0040: matched 10, left: 3893 individuals, 3893 jobs.
+    - DeSO 2080A0050: matched 10, left: 3883 individuals, 3883 jobs.
+    - DeSO 2080A0060: matched 10, left: 3873 individuals, 3873 jobs.
+
+[ROUND 10] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 387, left: 3486 individuals, 3486 jobs.
+
+[ROUND 10] Global batch matching
+    - Global: matched 174, left: 3312 individuals, 3312 jobs.
+[END OF ROUND 10] Matched this round: 771, total matched: 30257. Time: 0.18 s
+
+[ROUND 11] DeSO batch matching, zones: 37
+    - DeSO 2080C1040: matched 10, left: 3302 individuals, 3302 jobs.
+    - DeSO 2080C1010: matched 1, left: 3301 individuals, 3301 jobs.
+    - DeSO 2080A0020: matched 10, left: 3291 individuals, 3291 jobs.
+    - DeSO 2080A0010: matched 10, left: 3281 individuals, 3281 jobs.
+    - DeSO 2080C1030: matched 10, left: 3271 individuals, 3271 jobs.
+    - DeSO 2080A0030: matched 10, left: 3261 individuals, 3261 jobs.
+    - DeSO 2080C1050: matched 9, left: 3252 individuals, 3252 jobs.
+    - DeSO 2080C1140: matched 10, left: 3242 individuals, 3242 jobs.
+    - DeSO 2080C1070: matched 7, left: 3235 individuals, 3235 jobs.
+    - DeSO 2080C1150: matched 3, left: 3232 individuals, 3232 jobs.
+    - DeSO 2080C1120: matched 3, left: 3229 individuals, 3229 jobs.
+    - DeSO 2080C1260: matched 10, left: 3219 individuals, 3219 jobs.
+    - DeSO 2080C1250: matched 4, left: 3215 individuals, 3215 jobs.
+    - DeSO 2080B5010: matched 10, left: 3205 individuals, 3205 jobs.
+    - DeSO 2080B4010: matched 10, left: 3195 individuals, 3195 jobs.
+    - DeSO 2080B2010: matched 6, left: 3189 individuals, 3189 jobs.
+    - DeSO 2080B3010: matched 10, left: 3179 individuals, 3179 jobs.
+    - DeSO 2080A0040: matched 10, left: 3169 individuals, 3169 jobs.
+    - DeSO 2080A0050: matched 10, left: 3159 individuals, 3159 jobs.
+    - DeSO 2080A0060: matched 10, left: 3149 individuals, 3149 jobs.
+
+[ROUND 11] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 314, left: 2835 individuals, 2835 jobs.
+
+[ROUND 11] Global batch matching
+    - Global: matched 141, left: 2694 individuals, 2694 jobs.
+[END OF ROUND 11] Matched this round: 618, total matched: 30875. Time: 0.10 s
+
+[ROUND 12] DeSO batch matching, zones: 32
+    - DeSO 2080C1040: matched 4, left: 2690 individuals, 2690 jobs.
+    - DeSO 2080A0020: matched 10, left: 2680 individuals, 2680 jobs.
+    - DeSO 2080A0010: matched 10, left: 2670 individuals, 2670 jobs.
+    - DeSO 2080C1030: matched 4, left: 2666 individuals, 2666 jobs.
+    - DeSO 2080A0030: matched 5, left: 2661 individuals, 2661 jobs.
+    - DeSO 2080C1140: matched 1, left: 2660 individuals, 2660 jobs.
+    - DeSO 2080C1260: matched 10, left: 2650 individuals, 2650 jobs.
+    - DeSO 2080B5010: matched 10, left: 2640 individuals, 2640 jobs.
+    - DeSO 2080B4010: matched 10, left: 2630 individuals, 2630 jobs.
+    - DeSO 2080B3010: matched 10, left: 2620 individuals, 2620 jobs.
+    - DeSO 2080A0050: matched 5, left: 2615 individuals, 2615 jobs.
+    - DeSO 2080A0060: matched 5, left: 2610 individuals, 2610 jobs.
+
+[ROUND 12] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 261, left: 2349 individuals, 2349 jobs.
+
+[ROUND 12] Global batch matching
+    - Global: matched 117, left: 2232 individuals, 2232 jobs.
+[END OF ROUND 12] Matched this round: 462, total matched: 31337. Time: 0.06 s
+
+[ROUND 13] DeSO batch matching, zones: 28
+    - DeSO 2080A0020: matched 2, left: 2230 individuals, 2230 jobs.
+    - DeSO 2080A0010: matched 6, left: 2224 individuals, 2224 jobs.
+    - DeSO 2080C1260: matched 2, left: 2222 individuals, 2222 jobs.
+    - DeSO 2080B5010: matched 3, left: 2219 individuals, 2219 jobs.
+    - DeSO 2080B4010: matched 3, left: 2216 individuals, 2216 jobs.
+    - DeSO 2080B3010: matched 3, left: 2213 individuals, 2213 jobs.
+
+[ROUND 13] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 221, left: 1992 individuals, 1992 jobs.
+
+[ROUND 13] Global batch matching
+    - Global: matched 99, left: 1893 individuals, 1893 jobs.
+[END OF ROUND 13] Matched this round: 339, total matched: 31676. Time: 0.04 s
+
+[ROUND 14] DeSO batch matching, zones: 22
+
+[ROUND 14] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 189, left: 1704 individuals, 1704 jobs.
+
+[ROUND 14] Global batch matching
+    - Global: matched 85, left: 1619 individuals, 1619 jobs.
+[END OF ROUND 14] Matched this round: 274, total matched: 31950. Time: 0.02 s
+
+[ROUND 15] DeSO batch matching, zones: 22
+
+[ROUND 15] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 161, left: 1458 individuals, 1458 jobs.
+
+[ROUND 15] Global batch matching
+    - Global: matched 72, left: 1386 individuals, 1386 jobs.
+[END OF ROUND 15] Matched this round: 233, total matched: 32183. Time: 0.01 s
+
+[ROUND 16] DeSO batch matching, zones: 22
+
+[ROUND 16] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 138, left: 1248 individuals, 1248 jobs.
+
+[ROUND 16] Global batch matching
+    - Global: matched 62, left: 1186 individuals, 1186 jobs.
+[END OF ROUND 16] Matched this round: 200, total matched: 32383. Time: 0.02 s
+
+[ROUND 17] DeSO batch matching, zones: 22
+
+[ROUND 17] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 118, left: 1068 individuals, 1068 jobs.
+
+[ROUND 17] Global batch matching
+    - Global: matched 53, left: 1015 individuals, 1015 jobs.
+[END OF ROUND 17] Matched this round: 171, total matched: 32554. Time: 0.02 s
+
+[ROUND 18] DeSO batch matching, zones: 22
+
+[ROUND 18] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 101, left: 914 individuals, 914 jobs.
+
+[ROUND 18] Global batch matching
+    - Global: matched 45, left: 869 individuals, 869 jobs.
+[END OF ROUND 18] Matched this round: 146, total matched: 32700. Time: 0.01 s
+
+[ROUND 19] DeSO batch matching, zones: 22
+
+[ROUND 19] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 86, left: 783 individuals, 783 jobs.
+
+[ROUND 19] Global batch matching
+    - Global: matched 39, left: 744 individuals, 744 jobs.
+[END OF ROUND 19] Matched this round: 125, total matched: 32825. Time: 0.02 s
+
+[ROUND 20] DeSO batch matching, zones: 22
+
+[ROUND 20] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 74, left: 670 individuals, 670 jobs.
+
+[ROUND 20] Global batch matching
+    - Global: matched 33, left: 637 individuals, 637 jobs.
+[END OF ROUND 20] Matched this round: 107, total matched: 32932. Time: 0.01 s
+
+[ROUND 21] DeSO batch matching, zones: 22
+
+[ROUND 21] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 63, left: 574 individuals, 574 jobs.
+
+[ROUND 21] Global batch matching
+    - Global: matched 28, left: 546 individuals, 546 jobs.
+[END OF ROUND 21] Matched this round: 91, total matched: 33023. Time: 0.01 s
+
+[ROUND 22] DeSO batch matching, zones: 22
+
+[ROUND 22] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 54, left: 492 individuals, 492 jobs.
+
+[ROUND 22] Global batch matching
+    - Global: matched 24, left: 468 individuals, 468 jobs.
+[END OF ROUND 22] Matched this round: 78, total matched: 33101. Time: 0.01 s
+
+[ROUND 23] DeSO batch matching, zones: 22
+
+[ROUND 23] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 46, left: 422 individuals, 422 jobs.
+
+[ROUND 23] Global batch matching
+    - Global: matched 21, left: 401 individuals, 401 jobs.
+[END OF ROUND 23] Matched this round: 67, total matched: 33168. Time: 0.01 s
+
+[ROUND 24] DeSO batch matching, zones: 22
+
+[ROUND 24] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 40, left: 361 individuals, 361 jobs.
+
+[ROUND 24] Global batch matching
+    - Global: matched 18, left: 343 individuals, 343 jobs.
+[END OF ROUND 24] Matched this round: 58, total matched: 33226. Time: 0.01 s
+
+[ROUND 25] DeSO batch matching, zones: 22
+
+[ROUND 25] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 34, left: 309 individuals, 309 jobs.
+
+[ROUND 25] Global batch matching
+    - Global: matched 15, left: 294 individuals, 294 jobs.
+[END OF ROUND 25] Matched this round: 49, total matched: 33275. Time: 0.01 s
+
+[ROUND 26] DeSO batch matching, zones: 22
+
+[ROUND 26] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 29, left: 265 individuals, 265 jobs.
+
+[ROUND 26] Global batch matching
+    - Global: matched 13, left: 252 individuals, 252 jobs.
+[END OF ROUND 26] Matched this round: 42, total matched: 33317. Time: 0.01 s
+
+[ROUND 27] DeSO batch matching, zones: 22
+
+[ROUND 27] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 25, left: 227 individuals, 227 jobs.
+
+[ROUND 27] Global batch matching
+    - Global: matched 11, left: 216 individuals, 216 jobs.
+[END OF ROUND 27] Matched this round: 36, total matched: 33353. Time: 0.01 s
+
+[ROUND 28] DeSO batch matching, zones: 22
+
+[ROUND 28] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 21, left: 195 individuals, 195 jobs.
+
+[ROUND 28] Global batch matching
+    - Global: matched 10, left: 185 individuals, 185 jobs.
+[END OF ROUND 28] Matched this round: 31, total matched: 33384. Time: 0.01 s
+
+[ROUND 29] DeSO batch matching, zones: 22
+
+[ROUND 29] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 18, left: 167 individuals, 167 jobs.
+
+[ROUND 29] Global batch matching
+    - Global: matched 10, left: 157 individuals, 157 jobs.
+[END OF ROUND 29] Matched this round: 28, total matched: 33412. Time: 0.01 s
+
+[ROUND 30] DeSO batch matching, zones: 22
+
+[ROUND 30] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 15, left: 142 individuals, 142 jobs.
+
+[ROUND 30] Global batch matching
+    - Global: matched 10, left: 132 individuals, 132 jobs.
+[END OF ROUND 30] Matched this round: 25, total matched: 33437. Time: 0.01 s
+
+[ROUND 31] DeSO batch matching, zones: 22
+
+[ROUND 31] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 13, left: 119 individuals, 119 jobs.
+
+[ROUND 31] Global batch matching
+    - Global: matched 10, left: 109 individuals, 109 jobs.
+[END OF ROUND 31] Matched this round: 23, total matched: 33460. Time: 0.01 s
+
+[ROUND 32] DeSO batch matching, zones: 22
+
+[ROUND 32] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 10, left: 99 individuals, 99 jobs.
+
+[ROUND 32] Global batch matching
+    - Global: matched 10, left: 89 individuals, 89 jobs.
+[END OF ROUND 32] Matched this round: 20, total matched: 33480. Time: 0.01 s
+
+[ROUND 33] DeSO batch matching, zones: 22
+
+[ROUND 33] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 10, left: 79 individuals, 79 jobs.
+
+[ROUND 33] Global batch matching
+    - Global: matched 10, left: 69 individuals, 69 jobs.
+[END OF ROUND 33] Matched this round: 20, total matched: 33500. Time: 0.01 s
+
+[ROUND 34] DeSO batch matching, zones: 21
+
+[ROUND 34] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 10, left: 59 individuals, 59 jobs.
+
+[ROUND 34] Global batch matching
+    - Global: matched 10, left: 49 individuals, 49 jobs.
+[END OF ROUND 34] Matched this round: 20, total matched: 33520. Time: 0.01 s
+
+[ROUND 35] DeSO batch matching, zones: 19
+
+[ROUND 35] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 10, left: 39 individuals, 39 jobs.
+
+[ROUND 35] Global batch matching
+    - Global: matched 10, left: 29 individuals, 29 jobs.
+[END OF ROUND 35] Matched this round: 20, total matched: 33540. Time: 0.01 s
+
+[ROUND 36] DeSO batch matching, zones: 17
+
+[ROUND 36] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 10, left: 19 individuals, 19 jobs.
+
+[ROUND 36] Global batch matching
+    - Global: matched 10, left: 9 individuals, 9 jobs.
+[END OF ROUND 36] Matched this round: 20, total matched: 33560. Time: 0.01 s
+
+[ROUND 37] DeSO batch matching, zones: 9
+
+[ROUND 37] Municipal batch matching, municipalities: 1
+    - Municipality 2080: matched 9, left: 0 individuals, 0 jobs.
+
+[ROUND 37] Global batch matching
+
+Final summary: total matched: 33560, time: 5.03 s
+Efter matchning: {'total_individuals': 59945, 'individual_status_counts': {'employed': 33569, 'not_in_labor_force': 26376}, 'total_jobs': 33569, 'matched_pairs': 33569, 'unique_matched_individuals': 33569, 'unique_matched_jobs': 33569, 'unmatched_individuals_in_workforce': 0, 'unmatched_jobs': 0}
+--- Matchningsstatistik ---
+n_matched: 33569
+utility_mean: 5.184336497479799e-07
+utility_median: 0.0
+utility_std: 3.263375107452751e-05
+utility_min: 0.0
+utility_max: 0.0033009003553868175
+utility_q25: 0.0
+utility_q75: 1.7445790219083032e-240
+utility_99th: 4.656223048657063e-14
+n_utility_above_0.05: 0
+n_utility_below_0.01: 33569
+--- Pendlingsstatistik ---
+Totalt matchade: 33569
+Antal/andel som fått jobb i annan DeSO: 18591 (55.38%)
+Antal/andel som fått jobb i annan kommun: 0 (0.00%)
+Genomsnittlig andel jobb (per DeSO) som fylls av utpendlare: 34.17%
+Genomsnittlig andel jobb (per kommun) som fylls av utpendlare: 0.00%
+VALDA KOMMUNER:
+    municipal_code municipality
+230           2080        Falun

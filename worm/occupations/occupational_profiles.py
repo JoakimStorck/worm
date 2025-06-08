@@ -84,7 +84,7 @@ def transform_onet_skills_scaled_from_db(n_clusters=50, db_path="data/worm.sqlit
     conn = sqlite3.connect(db_path)
     final_df[cols].to_sql("onet_occupation_space", conn, if_exists="replace", index=False)
     conn.close()
-    print(f"Sparade {len(final_df)} rader till onet_occupation_space (n_clusters={n_clusters})")
+    log(f"Sparade {len(final_df)} rader till onet_occupation_space (n_clusters={n_clusters})")
     return final_df
 
 
@@ -116,10 +116,10 @@ def transform_onet_skills_scaled_from_db(n_clusters=50, db_path="data/worm.sqlit
 #     conn = sqlite3.connect(db_path)
 #     df.to_sql("onet_occupation_space", conn, if_exists="append", index=False)
 #     conn.close()
-#     print(f"Sparade {len(df)} rader till onet_occupation_space (n_clusters={df['n_clusters'].iloc[0]})")
+#     log(f"Sparade {len(df)} rader till onet_occupation_space (n_clusters={df['n_clusters'].iloc[0]})")
 
 
 # Om du vill köra modulen direkt för test
 if __name__ == "__main__":
     df = transform_onet_skills_scaled_from_db(n_clusters=50)
-    print(df.head())
+    log(df.head())

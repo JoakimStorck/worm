@@ -1,0 +1,9 @@
+{
+  "n_matched": 33569,
+  "n_cross_deso": 19024,
+  "share_cross_deso": 0.5667133367094641,
+  "n_cross_muni": 0,
+  "share_cross_muni": 0.0,
+  "mean_job_share_cross_deso": 0.30738377277468737,
+  "mean_job_share_cross_muni": 0.0
+}

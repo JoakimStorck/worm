@@ -13,12 +13,12 @@ DB_PATH = "data/worm.sqlite3"
 
 def file_exists(path):
     if not os.path.exists(path):
-        print(f"Varning: Filen saknas: {path}")
+        log(f"Varning: Filen saknas: {path}")
         return False
     return True
 
 # Skapa databasens schema (tabeller)
-print("Skapar/uppdaterar databasstruktur...")
+log("Skapar/uppdaterar databasstruktur...")
 schema.create_schema(DB_PATH)
 
 # Ladda SCB-kommuner (CSV om ingen GPKG finns)
@@ -26,7 +26,7 @@ mun_csv = "data/scb_municipalities.csv"
 if file_exists(mun_csv):
     loader.load_municipalities(mun_csv, db_path=DB_PATH)
 else:
-    print("OBS: Laddar inte kommuner, ingen CSV hittad.")
+    log("OBS: Laddar inte kommuner, ingen CSV hittad.")
 
 # Ladda handelsområden (GPKG)
 handels_gpkg = "data/Handelsomraden_2020.gpkg"
@@ -65,14 +65,14 @@ emp_mun_csv = "data/employment_municipality_sni_2020.csv"
 if file_exists(emp_mun_csv):
     loader.load_employment_municipality_sni(emp_mun_csv, db_path=DB_PATH)
 else:
-    print("OBS: Laddar inte arbetsmarknadsdata på kommunnivå, filen saknas.")
+    log("OBS: Laddar inte arbetsmarknadsdata på kommunnivå, filen saknas.")
 
 # Ladda arbetsmarknadsdata på DeSO-nivå (CSV, om fil finns)
 deso_emp_csv = "data/scb_sysselsatta_deso.csv"
 if file_exists(deso_emp_csv):
     loader.load_employment_deso_sni(deso_emp_csv, db_path=DB_PATH, year=2023)
 else:
-    print("OBS: Laddar inte sysselsatta per DeSO, filen saknas.")
+    log("OBS: Laddar inte sysselsatta per DeSO, filen saknas.")
 
 # Ladda O*NET-data (yrken och skills)
 onet_occ_path = "onet_data/Occupation Data.txt"
@@ -81,14 +81,14 @@ onet_skills_path = "onet_data/Skills.txt"
 if file_exists(onet_occ_path):
     loader.load_onet_occupations(onet_occ_path, db_path=DB_PATH)
 else:
-    print("OBS: Laddar inte onet_occupations, filen saknas.")
+    log("OBS: Laddar inte onet_occupations, filen saknas.")
 
 if file_exists(onet_skills_path):
     loader.load_onet_skills(onet_skills_path, db_path=DB_PATH)
     loader.load_occupation_skill_link(onet_skills_path, db_path=DB_PATH)
 else:
-    print("OBS: Laddar inte onet_skills/occupation_skill_link, filen saknas.")
+    log("OBS: Laddar inte onet_skills/occupation_skill_link, filen saknas.")
 
 
-print("Alla laddningar är färdiga.")
+log("Alla laddningar är färdiga.")
 

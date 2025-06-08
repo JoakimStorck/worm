@@ -1,0 +1,13 @@
+{
+  "n_matched": 33569,
+  "utility_mean": 2.9941258494931525e-07,
+  "utility_median": 0.0,
+  "utility_std": 2.9179944582598472e-05,
+  "utility_min": 0.0,
+  "utility_max": 0.004543648106469323,
+  "utility_q25": 0.0,
+  "utility_q75": 1.2120964006085504e-302,
+  "utility_99th": 5.706127347160582e-16,
+  "n_utility_above_0.05": 0,
+  "n_utility_below_0.01": 33569
+}

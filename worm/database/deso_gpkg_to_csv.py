@@ -33,4 +33,4 @@ if "area_ha" in gdf.columns:
 # Spara till UTF-8 CSV
 df.to_csv(csv_path, index=False, encoding="utf-8", quoting=csv.QUOTE_NONNUMERIC)
 
-print(f"Sparade {len(df)} rader till {csv_path}")
+log(f"Sparade {len(df)} rader till {csv_path}")

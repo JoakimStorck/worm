@@ -47,6 +47,51 @@ class ConfigReader:
             result.append(int(pop))
         return result
 
+    def get_unemployment_rate(self, municipal_codes, year=None):
+        codes = self._to_list(municipal_codes)
+        overrides = self.config.get("municipality_overrides", {})
+        defaults = self.config.get("defaults", {})
+        result = []
+        for code in codes:
+            rate = None
+            # 1. Municipality-specific override
+            if code in overrides and "unemployment_rate" in overrides[code]:
+                val = overrides[code]["unemployment_rate"]
+                # Om det är tidsserie: {by_year: {2024: 0.07, 2027: 0.08, ...}}
+                if isinstance(val, dict) and "by_year" in val and year is not None:
+                    # Hitta närmaste år bakåt eller exakt
+                    years = sorted(int(k) for k in val["by_year"].keys())
+                    rate = val["by_year"].get(str(year))
+                    if rate is None:
+                        # Hitta senaste tillgängliga år innan det aktuella
+                        past_years = [y for y in years if y <= year]
+                        if past_years:
+                            rate = val["by_year"][str(max(past_years))]
+                        else:
+                            rate = 0.0
+                else:
+                    rate = val
+            # 2. Default för alla
+            elif "unemployment_rate" in defaults:
+                val = defaults["unemployment_rate"]
+                if isinstance(val, dict) and "by_year" in val and year is not None:
+                    years = sorted(int(k) for k in val["by_year"].keys())
+                    rate = val["by_year"].get(str(year))
+                    if rate is None:
+                        past_years = [y for y in years if y <= year]
+                        if past_years:
+                            rate = val["by_year"][str(max(past_years))]
+                        else:
+                            rate = 0.0
+                else:
+                    rate = val
+            # 3. Fallback – om inget finns, default = 0.0
+            if rate is None:
+                rate = 0.0
+            result.append(float(rate))
+        return result
+
+
     def get_workforce_ratio(self, municipal_codes):
         codes = self._to_list(municipal_codes)
         overrides = self.config.get("municipality_overrides", {})

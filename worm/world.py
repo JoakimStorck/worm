@@ -8,6 +8,7 @@ import pandas as pd
 from worm.geography.geoworld import GeoWorld
 from worm.plotting.plot_selected_municipalities import plot_selected_municipalities
 from worm.matching import greedy_deso_matching
+from worm.statistics.log import log
 
 class World:
     def __init__(self, db_path, geoworld=None, scope=None, individuals=None, jobs=None, employers=None, events=None):
@@ -54,17 +55,48 @@ class World:
         Matchar individer till jobb enligt valt läge.
         Stödjer nu:
         - mode="deso_greedy": Hierarkisk DeSO-matchning
+        - mode="deso_interleaved": Interleaverad multilevel batchmatchning
         (lägg till fler metoder vid behov)
         """
 
-        self.matchings = greedy_deso_matching(
-            individuals=self.individuals,
-            jobs=self.jobs,
-            alpha=1.0,           # eller vad du vill
-            batch_size=1000,     # kan användas i optimeringar senare
-            verbose=True
-        )
+        # Skapa en kopia av arbetskraften (arbetslösa individer)
+        workforce = self.individuals[self.individuals['status'] == 'unemployed'].copy()
 
+        if mode == "deso_greedy":
+            from worm.matching import greedy_deso_matching
+            self.matchings = greedy_deso_matching(
+                individuals=workforce,
+                jobs=self.jobs,
+                alpha_chi=kwargs.get("alpha_chi", 5.0),
+                alpha_xi=kwargs.get("alpha_xi", 5.0),
+                alpha_geo=kwargs.get("alpha_geo", 1.0),
+                batch_size=kwargs.get("batch_size", 1000),
+                verbose=kwargs.get("verbose", True)
+            )
+
+        elif mode == "deso_interleaved":
+            from worm.matching import interleaved_multilevel_batch_matching
+            matchings = interleaved_multilevel_batch_matching(
+                individuals=workforce,
+                jobs=self.jobs,
+                batch_frac_deso=kwargs.get("batch_frac_deso", 0.20),
+                batch_frac_muni=kwargs.get("batch_frac_muni", 0.10),
+                batch_frac_global=kwargs.get("batch_frac_global", 0.05),
+                alpha_chi=kwargs.get("alpha_chi", 5.0),
+                alpha_xi=kwargs.get("alpha_xi", 5.0),
+                alpha_geo=kwargs.get("alpha_geo", 1.0),
+                min_batch=kwargs.get("min_batch", 10),
+                verbose=kwargs.get("verbose", True)
+            )
+            self.matchings = matchings
+
+            # (Optional) Save unmatched for further processing
+            # If you want to track remaining individuals/jobs (not needed om du inte bryr dig)
+            # self.remaining_unmatched_individuals = ...
+            # self.remaining_unmatched_jobs = ...
+
+        else:
+            raise ValueError(f"Unknown matching mode: {mode}")
 
     def update_after_matching(self):
         """
@@ -89,12 +121,20 @@ class World:
 
     def analyze(self):
         """
-        Returnerar enkel statistik över nuvarande värld.
+        Returnerar utökad statistik över nuvarande värld.
         """
+        n_unique_individuals = len(self.matchings['individual_id'].unique()) if not self.matchings.empty else 0
+        n_unique_jobs = len(self.matchings['job_id'].unique()) if not self.matchings.empty else 0
+
         stats = {
             "total_individuals": len(self.individuals),
+            "individual_status_counts": self.individuals['status'].value_counts().to_dict(),
             "total_jobs": len(self.jobs),
-            "matched": len(self.matchings),
+            "matched_pairs": len(self.matchings),
+            "unique_matched_individuals": n_unique_individuals,
+            "unique_matched_jobs": n_unique_jobs,
+            "unmatched_individuals_in_workforce": len(self.individuals[(self.individuals['status'] == 'unemployed') & (~self.individuals['individual_id'].isin(self.matchings['individual_id']) if not self.matchings.empty else True)]),
+            "unmatched_jobs": len(self.jobs[~self.jobs['job_id'].isin(self.matchings['job_id'])]) if not self.matchings.empty else len(self.jobs),
         }
         return stats
 
@@ -123,10 +163,10 @@ if __name__ == "__main__":
     # Exempel
     db_path = "data/example.db"
     world = World(db_path)
-    print("Laddat:", world.analyze())
+    log("Laddat:", world.analyze())
     world.plot(layers=("municipalities", "urban_areas"))
     world.match_individuals_to_jobs()
-    print("Efter matchning:", world.analyze())
+    log("Efter matchning:", world.analyze())
     # ...eller: ladda in från scenario
     # from worm.scenario_builder import ScenarioBuilder
     # builder = ScenarioBuilder("scenarios/scenario_falun_baseline.yml", world.geoworld)

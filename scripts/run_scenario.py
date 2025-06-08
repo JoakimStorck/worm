@@ -2,15 +2,19 @@
 
 import sys
 import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import sqlite3
 import yaml
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import geopandas as gpd
 
 from worm.configreader import ConfigReader
 from worm.geography.geoworld import GeoWorld
 from worm.scenariobuilder import ScenarioBuilder
 from worm.world import World
+from worm.statistics.matching_stats import compute_matching_statistics, compute_commuting_statistics 
+from worm.statistics.log import log, save_run_output, log_lines
+
 
 def load_config(config_path):
     with open(config_path, "r") as f:
@@ -38,11 +42,11 @@ if __name__ == "__main__":
     # Generera scenario-agentdata (individuals, jobs, employers, events...)
     individuals, jobs, employers, events = builder.generate()
 
-    # print(f"Antal genererade arbetsgivare: {len(employers)}")
-    # print("\nTopp 10 största arbetsgivare (storlek, SNI, zon):")
-    # print(employers.nlargest(10, "size")[["size", "sni_code", "layer", "zone_code"]])
-    # print("\nTopp 10 SNI-koder (arbetsgivare):")
-    # print(employers["sni_code"].value_counts().head(10))
+    # log(f"Antal genererade arbetsgivare: {len(employers)}")
+    # log("\nTopp 10 största arbetsgivare (storlek, SNI, zon):")
+    # log(employers.nlargest(10, "size")[["size", "sni_code", "layer", "zone_code"]])
+    # log("\nTopp 10 SNI-koder (arbetsgivare):")
+    # log(employers["sni_code"].value_counts().head(10))
 
     # Skapa World och injicera scenariodata
     world = World(
@@ -54,24 +58,24 @@ if __name__ == "__main__":
     )
 
     # Kör analys och visualisering
-    print("Scenario:", scenario_path)
-    print("Statistik före matchning:", world.analyze())
+    log("Scenario:", scenario_path)
+    log("Statistik före matchning:", world.analyze())
 
     # Matcha individer till jobb (optimal assignment)
-    world.match_individuals_to_jobs(mode="deso_greedy", alpha=1.0, batch_size=1000)
-    world.update_after_matching()
-    print("Efter matchning:", world.analyze())
+    #world.match_individuals_to_jobs(mode="deso_greedy", alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0, batch_size=1000)
+    world.match_individuals_to_jobs(mode="deso_interleaved", alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0, batch_frac=0.2, min_batch_size=10, verbose=True)
 
-    from worm.statistics.matching_stats import compute_matching_statistics
+    world.update_after_matching()
+    log("Efter matchning:", world.analyze())
 
     # Efter att matchnings-DataFrame (matchings) är färdig
-    stats = compute_matching_statistics(world.matchings)
-    print(stats)
+    match_stats = compute_matching_statistics(world.matchings)
+    #log(match_stats)
+    commuting_stats = compute_commuting_statistics(world.matchings, world.individuals, world.jobs)
+    #log(commuting_stats)
 
     # Hämta urval från scenario:
     municipalities = config["municipalities"]
-
-    import geopandas as gpd
 
     # Om dina DataFrames heter employers och individuals:
     employers_gdf = gpd.GeoDataFrame(
@@ -94,3 +98,5 @@ if __name__ == "__main__":
         individuals_gdf=individuals_gdf,
     )
 
+    scenario_name = config["scenario_name"]
+    save_run_output(world.matchings, match_stats, commuting_stats, log_lines, scenario_name)

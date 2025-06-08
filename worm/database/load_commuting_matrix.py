@@ -36,7 +36,7 @@ def load_commuting_matrix(csv_path, db_path="data/worm.sqlite3", year=2020):
     df_final.to_sql("commuting", conn, if_exists="replace", index=False)
     conn.close()
 
-    print(f"{len(df_final)} commuting flows loaded to SQLite.")
+    log(f"{len(df_final)} commuting flows loaded to SQLite.")
 
 # Använd så här:
 # load_commuting_matrix("data/Sysselsatta 15-74 år arbetsställekommun bostadskommun.csv")

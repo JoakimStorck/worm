@@ -20,14 +20,14 @@ def plot_geoworld_layers(geoworld, layers=("municipalities", "urban_areas", "bus
     plotted = set()
     for layer in layers:
         if not hasattr(geoworld, layer):
-            print(f"Warning: GeoWorld does not have layer '{layer}'.")
+            log(f"Warning: GeoWorld does not have layer '{layer}'.")
             continue
         gdf = getattr(geoworld, layer)
         if not isinstance(gdf, gpd.GeoDataFrame):
-            print(f"Warning: Layer '{layer}' is not a GeoDataFrame.")
+            log(f"Warning: Layer '{layer}' is not a GeoDataFrame.")
             continue
         if gdf.empty:
-            print(f"Warning: Layer '{layer}' is empty.")
+            log(f"Warning: Layer '{layer}' is empty.")
             continue
         # Plot hela lagret i ett anrop!
         gdf.plot(ax=ax, color=colors.get(layer, "#88888844"), label=layer if layer not in plotted else "", linewidth=0.5, edgecolor="#55555544")

@@ -28,7 +28,7 @@ workers = generate_workers(100, residences)
 # Skapa jobb
 jobs = generate_jobs(employers)
 
-print(f"Antal arbetsgivare: {len(employers)}")
-print(f"Antal arbetsplatser: {len(workplaces)}")
-print(f"Antal arbetare: {len(workers)}")
-print(f"Antal jobb: {len(jobs)}")
+log(f"Antal arbetsgivare: {len(employers)}")
+log(f"Antal arbetsplatser: {len(workplaces)}")
+log(f"Antal arbetare: {len(workers)}")
+log(f"Antal jobb: {len(jobs)}")

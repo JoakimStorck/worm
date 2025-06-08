@@ -10,4 +10,4 @@ for item in items:
     assets = item["assets"]
     for asset in assets.values():
         if asset["type"] == "application/geopackage+sqlite3":
-            print("GeoPackage-länk:", asset["href"])
+            log("GeoPackage-länk:", asset["href"])

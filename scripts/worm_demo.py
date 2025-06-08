@@ -30,9 +30,9 @@ plot_agent_distribution(workers, jobs, title="Geografisk fördelning")
 plot_matches(workers, jobs, matches, title="Matchade par")
 
 # 6. Utskrift
-print("\nMatchade par:")
+log("\nMatchade par:")
 for w, j, score in matches[:5]:
-    print(f"Worker {w.id[:6]} matched with Job {j.id[:6]} (Employer {j.employer_id[:6]})")
-    print(f"  χ_w = {w.chi:.2f}, ξ_w = {w.xi:.2f}")
-    print(f"  χ_j = {j.chi:.2f}, ξ_j = {j.xi:.2f}")
-    print(f"  Utility score: {score:.4f}\n")
+    log(f"Worker {w.id[:6]} matched with Job {j.id[:6]} (Employer {j.employer_id[:6]})")
+    log(f"  χ_w = {w.chi:.2f}, ξ_w = {w.xi:.2f}")
+    log(f"  χ_j = {j.chi:.2f}, ξ_j = {j.xi:.2f}")
+    log(f"  Utility score: {score:.4f}\n")
