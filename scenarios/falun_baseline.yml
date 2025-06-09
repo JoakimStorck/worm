@@ -1,8 +1,8 @@
-# === EXEMPELSCENARIO: Falu kommun ===
+# === EXAMPLE SCENARIO: Falun Municipality ===
 scenario_name: "Falun baseline"
 description: >
-  Baslinjescenario för Falun.
-  Syftet är att testa matching i en kommun.
+  Baseline scenario for Falun.
+  The purpose is to test matching in a single municipality.
 start_year: 2024
 end_year: 2030
 seed: 12345
@@ -10,16 +10,16 @@ seed: 12345
 municipalities:
   - 2080   # Falun
 
-# === Globalt default för alla kommuner ===
+# === Global defaults for all municipalities ===
 defaults:
-  population: auto          # Tar från databas om möjligt
+  population: auto          # Will use database if possible
   workforce_ratio: 0.52
   unemployment_rate: 0.07
   education_levels:
     low: 0.25
     medium: 0.60
     high: 0.15
-  sex_ratio: 0.51           # Andel kvinnor
+  sex_ratio: 0.51           # Share of women
   occupation_distribution: "realistic"
   employer_distribution:
     n_employers: auto
@@ -55,7 +55,7 @@ defaults:
         max_size: 1000
         ratio: 0.005
 
-# === Kommunvisa overrides (bara skillnader mot defaults!) ===
+# === Municipality-specific overrides (only differences from defaults!) ===
 municipality_overrides:
   2080: # Falun
     education_levels:
@@ -65,8 +65,21 @@ municipality_overrides:
     workforce_ratio: 0.56
     unemployment_rate: 0.065
 
-# === Policyregler (exempel, kan kompletteras) ===
+# === Policy rules (example, can be expanded) ===
 hiring_policy: "random"
 wage_policy: "market_adjust"
 
+# === Simulation parameters ===
+simulation:
+  avg_employment_duration: 4.0     # år
+  employment_duration_std: 3.0     # år
+  job_search_interval: 0.083       # år (ca 1 månad)
+  n_years: 10
+  start_year: 2024
+  log_to_console: true
+  log_to_file: true
+  logfile_path: "output/falun_baseline.log"
+  alpha_chi: 5.0
+  alpha_xi: 5.0
+  alpha_geo: 1.0
 

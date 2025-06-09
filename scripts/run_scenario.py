@@ -1,4 +1,15 @@
 # scripts/run_scenario.py
+"""
+Run a WORM scenario: initializes the agent population and labor market,
+performs initial batch matching of the workforce, then runs the event-driven
+simulation. Collects statistics and visualizes results.
+
+1. Reads scenario and config from YAML.
+2. Initializes database, geography, and agent population via ScenarioBuilder.
+3. Performs initial batch matching (t=0) so that all matchable individuals have job status.
+4. Runs the event-driven simulation.
+5. Collects statistics and visualizes output.
+"""
 
 import sys
 import os
@@ -15,88 +26,86 @@ from worm.world import World
 from worm.statistics.matching_stats import compute_matching_statistics, compute_commuting_statistics 
 from worm.statistics.log import log, save_run_output, log_lines
 
-
 def load_config(config_path):
+    """Load YAML configuration as Python dict."""
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
 if __name__ == "__main__":
+    # --- 1. Define paths and load config ---
     db_path = "data/worm.sqlite3"
     scenario_path = "scenarios/falun_baseline.yml"
 
-    # Ladda config
     config = load_config(scenario_path)
 
-    # Initiera databasanslutning
+    # --- 2. Initialize database, config, and scenario environment ---
     conn = sqlite3.connect(db_path)
-
-    # Initiera ConfigReader
     cfg = ConfigReader(config, conn)
-
-    # Initiera GeoWorld
     geoworld = GeoWorld(db_path)
-    
-    # Initiera ScenarioBuilder
     builder = ScenarioBuilder(config, conn, cfg, geoworld=geoworld)
 
-    # Generera scenario-agentdata (individuals, jobs, employers, events...)
+    # --- 3. Generate agent population, employers, and jobs from scenario ---
     individuals, jobs, employers, events = builder.generate()
 
-    # log(f"Antal genererade arbetsgivare: {len(employers)}")
-    # log("\nTopp 10 största arbetsgivare (storlek, SNI, zon):")
-    # log(employers.nlargest(10, "size")[["size", "sni_code", "layer", "zone_code"]])
-    # log("\nTopp 10 SNI-koder (arbetsgivare):")
-    # log(employers["sni_code"].value_counts().head(10))
-
-    # Skapa World och injicera scenariodata
+    # --- 4. Create World object (no matching performed yet) ---
     world = World(
         db_path,
+        config=config,
         individuals=individuals,
         jobs=jobs,
         employers=employers,
         events=events
     )
 
-    # Kör analys och visualisering
+    # --- 5. Log and show statistics BEFORE batch matching ---
     log("Scenario:", scenario_path)
-    log("Statistik före matchning:", world.analyze())
+    log("Statistics BEFORE batch matching:", world.analyze())
 
-    # Matcha individer till jobb (optimal assignment)
-    #world.match_individuals_to_jobs(mode="deso_greedy", alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0, batch_size=1000)
-    world.match_individuals_to_jobs(mode="deso_interleaved", alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0, batch_frac=0.2, min_batch_size=10, verbose=True)
+    # --- 6. Initial batch matching of all unemployed individuals to available jobs (t=0) ---
+    #    (This represents the labor market at simulation start.)
+    #    The matching uses utility in occupation and geographic space.
+    matchings = world.match_individuals_to_jobs(
+        mode="interleaved_multilevel",
+        alpha_chi=config.get('alpha_chi', 5.0),
+        alpha_xi=config.get('alpha_xi', 5.0),
+        alpha_geo=config.get('alpha_geo', 1.0),
+        # Other batch parameters can be added here
+    )
+    world.update_after_matching(matchings=matchings)
+    log("Statistics AFTER batch matching (t=0):", world.analyze())
 
-    world.update_after_matching()
-    log("Efter matchning:", world.analyze())
-
-    # Efter att matchnings-DataFrame (matchings) är färdig
+    # --- 7. (Optional) Compute and save statistics for batch matching ---
     match_stats = compute_matching_statistics(world.matchings)
-    #log(match_stats)
     commuting_stats = compute_commuting_statistics(world.matchings, world.individuals, world.jobs)
-    #log(commuting_stats)
 
-    # Hämta urval från scenario:
-    municipalities = config["municipalities"]
+    # --- 8. Run event-driven simulation ---
+    log("Starting event-driven simulation ...")
+    world.simulate()
+    log("Statistics AFTER simulation:", world.analyze())
 
-    # Om dina DataFrames heter employers och individuals:
+    # --- 9. (Optional) Save and summarize final statistics ---
+    scenario_name = config.get("scenario_name", "scenario")
+    save_run_output(world.matchings, match_stats, commuting_stats, log_lines, scenario_name)
+
+    # --- 10. Visualize results for selected municipalities ---
+    municipalities = config.get("municipalities", [])
+
     employers_gdf = gpd.GeoDataFrame(
         employers,
         geometry=gpd.points_from_xy(employers["x"], employers["y"]),
-        crs="EPSG:3006"  # Justera om du har annat CRS!
+        crs="EPSG:3006"  # Adjust CRS if necessary!
     )
-
     individuals_gdf = gpd.GeoDataFrame(
         individuals,
         geometry=gpd.points_from_xy(individuals["x"], individuals["y"]),
         crs="EPSG:3006"
     )
 
-    # Nu kan du plotta!
     world.plot(
-        municipal_codes_or_names=["2080"],
+        municipal_codes_or_names=municipalities,
         layers=("municipalities", "urban_areas", "business_zones", "employers", "individuals"),
         employers_gdf=employers_gdf,
         individuals_gdf=individuals_gdf,
     )
 
-    scenario_name = config["scenario_name"]
-    save_run_output(world.matchings, match_stats, commuting_stats, log_lines, scenario_name)
+    world.close()

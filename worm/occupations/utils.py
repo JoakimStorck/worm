@@ -76,6 +76,9 @@ def compute_utility_matrix(individuals_df, jobs_df, alpha_chi=5.0, alpha_xi=5.0,
 
 
 def optimal_assignment(individuals_df, jobs_df, alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0):
+    """
+    Utför optimal matchning mellan individer och jobb med hjälp av Hungarian-algoritmen.
+    """
     n_inds = len(individuals_df)
     n_jobs = len(jobs_df)
     if n_inds == 0 or n_jobs == 0:

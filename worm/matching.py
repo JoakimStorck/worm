@@ -271,3 +271,4 @@ def interleaved_multilevel_batch_matching(
     else:
         result = pd.DataFrame(columns=["individual_id", "job_id", "utility"])
     return result
+
