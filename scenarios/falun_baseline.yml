@@ -74,7 +74,7 @@ simulation:
   avg_employment_duration: 4.0     # år
   employment_duration_std: 3.0     # år
   job_search_interval: 0.083       # år (ca 1 månad)
-  n_years: 10
+  n_years: 6
   start_year: 2024
   log_to_console: true
   log_to_file: true

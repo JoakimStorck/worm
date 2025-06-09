@@ -56,6 +56,7 @@ class World:
         self.event_queue = EventQueue()
         self.current_time = 0  # Starttid i simuleringen, kan vara t.ex. dagar, månader, år
 
+        self.simulation_end_time = DAYS_PER_YEAR*self.config.get('simulation', {}).get('n_years', 365 * 1)  # Default to 1 year in days
         # Output/resultat – samlas/uppdateras löpande
         self.matchings = pd.DataFrame()
 
@@ -215,11 +216,14 @@ class World:
                 self.config['simulation']['employment_duration_std']
             )
             event = Event(self.current_time + t_quit, idx, 'quit_job')
-            self.event_queue.push(event)
+            self.push_event(event)
 
         # Add new_month/new_year events if desired
         self.schedule_calendar_events()
 
+    def push_event(self, event):
+        if event.time <= self.simulation_end_time:
+            self.event_queue.push(event)
 
     def log_event(self, event, *args):
         logline = f"{event.time:.2f}, {event.event_type}" + (", " if args else "") + ", ".join(map(str, args))
@@ -253,7 +257,7 @@ class World:
         day = 0
 
         # new_year always on day 0
-        self.event_queue.push(Event(day, None, 'new_year', {'year': year}))
+        self.push_event(Event(day, None, 'new_year', {'year': year}))
 
         for y in range(n_years):
             current_year = start_year + y
@@ -262,7 +266,7 @@ class World:
             if y == 0 and start_month > 1:
                 months_in_year = list(range(start_month, 13))
             for current_month in months_in_year:
-                self.event_queue.push(Event(day, None, 'new_month', {'year': current_year, 'month': current_month}))
+                self.push_event(Event(day, None, 'new_month', {'year': current_year, 'month': current_month}))
                 # Determine month length
                 if current_month == 2 and is_leap_year(current_year):
                     days_in_month = 29
@@ -272,7 +276,7 @@ class World:
             # Schedule new_year for next year (if not last year)
             if y < n_years - 1:
                 next_year = current_year + 1
-                self.event_queue.push(Event(day, None, 'new_year', {'year': next_year}))
+                self.push_event(Event(day, None, 'new_year', {'year': next_year}))
 
 
     # Eventhandlers below
@@ -292,7 +296,7 @@ class World:
             self.config['simulation']['employment_duration_std']
         )
         quit_event = Event(t_quit, idx, 'quit_job')
-        self.event_queue.push(quit_event)
+        self.push_event(quit_event)
 
     def handle_start_job_search(self, event):
         idx = event.agent_id
@@ -310,13 +314,13 @@ class World:
             # Schedule start_job
             t_start = event.time
             start_event = Event(t_start, idx, 'start_job', {'job_id': job_id})
-            self.event_queue.push(start_event)
+            self.push_event(start_event)
             self.log_event(event, idx, "match_completed", f"job {job_id}")
         else:
             # New search after interval
             t_retry = event.time + DAYS_PER_YEAR*np.random.exponential(self.config['simulation']['job_search_interval'])
             retry_event = Event(t_retry, idx, 'start_job_search')
-            self.event_queue.push(retry_event)
+            self.push_event(retry_event)
             self.log_event(event, idx, "match_failed")
 
     def handle_quit_job(self, event):
