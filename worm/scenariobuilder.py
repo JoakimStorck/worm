@@ -229,6 +229,7 @@ class ScenarioBuilder:
                     "municipal_code": row['municipal_code'],
                     "layer": row['layer'],
                     "zone_code": row['zone_code'],
+                    "employer_size": row['size'],
                     "sni_code": row['sni_code'],
                     "geometry": geom,
                     "chi": chi,
@@ -295,8 +296,28 @@ class ScenarioBuilder:
         df = pd.DataFrame(records)
         df["individual_id"] = [f"{municipal_code}_i{ix:06d}" for ix in range(len(df))]
         rng = self.rng
+
+        indiv_defaults = self.config.get('defaults', {}).get('individuals', {})
+        prop_cfg = indiv_defaults.get('propensities', {})
+
+        # För varje propensity:
+        for name in ['start_education', 'internal_training', 'quit_job', 'career_break', 'internal_job_change']:
+            pblock = prop_cfg.get(name, {})
+            mean = pblock.get('mean', 0.1)  # Välj defaultvärde
+            std = pblock.get('std', 0.05)
+            col = f'propensity_{name}'
+            df[col] = np.clip(
+                rng.normal(mean, std, size=len(df)), 0, 1
+            )
+
+        # Slumpa individens position inom occupation space
         df["chi"] = rng.uniform(0, 1, size=len(df))
         df["xi"] = rng.uniform(0, 2 * np.pi, size=len(df))
+        # H för individen
+        H_cfg = indiv_defaults.get('initial_H', {})
+        H_min = H_cfg.get('min', 0.08)
+        H_max = H_cfg.get('max', 0.25)
+        df['H'] = rng.uniform(H_min, H_max, size=len(df))
 
         return df
 

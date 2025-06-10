@@ -4,7 +4,6 @@ description: >
   Baseline scenario for Falun.
   The purpose is to test matching in a single municipality.
 start_year: 2024
-end_year: 2030
 seed: 12345
 
 municipalities:
@@ -54,6 +53,35 @@ defaults:
         min_size: 251
         max_size: 1000
         ratio: 0.005
+  employer:
+    training_prob_by_size:
+      small: 0.05
+      medium: 0.15
+      large: 0.40
+    # ...andra arbetsgivarparametrar...
+
+  individuals:
+    propensities:
+      start_education:
+        mean: 0.12
+        std: 0.05
+      internal_training:
+        mean: 0.35
+        std: 0.12
+      quit_job:
+        mean: 0.14
+        std: 0.07
+      career_break:
+        mean: 0.06
+        std: 0.03
+      internal_job_change:
+        mean: 0.10
+        std: 0.04
+    initial_H:
+      min: 0.08
+      max: 0.25
+    # ...här kan du fylla på med fler standardattribut för individer!
+
 
 # === Municipality-specific overrides (only differences from defaults!) ===
 municipality_overrides:
@@ -74,7 +102,7 @@ simulation:
   avg_employment_duration: 4.0     # år
   employment_duration_std: 3.0     # år
   job_search_interval: 0.083       # år (ca 1 månad)
-  n_years: 6
+  n_years: 1
   start_year: 2024
   log_to_console: true
   log_to_file: true

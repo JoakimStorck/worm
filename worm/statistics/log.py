@@ -2,6 +2,7 @@
 
 
 import os
+import csv
 import json
 from datetime import datetime
 
@@ -50,3 +51,80 @@ def save_run_output(matchings, matching_stats, commuting_stats, log_lines, scena
         json.dump(commuting_stats, f, indent=2, ensure_ascii=False, default=default_converter)
     with open(f"{base}_log.txt", "w", encoding="utf-8") as f:
         f.write('\n'.join(log_lines))
+
+
+class EventLogger:
+    def __init__(self, filepath=None):
+        self.filepath = filepath
+        self.file = open(filepath, 'w') if filepath else None
+        self.csv_writer = None
+        self.columns = None
+
+    def log_individual_event(self, world, event, extra=None, print_line=False):
+        """
+        Loggar individuella pathways: tid, event, individ-id, (chi, xi, H), ev. mer.
+        :param world: World-instans
+        :param event: Event-objekt
+        :param extra: dict med extra attribut
+        """
+        idx = event.agent_id
+        ind = world.individuals.loc[idx]
+        logdict = {
+            "time": event.time,
+            "event": event.event_type,
+            "individual_id": ind.get('individual_id', idx),
+            "chi": ind.get('chi', None),
+            "xi": ind.get('xi', None),
+            "H": ind.get('H', None)
+        }
+        if extra:
+            logdict.update(extra)
+        self._write_log(logdict, print_line=print_line)
+
+    def log_employer_event(self, world, event, extra=None, print_line=False):
+        idx = event.agent_id
+        emp = world.employers.loc[idx]
+        logdict = {
+            "time": event.time,
+            "event": event.event_type,
+            # ...lägg till andra arbetsgivarattribut...
+        }
+        if extra:
+            logdict.update(extra)
+        self._write_log(logdict, print_line=print_line)
+
+    def log_generic_event(self, event, data=None, print_line=False):
+        logdict = {
+            "time": event.time,
+            "event": event.event_type
+        }
+        if data:
+            logdict.update(data)
+        self._write_log(logdict, print_line=print_line)
+
+    def _write_log(self, logdict, print_line=False):
+        # Skriv alltid ut tidsstämpel och event-typ först
+        parts = []
+        if 'time' in logdict:
+            parts.append(f"{logdict['time']:.2f}")
+        if 'event' in logdict:
+            parts.append(f"{logdict['event']}")
+        # Lägg till övriga fält i den ordning de lades in
+        for k in logdict:
+            if k in ['time', 'event']:
+                continue
+            parts.append(f"{k} {logdict[k]}")
+        line = ", ".join(str(x) for x in parts)
+        if self.file:
+            self.file.write(line + "\n")
+            self.file.flush()
+            if print_line:
+                print(line)
+        else:
+            print(line)
+
+
+
+    def close(self):
+        if self.file:
+            self.file.close()

@@ -13,6 +13,7 @@ from worm.matching import greedy_deso_matching, interleaved_multilevel_batch_mat
 
 from worm.statistics.log import log
 from worm.events import Event, EventQueue
+from worm.statistics.log import EventLogger
 
 DAYS_PER_YEAR = 365.25  # Average days per year, accounting for leap years
 MONTH_LENGTHS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
@@ -50,6 +51,12 @@ class World:
             'start_job': self.handle_start_job,
             'new_month': self.handle_new_month,
             'new_year': self.handle_new_year,
+            # Nya events:
+            'start_education': self.handle_start_education,
+            'end_education': self.handle_end_education,
+            'start_internal_training': self.handle_start_internal_training,
+            'internal_job_change': self.handle_internal_job_change,
+            'career_break': self.handle_career_break,
         }
 
         # Event queue (AP8) – från scenario, eller tom DataFrame
@@ -64,21 +71,15 @@ class World:
         self.log_to_console = self.config.get('simulation', {}).get('log_to_console', False)
         self.log_to_file = self.config.get('simulation', {}).get('log_to_file', True)
         self.logfile_path = self.config.get('simulation', {}).get('logfile_path', 'output/worm_simulation.log')
-        self.logfile = open(self.logfile_path, "w") if self.log_to_file else None
 
+        self.event_logger = EventLogger(filepath=self.logfile_path if self.log_to_file else None)
 
-
-    def draw_employment_duration(self, avg_employment_duration, employment_duration_std):
-        """
-        Returns a log-normally distributed employment duration with given mean and std.
-        """
+    def draw_employment_duration(self, avg_employment_duration, employment_duration_std, size=None):
         mean = avg_employment_duration
         std = employment_duration_std
-
         sigma = np.sqrt(np.log(1 + (std / mean) ** 2))
         mu = np.log(mean) - 0.5 * sigma ** 2
-
-        return np.random.lognormal(mean=mu, sigma=sigma)
+        return np.random.lognormal(mean=mu, sigma=sigma, size=size)
 
     def set_scenario_data(self, individuals=None, jobs=None, employers=None, events=None):
         """
@@ -142,6 +143,31 @@ class World:
         job_idx = self.jobs['job_id'].isin(job_to_ind.index)
         self.jobs.loc[job_idx, 'individual_id'] = self.jobs.loc[job_idx, 'job_id'].map(job_to_ind)
 
+        n_emp = (self.individuals['status'] == 'employed').sum()
+        n_unemp = (self.individuals['status'] == 'unemployed').sum()
+        n_notlf = (self.individuals['status'] == 'not_in_labor_force').sum()
+        n_vacant = (self.jobs['individual_id'].isna()).sum()
+
+        self.event_logger.log_generic_event(
+            Event(0.00, None, "batch_matching"),
+            data={
+                "employed": n_emp,
+                "unemployed": n_unemp,
+                "not_in_labor_force": n_notlf,
+                "vacant_jobs": n_vacant
+            }
+        )
+
+        # Sätt gärna en egen katalog/loggningsnamn om du vill samla olika loggar
+        outdir = "output"
+        os.makedirs(outdir, exist_ok=True)
+
+        # Logga hela individ-tabellen med relevant status
+        self.individuals.to_csv(os.path.join(outdir, "initial_state_individuals.csv"), index=True)
+
+        # Logga hela jobb-tabellen på samma sätt (om du vill)
+        self.jobs.to_csv(os.path.join(outdir, "initial_state_jobs.csv"), index=False)
+
     def analyze(self):
         """
         Returns extended statistics about the current world.
@@ -191,8 +217,13 @@ class World:
 
         while not self.event_queue.is_empty():
             event = self.event_queue.pop()
+        
             self.current_time = event.time
             handler = self.event_handlers.get(event.event_type)
+            if event.time > self.simulation_end_time:
+                print(f"FEL: Executing event {event.event_type} at {event.time}, which is after simulation end time {self.simulation_end_time}")
+                break  # <-- AVBRYT SIMULERINGEN!
+
             if handler:
                 handler(event)
             else:
@@ -202,38 +233,34 @@ class World:
     def close(self):
         """ Shut down after simulation is done. Closes any open resources, e.g. log files.
         """
-        if self.logfile:
-            self.logfile.close()
         if self.log_to_console:
             elapsed = time.time() - self.wallclock_start
             print(f"[TIMER] {elapsed:8.2f}s | simulation_ended")
 
     def _init_events(self):
         # Schedule first events, e.g. when all employees are supposed to quit
-        for idx, row in self.individuals[self.individuals['status'] == 'employed'].iterrows():
-            t_quit = DAYS_PER_YEAR*self.draw_employment_duration(
+        employed_mask = self.individuals['status'] == 'employed'
+        n_emp = employed_mask.sum()
+        if n_emp > 0:
+            durations = DAYS_PER_YEAR * self.draw_employment_duration(
                 self.config['simulation']['avg_employment_duration'],
-                self.config['simulation']['employment_duration_std']
+                self.config['simulation']['employment_duration_std'],
+                size=n_emp
             )
-            event = Event(self.current_time + t_quit, idx, 'quit_job')
-            self.push_event(event)
+            for idx, t_quit in zip(self.individuals.index[employed_mask], durations):
+                event = Event(self.current_time + t_quit, idx, 'quit_job')
+                self.push_event(event)
 
         # Add new_month/new_year events if desired
         self.schedule_calendar_events()
 
     def push_event(self, event):
-        if event.time <= self.simulation_end_time:
-            self.event_queue.push(event)
+        if event.time is None:
+            print(f"VARNING: Försöker pusha event utan tidsstämpel: {event.event_type}")
+            return
 
-    def log_event(self, event, *args):
-        logline = f"{event.time:.2f}, {event.event_type}" + (", " if args else "") + ", ".join(map(str, args))
-        # Always write to file if enabled
-        if self.log_to_file and self.logfile:
-            self.logfile.write(logline + "\n")
-        # Print to console only for new_month/new_year (or whatever you choose)
-        if self.log_to_console and event.event_type in {"new_month", "new_year"}:
-            elapsed = time.time() - self.wallclock_start
-            print(f"[TIMER] {elapsed:8.2f}s | {logline}")
+        if event.time < self.simulation_end_time:
+            self.event_queue.push(event)
             
     def schedule_calendar_events(self):
         """
@@ -278,8 +305,40 @@ class World:
                 next_year = current_year + 1
                 self.push_event(Event(day, None, 'new_year', {'year': next_year}))
 
-
     # Eventhandlers below
+
+    def handle_quit_job(self, event):
+        idx = event.agent_id
+        # Sätt status till arbetslös
+        self.individuals.at[idx, 'status'] = 'unemployed'
+        job_id = self.individuals.at[idx, 'job_id']
+        if pd.notna(job_id):
+            self.jobs.loc[self.jobs['job_id'] == job_id, 'individual_id'] = np.nan
+            self.individuals.at[idx, 'job_id'] = np.nan
+
+        # Sannolikhet för att gå till utbildning
+        prop_edu = self.individuals.at[idx, 'propensity_start_education']
+        if np.random.rand() < prop_edu:
+            edu_event = Event(
+                event.time + np.random.uniform(5, 40),  # dagar till utbildningsstart
+                idx,
+                'start_education',
+                {
+                    'education_type': 'broad',
+                    'delta_chi': 0.8,
+                    'delta_H': 0.3,
+                    'duration': 0.7 * DAYS_PER_YEAR
+                }
+            )
+            self.push_event(edu_event)
+        else:
+            # Börja söka nytt jobb
+            t_search = event.time + DAYS_PER_YEAR * np.random.exponential(
+                self.config['simulation']['job_search_interval'])
+            search_event = Event(t_search, idx, 'start_job_search')
+            self.push_event(search_event)
+
+        self.event_logger.log_individual_event(self, event)
 
     def handle_start_job(self, event):
         idx = event.agent_id
@@ -289,9 +348,36 @@ class World:
         job_idx = self.jobs['job_id'] == job_id
         self.jobs.loc[job_idx, 'individual_id'] = idx
 
-        self.log_event(event, idx, job_id)
+        self.event_logger.log_individual_event(self, event, extra={'job_id': job_id})
 
-        t_quit = event.time + DAYS_PER_YEAR*self.draw_employment_duration(
+        # Internutbildning: propensity * arbetsgivarens chans
+        job_row = self.jobs[self.jobs['job_id'] == job_id].iloc[0]
+        n_employees = job_row['employer_size']
+        prop_ind = self.individuals.at[idx, 'propensity_internal_training']
+        P = prop_ind * self.employer_training_prob(n_employees)
+        if np.random.rand() < P:
+            t_training = event.time + np.random.uniform(0.05, 0.2) * DAYS_PER_YEAR
+            training_event = Event(
+                t_training,
+                idx,
+                'start_internal_training',
+                {'delta_H': np.random.uniform(0.05, 0.15), 'delta_chi': np.random.uniform(0.01, 0.04)}
+            )
+            self.push_event(training_event)
+
+        # Interna byten av arbetsuppgifter, kan ha lägre sannolikhet
+        if np.random.rand() < 0.10:  # 10% chans, kan styras från config
+            t_change = event.time + np.random.uniform(0.2, 0.8) * DAYS_PER_YEAR
+            change_event = Event(
+                t_change,
+                idx,
+                'internal_job_change',
+                {'delta_xi': np.random.uniform(2, 7), 'delta_H': np.random.uniform(0.10, 0.25), 'delta_chi': np.random.uniform(0.01, 0.03)}
+            )
+            self.push_event(change_event)
+
+        # Schemalägg när individen slutar detta jobb
+        t_quit = event.time + DAYS_PER_YEAR * self.draw_employment_duration(
             self.config['simulation']['avg_employment_duration'],
             self.config['simulation']['employment_duration_std']
         )
@@ -307,42 +393,80 @@ class World:
             alpha_chi=self.config['simulation']['alpha_chi'],
             alpha_xi=self.config['simulation']['alpha_xi'],
             alpha_geo=self.config['simulation']['alpha_geo'],
-            # ... andra parametrar
         )
         if not matches.empty:
             job_id = matches.iloc[0]['job_id']
-            # Schedule start_job
             t_start = event.time
             start_event = Event(t_start, idx, 'start_job', {'job_id': job_id})
             self.push_event(start_event)
-            self.log_event(event, idx, "match_completed", f"job {job_id}")
+            self.event_logger.log_generic_event(event, data={"event_detail": "match_completed", "job_id": job_id})
         else:
-            # New search after interval
-            t_retry = event.time + DAYS_PER_YEAR*np.random.exponential(self.config['simulation']['job_search_interval'])
+            t_retry = event.time + DAYS_PER_YEAR * np.random.exponential(self.config['simulation']['job_search_interval'])
             retry_event = Event(t_retry, idx, 'start_job_search')
             self.push_event(retry_event)
-            self.log_event(event, idx, "match_failed")
+            self.event_logger.log_generic_event(event, data={"event_detail": "match_failed"})
 
-    def handle_quit_job(self, event):
+    def handle_start_education(self, event):
         idx = event.agent_id
-        # Set individual's status to unemployed
-        self.individuals.at[idx, 'status'] = 'unemployed'
-        # Get job_id and vacate the job
-        job_id = self.individuals.at[idx, 'job_id']
-        if pd.notna(job_id):
-            self.jobs.loc[self.jobs['job_id'] == job_id, 'individual_id'] = np.nan
-            self.individuals.at[idx, 'job_id'] = np.nan
-        # Schedule new job search
-        t_search = event.time + DAYS_PER_YEAR*np.random.exponential(self.config['simulation']['job_search_interval'])
-        search_event = Event(t_search, idx, 'start_job_search')
-        self.event_queue.push(search_event)
+        education_type = event.params.get('education_type', 'specialist')
+        if education_type == 'specialist':
+            self.individuals.at[idx, 'chi'] += event.params.get('delta_chi', 1.0)
+            self.individuals.at[idx, 'H'] += event.params.get('delta_H', 0.1)
+        elif education_type == 'broad':
+            self.individuals.at[idx, 'H'] += event.params.get('delta_H', 0.5)
+            self.individuals.at[idx, 'xi'] += event.params.get('delta_xi', 10)
+        self.individuals.at[idx, 'status'] = 'in_education'
+        self.event_logger.log_individual_event(self, event, extra={'education_type': education_type})
+        # Schemalägg slut på utbildningen
+        education_duration = event.params.get('duration', 1 * DAYS_PER_YEAR)
+        end_event = Event(event.time + education_duration, idx, 'end_education', {'education_type': education_type})
+        self.push_event(end_event)
 
-        self.log_event(event, idx)
+    def handle_end_education(self, event):
+        idx = event.agent_id
+        self.individuals.at[idx, 'status'] = 'unemployed'
+        self.event_logger.log_individual_event(self, event, extra={'event_detail': 'education_finished'})
+        t_search = event.time + DAYS_PER_YEAR * np.random.exponential(self.config['simulation']['job_search_interval'])
+        search_event = Event(t_search, idx, 'start_job_search')
+        self.push_event(search_event)
+
+    def handle_start_internal_training(self, event):
+        idx = event.agent_id
+        self.individuals.at[idx, 'H'] += event.params.get('delta_H', 0.2)
+        self.individuals.at[idx, 'chi'] += event.params.get('delta_chi', 0.05)
+        self.event_logger.log_individual_event(self, event, extra={'event_detail': 'start_internal_training'})
+        # Ev. möjlighet till återkommande utbildning (rekursivt, med låg sannolikhet)
+        if self.individuals.at[idx, 'status'] == 'employed' and np.random.rand() < 0.15:
+            t_training = event.time + np.random.uniform(0.2, 0.8) * DAYS_PER_YEAR
+            more_training = Event(
+                t_training,
+                idx,
+                'start_internal_training',
+                {'delta_H': np.random.uniform(0.03, 0.10), 'delta_chi': np.random.uniform(0.01, 0.02)}
+            )
+            self.push_event(more_training)
+
+    def handle_internal_job_change(self, event):
+        idx = event.agent_id
+        self.individuals.at[idx, 'xi'] += event.params.get('delta_xi', 3)
+        self.individuals.at[idx, 'H'] += event.params.get('delta_H', 0.3)
+        self.individuals.at[idx, 'chi'] += event.params.get('delta_chi', 0.03)
+        self.event_logger.log_individual_event(self, event, extra={'event_detail': 'internal_job_change'})
+
+    def handle_career_break(self, event):
+        idx = event.agent_id
+        self.individuals.at[idx, 'status'] = 'career_break'
+        self.individuals.at[idx, 'chi'] -= event.params.get('delta_chi', 0.05)
+        self.individuals.at[idx, 'H'] -= event.params.get('delta_H', 0.02)
+        self.event_logger.log_individual_event(self, event, extra={'event_detail': 'career_break'})
+        break_duration = event.params.get('duration', 0.5 * DAYS_PER_YEAR)
+        end_event = Event(event.time + break_duration, idx, 'start_job_search')
+        self.push_event(end_event)
 
     def handle_new_month(self, event):
         year = event.params.get('year')
         month = event.params.get('month')
-        self.log_event(event, f"{year}-{month:02d}")
+        self.event_logger.log_generic_event(event, data={"year": year, "month": month}, print_line=True)
 
     def handle_new_year(self, event):
         year = event.params.get('year')
@@ -351,14 +475,20 @@ class World:
         unemployed = stats['individual_status_counts'].get('unemployed', 0)
         matched = stats.get('matched_pairs', 0)
         unmatched_jobs = stats.get('unmatched_jobs', 0)
+        self.event_logger.log_generic_event(event, data={
+            "year": year,
+            "employed": employed,
+            "unemployed": unemployed,
+            "matched": matched,
+            "unmatched_jobs": unmatched_jobs
+        }, print_line=True)
 
-        # Example log format:
-        # <time>, new_year, <year>, employed <count>, unemployed <count>, matched <count>, unmatched_jobs <count>
-        self.log_event(
-            event,
-            year,
-            f"employed {employed}",
-            f"unemployed {unemployed}",
-            f"matched {matched}",
-            f"unmatched_jobs {unmatched_jobs}"
-        )
+    def employer_training_prob(self, n_employees):
+        tr_cfg = self.config['defaults']['employer']['training_prob_by_size']
+        if n_employees < 10:
+            return tr_cfg.get('small', 0.05)
+        elif n_employees < 100:
+            return tr_cfg.get('medium', 0.15)
+        else:
+            return tr_cfg.get('large', 0.40)
+

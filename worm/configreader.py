@@ -244,4 +244,110 @@ class ConfigReader:
             val = default
         return self.resolve_year_param(val, year)
 
+
+    def validate_scenario(self, strict=True):
+        """
+        Validerar att scenariot är logiskt och konsistent.
+        Upptäcker bl a:
+        - Tvetydiga eller motsägande perioddefinitioner (start_year, end_year, n_years)
+        - Saknade nödvändiga fält (ex: municipalities, defaults)
+        - Orimliga värden (negativa populationer, ratio > 1, etc)
+        - Dubbeldefinitioner på flera nivåer
+        - Kända fält i employer/individuals-sektioner
+        Skriv ut VARNING eller FEL beroende på strict.
+        """
+        err = []
+        warn = []
+
+        # === Kolla simuleringsperiod ===
+        sim = self.config.get("simulation", {})
+        sy = sim.get("start_year", self.config.get("start_year"))
+        ey = sim.get("end_year", self.config.get("end_year"))
+        ny = sim.get("n_years", self.config.get("n_years"))
+
+        try:
+            sy = int(sy) if sy is not None else None
+            ey = int(ey) if ey is not None else None
+            ny = int(ny) if ny is not None else None
+        except Exception as e:
+            err.append(f"Felaktigt format på start_year, end_year eller n_years: {e}")
+
+        # Kontrollera period
+        if sy is not None and ey is not None and ny is not None and ny != (ey - sy + 1):
+            err.append(f"Konflikt: n_years={ny} men (end_year - start_year + 1) = {ey-sy+1}.")
+        if sy is not None and ey is not None and ey < sy:
+            err.append(f"end_year ({ey}) < start_year ({sy})!")
+        if ny is not None and ny < 1:
+            err.append("n_years måste vara minst 1.")
+        if (sy is None and ey is None) or (sy is None and ny is None) or (ey is None and ny is None):
+            err.append("Du måste ange minst två av: start_year, end_year, n_years.")
+
+        # === Nödvändiga huvudsektioner ===
+        for section in ["municipalities", "defaults"]:
+            if section not in self.config or self.config[section] is None:
+                err.append(f"Sektionen '{section}' saknas i scenariot.")
+            elif section == "municipalities" and not self.config[section]:
+                err.append("Listan över municipalities är tom.")
+
+        # === Validera defaults ===
+        defaults = self.config.get("defaults", {})
+        pop = defaults.get("population", None)
+        if pop is not None and (isinstance(pop, (int, float)) and pop < 0):
+            err.append("Population kan inte vara negativ.")
+
+        # Ratio-kontroller
+        ratios = {
+            "workforce_ratio": defaults.get("workforce_ratio"),
+            "sex_ratio": defaults.get("sex_ratio"),
+            "unemployment_rate": defaults.get("unemployment_rate")
+        }
+        for k, v in ratios.items():
+            if v is not None:
+                try:
+                    val = float(v)
+                    if not (0 <= val <= 1):
+                        err.append(f"{k} ska vara mellan 0 och 1.")
+                except Exception:
+                    warn.append(f"{k} kan inte tolkas som tal: '{v}'")
+
+        # === Education levels ska summera till 1.0 (+/- 0.01) ===
+        edu = defaults.get("education_levels", {})
+        if edu and isinstance(edu, dict):
+            total = sum(float(edu.get(level, 0.0)) for level in ["low", "medium", "high"])
+            if abs(total - 1.0) > 0.01:
+                warn.append(f"education_levels summerar till {total}, ej 1.0.")
+
+        # === Kolla employer_distribution ===
+        emp_dist = defaults.get("employer_distribution", {})
+        size_dist = emp_dist.get("employer_size_distribution", {})
+        size_sum = sum(float(cls.get("ratio", 0.0)) for cls in size_dist.values())
+        if size_dist and abs(size_sum - 1.0) > 0.01:
+            warn.append(f"employer_size_distribution ratio summerar till {size_sum}, ej 1.0.")
+
+        # === Dubbletter: Warn om param finns på flera nivåer ===
+        overrides = self.config.get("municipality_overrides", {})
+        for mcode, ovr in overrides.items():
+            for key in ovr:
+                if key in defaults:
+                    warn.append(f"Parameter '{key}' finns både i defaults och i override för {mcode}.")
+
+        # === Kända sektioner individuals/employer (felstavar eller dubbletter) ===
+        known_indiv = {"propensities", "initial_H"}
+        indv = defaults.get("individuals", {})
+        for k in indv.keys():
+            if k not in known_indiv:
+                warn.append(f"Okänt attribut '{k}' i defaults.individuals.")
+
+        # === Rapportera allt ===
+        for w in warn:
+            print("[SCENARIO CONFIG VARNING]", w)
+        if err:
+            for e in err:
+                print("[SCENARIO CONFIG FEL]", e)
+            if strict:
+                raise ValueError("Felaktig scenario-config (se ovan).")
+
+        return True
+
+
 # --- Slut på ConfigReader ---

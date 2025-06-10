@@ -41,6 +41,8 @@ if __name__ == "__main__":
     # --- 2. Initialize database, config, and scenario environment ---
     conn = sqlite3.connect(db_path)
     cfg = ConfigReader(config, conn)
+    cfg.validate_scenario(strict=True)
+
     geoworld = GeoWorld(db_path)
     builder = ScenarioBuilder(config, conn, cfg, geoworld=geoworld)
 
