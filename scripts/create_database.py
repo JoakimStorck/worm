@@ -7,7 +7,7 @@ locale.setlocale(locale.LC_NUMERIC, "C")
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from worm.database import schema, loader
+from core.database import schema, loader
 
 DB_PATH = "data/worm.sqlite3"
 

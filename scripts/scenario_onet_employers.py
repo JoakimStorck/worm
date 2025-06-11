@@ -6,9 +6,9 @@ import uuid
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from worm.occupational_profiles import transform_onet_skills_scaled, select_representative_occupations
-from worm.agents import Employer, Job
-from worm.plotting.occupational import plot_occupation_space
+from core.occupational_profiles import transform_onet_skills_scaled, select_representative_occupations
+from core.agents import Employer, Job
+from core.plotting.occupational import plot_occupation_space
 
 # 1. Ladda transformerade O*NET-data (hela datasettet)
 all_occupations_df = transform_onet_skills_scaled(n_clusters=50)

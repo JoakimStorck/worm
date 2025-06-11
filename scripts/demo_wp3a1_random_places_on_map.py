@@ -2,9 +2,9 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from worm.geography.geoworld import GeoWorld
-from worm.geography.places import Residence, Workplace
-from worm.geography.geoutils import random_points_in_polygon
+from core.geography.geoworld import GeoWorld
+from core.geography.places import Residence, Workplace
+from core.geography.geoutils import random_points_in_polygon
 
 gw = GeoWorld("data/worm.sqlite3")
 falun = [m for m in gw.municipalities.values() if m.name.lower() == "falun"][0]

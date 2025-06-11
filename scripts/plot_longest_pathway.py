@@ -4,7 +4,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
 import pandas as pd
-from worm.plotting.occupational import replay_plot_occupation_space
+from core.plotting.occupational import replay_plot_occupation_space
 
 EVENTLOG_PATH = 'output/eventlog.log'
 INDIV_PATH = 'output/initial_state_individuals.csv'

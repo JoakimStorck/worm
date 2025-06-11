@@ -7,13 +7,13 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import time
 import numpy as np
 import pandas as pd
-from worm.geography.geoworld import GeoWorld
-from worm.plotting.plot_selected_municipalities import plot_selected_municipalities
-from worm.matching import greedy_deso_matching, interleaved_multilevel_batch_matching
+from core.geography.geoworld import GeoWorld
+from core.plotting.plot_selected_municipalities import plot_selected_municipalities
+from core.matching import greedy_deso_matching, interleaved_multilevel_batch_matching
 
-from worm.statistics.log import log
-from worm.events import Event, EventQueue
-from worm.statistics.log import EventLogger
+from core.statistics.log import log
+from core.events import Event, EventQueue
+from core.statistics.log import EventLogger
 
 DAYS_PER_YEAR = 365.25  # Average days per year, accounting for leap years
 MONTH_LENGTHS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]

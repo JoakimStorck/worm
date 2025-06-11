@@ -11,6 +11,83 @@
 * All modellering och simulering utformas så att 1e5–1e6 agenter kan hanteras effektivt med pandas/numpy och event queue.
 * Händelsedriven simulering bygger på ID-baserade länkar och batchbearbetning.
 
+# NYTT 2025-06-11 ROADMAP
+
+Övergången till en modern, modulär och flexibel analysplattform kräver både **strategi för refaktorering** och **en pragmatisk, inkrementell arbetsmetod**. Här är en rekommenderad väg, grundad på erfarenhet från liknande forskningsprojekt:
+
+---
+
+## **1. Formulera ett minimalt, men visionärt delmål ("Minimal Viable Platform")**
+
+* **Identifiera kärnflödet**: Vilket *scenario*, *pipeline* och *analys* är viktigast att få in i den nya strukturen först? (T.ex. Falun-baseline → simulering → occupation space + karta interaktivt.)
+* Gör en *checklista* med de 2–3 mest centrala analys/visualiseringsvyer du vill ha “2030-snygga” och interaktiva.
+* Låt resten av systemet (alla avancerade analyser, udda scenarier, batch-körningar) vänta tills du har denna kärna på plats.
+
+---
+
+## **2. Arbeta i *vertikala skivor* ("vertical slices") snarare än att först refaktorera hela koden**
+
+* Gör först en *pipeline* som går hela vägen från scenario → data → simulering → analys → interaktiv vy för EN typ av utdata (t.ex. pathways, eller occupationspace + karta).
+* Dra **snabbt** in Bokeh Panel eller React/Plotly och koppla till Python-API *med nuvarande kod* (även om det innebär en del "glue code").
+* *När* du har en fungerande end-to-end-demo: börja plocka in nästa analys/vy (en “slice” till).
+* **Undvik** att försöka omstrukturera alla moduler och allt datalager på en gång – det är mycket större och mer riskfyllt än att iterera i små, nyttiga steg.
+
+---
+
+## **3. Inkapsla det gamla, bygg det nya ovanpå ("Strangler Fig Pattern")**
+
+* Låt de gamla scripts och moduler vara kvar, men bygg nya funktioner/moduler som använder gamla som “svarta lådor” i början.
+* Skapa nya *API\:er/klasser* som gradvis tar över mer logik, men där du enkelt kan falla tillbaka till beprövade scripts om något saknas eller strular.
+
+---
+
+## **4. Satsa tidigt på ny UI och utseende**
+
+* Bygg snabbt ett *enkelt* men **modernt och responsivt dashboard-skal** (t.ex. i Bokeh Panel eller React, med tailwind/MUI för design).
+* Lägg bara in EN eller TVÅ vyer till att börja med.
+* Få ut datan från din pipeline och in i dashboarden – även om kopplingen sker via temporär fil eller ett “hårt” Python-API i början.
+* Känslan av framsteg och den direkta visuella återkopplingen är **mycket mer motiverande** än “osynlig” inre refaktorering.
+
+---
+
+## **5. Bygg successivt ut analys och backend**
+
+* När UI/dashboarden funkar med en eller två analyser – börja refaktorera analysfunktionerna så att de är pluggbar/modulär (en analys = en modul/klass/funktion, och de kan enkelt bytas ut eller återanvändas).
+* Gör kod för scenariohantering, simulering, databas och geodata mer och mer API-baserad/modulär – men bara när det verkligen behövs (dvs. när du stöter på flaskhalsar eller kod-”sörja” som hindrar ny funktion).
+
+---
+
+## **6. Gör små, tydliga förbättringar (med test och demo) varje vecka**
+
+* Sätt konkreta delmål: “Denna vecka: pathways-plotten ska vara snygg och funka i webben.”
+* Låt varje steg kunna visas upp för kollegor/beställare – att kunna “demonstrera” något nyttigt driver projektet framåt.
+
+---
+
+## **7. Automatisera och profilera från dag 1**
+
+* Mät prestanda så snart du har pipeline och simuleringskärna i gång i ny miljö.
+* Lägg in loggning/profilering (t.ex. via `cProfile` eller IPython magic) så att du kan jaga flaskhalsar *när de faktiskt uppstår*.
+
+---
+
+## **Sammanfattning – “Blueprint” för iterativ förflyttning**
+
+1. **Fokusera på en minimal demo från scenario till snygg interaktiv visualisering.**
+2. **Bygg i “skivor” – en pipeline per analys/vy.**
+3. **Låt gamla moduler leva kvar tills du med säkerhet kan fasa ut dem.**
+4. **Investera tidigt i en modern frontend/dashboard – det lyfter hela projektet.**
+5. **Expanda API, analys och backend i takt med att du ser var behovet är störst.**
+6. **Mät, visa, och förbättra i korta, iterativa cykler.**
+
+---
+
+Vill du ha ett **exempel på en “minimal första slice”** – t.ex. kod för att läsa scenario, köra simulering, och visa interaktiv occupation space + karta i Bokeh Panel/dashboard?
+Eller vill du ha en **prioriterad TODO-lista** för första 2–3 sprintarna?
+Säg bara till så hjälper jag dig att *komma igång* direkt med just rätt steg.
+
+
+
 
 ---
 

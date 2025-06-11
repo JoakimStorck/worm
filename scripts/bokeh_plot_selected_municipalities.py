@@ -1,5 +1,3 @@
-# plotting/plot_selected_municipalities.py
-
 import numpy as np
 import pandas as pd
 import geopandas as gpd
@@ -8,104 +6,51 @@ from bokeh.plotting import figure, show, output_file
 from bokeh.models import ColumnDataSource, MultiPolygons, HoverTool, CustomJS, Div
 from bokeh.layouts import column
 from bokeh.palettes import Category10
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 
+# ---- DEMODATA: skapa exempeldata ----
+# Skapa två låtsaskommuner (fyrkanter)
+polys = [
+    Polygon([(0,0), (0,10), (10,10), (10,0)]),      # Kommun 1
+    Polygon([(12,2), (12,8), (20,8), (20,2)])       # Kommun 2
+]
+muni_gdf = gpd.GeoDataFrame({
+    'municipal_code': ['2080', '2081'],
+    'municipality': ['Falun', 'Borlänge'],
+    'geometry': polys
+})
 
-from core.statistics.log import log
+# Urban area i Falun (rektangel inuti)
+urban_gdf = gpd.GeoDataFrame({
+    'municipal_code': ['2080'],
+    'geometry': [Polygon([(2,2), (2,7), (8,7), (8,2)])]
+})
 
-def plot_selected_municipalities(
-    geoworld,
-    municipal_codes_or_names,
-    layers=("municipalities",),
-    employers_gdf=None,
-    individuals_gdf=None,
-    save_path=None,
-    dpi=200,
-    file_format=None,
-    show=True
-):
-    if isinstance(municipal_codes_or_names, str):
-        municipal_codes_or_names = [municipal_codes_or_names]
-    municipal_codes_or_names = [str(v) for v in municipal_codes_or_names]
+# Individer och arbetsgivare (slump)
+individuals_gdf = gpd.GeoDataFrame({
+    'individual_id': [f'2080_i{i:06d}' for i in range(10)],
+    'municipal_code': ['2080']*10,
+    'geometry': [Point(np.random.uniform(2,8), np.random.uniform(2,7)) for _ in range(10)]
+})
+employers_gdf = gpd.GeoDataFrame({
+    'employer_id': [f'2080_e{i:05d}' for i in range(5)],
+    'municipal_code': ['2080']*5,
+    'geometry': [Point(np.random.uniform(2,8), np.random.uniform(2,7)) for _ in range(5)]
+})
 
-    muni_gdf = geoworld.municipalities
-
-    selected = muni_gdf[
-        muni_gdf["municipal_code"].isin(municipal_codes_or_names) |
-        muni_gdf["municipality"].str.lower().str.contains('|'.join([v.lower() for v in municipal_codes_or_names]))
-    ]
-    if selected.empty:
-        log("Inga matchande kommuner hittades!")
-        return
-
-    log("VALDA KOMMUNER:")
-    log(selected[["municipal_code", "municipality"]])
-
-    fig, ax = plt.subplots(figsize=(10, 10))
-
-    colors = {
-        "municipalities": "#ECECEC",
-        "urban_areas": "#FF7F0E",
-        "small_localities": "#FFD700",
-        "business_zones": "#D62728",
-        "commercial_zones": "#2CA02C",
-        "leisure_house_zones": "#9467BD",
-        "employers": "#1f77b4",
-        "individuals": "#000000",
-    }
-
-    # Rita polygonlager
-    selected.plot(ax=ax, color=colors["municipalities"], edgecolor="#888888", linewidth=0.7, label="Kommun")
-    for layer in layers:
-        if layer == "municipalities":
-            continue
-        if hasattr(geoworld, layer):
-            gdf = getattr(geoworld, layer)
-            if gdf.empty:
-                continue
-            muni_col = next((c for c in ["municipal_code", "municipality_code"] if c in gdf.columns), None)
-            if muni_col:
-                hits = gdf[gdf[muni_col].isin(selected["municipal_code"])]
-            else:
-                hits = gdf
-            if not hits.empty:
-                hits.plot(ax=ax, color=colors.get(layer, "#88888844"), edgecolor="#444444", linewidth=0.5, label=layer)
-        if layer == "employers" and employers_gdf is not None:
-            employers_gdf.plot(ax=ax, color=colors["employers"], markersize=6, alpha=0.7, label="Employers", zorder=10)
-        if layer == "individuals" and individuals_gdf is not None:
-            individuals_gdf.plot(ax=ax, color=colors["individuals"], markersize=2, alpha=0.5, label="Individuals", zorder=11)
-
-    ax.set_aspect("equal")
-    ax.axis("off")
-    plt.title("Valda kommuner och lager")
-
-    legend_handles = [
-        mpatches.Patch(color=colors["municipalities"], label="Municipality"),
-    ]
-    for layer in layers:
-        if layer == "municipalities":
-            continue
-        if layer in colors:
-            if layer in ["employers", "individuals"]:
-                legend_handles.append(
-                    mpatches.Patch(color=colors[layer], label=layer.capitalize())
-                )
-            else:
-                legend_handles.append(
-                    mpatches.Patch(color=colors[layer], label=layer.replace("_", " ").capitalize())
-                )
-    ax.legend(handles=legend_handles, loc="upper right")
-
-    plt.tight_layout()
-    if save_path:
-        if file_format:
-            plt.savefig(save_path, format=file_format, dpi=dpi)
-        else:
-            plt.savefig(save_path, dpi=dpi)
-        log(f"Karta sparad till {save_path}")
-    if show:
-        plt.show()
+# ---- KONVERTERA POLYGONER TILL BOKEH-format ----
+def gdf_to_bokeh_patches(gdf):
+    xs, ys = [], []
+    for geom in gdf.geometry:
+        if geom.type == 'Polygon':
+            x, y = geom.exterior.xy
+            xs.append(list(x))
+            ys.append(list(y))
+        elif geom.type == 'MultiPolygon':
+            # Endast enklaste fallet: ta första polygonen
+            x, y = list(geom.geoms[0].exterior.xy)
+            xs.append(list(x))
+            ys.append(list(y))
+    return dict(xs=xs, ys=ys)
 
 # ---- PLOTNING ----
 def plot_selected_municipalities_bokeh(
@@ -201,3 +146,12 @@ def plot_selected_municipalities_bokeh(
 
     output_file("bokeh_selected_municipalities.html")
     show(layout)
+
+# ----------- DEMOANROP -----------
+plot_selected_municipalities_bokeh(
+    muni_gdf,
+    selected_codes_or_names=["Falun"],
+    layers=["municipalities", "urban_areas"],
+    employers_gdf=employers_gdf,
+    individuals_gdf=individuals_gdf,
+)

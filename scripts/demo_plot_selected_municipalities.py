@@ -4,7 +4,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import matplotlib.pyplot as plt
 import geopandas as gpd
-from worm.geography.geoworld import GeoWorld
+from core.geography.geoworld import GeoWorld
 
 def plot_selected_municipalities(geoworld, codes_or_names, layers=("municipalities",)):
     """

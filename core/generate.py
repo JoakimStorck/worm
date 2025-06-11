@@ -2,10 +2,10 @@ import uuid
 import numpy as np
 import random
 from typing import List, Tuple
-from worm.employers import Employer
-from worm.geography.places import Workplace, Residence
-from worm.jobs import Job
-from worm.agents import Worker
+from core.employers import Employer
+from core.geography.places import Workplace, Residence
+from core.jobs import Job
+from core.agents import Worker
 
 def generate_employers(n, map_size=100) -> Tuple[List[Employer], List[Workplace]]:
     """

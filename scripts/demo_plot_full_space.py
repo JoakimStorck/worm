@@ -3,8 +3,8 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from worm.occupations.occupational_profiles import transform_onet_skills_scaled_from_db
-from worm.plotting.occupational import plot_full_occupation_space_polar
+from core.occupations.occupational_profiles import transform_onet_skills_scaled_from_db
+from core.plotting.occupational import plot_full_occupation_space_polar
 
 import matplotlib.pyplot as plt
 

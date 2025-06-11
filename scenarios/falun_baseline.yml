@@ -4,6 +4,7 @@ description: >
   Baseline scenario for Falun.
   The purpose is to test matching in a single municipality.
 start_year: 2024
+n_years: 5
 seed: 12345
 
 municipalities:
@@ -102,7 +103,6 @@ simulation:
   avg_employment_duration: 4.0     # år
   employment_duration_std: 3.0     # år
   job_search_interval: 0.083       # år (ca 1 månad)
-  n_years: 1
   start_year: 2024
   log_to_console: true
   log_to_file: true

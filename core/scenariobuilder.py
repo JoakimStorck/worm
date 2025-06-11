@@ -6,8 +6,8 @@ import geopandas as gpd
 import time
 from shapely import wkt
 
-from worm.geography.geoutils import assign_deso_code, random_points_in_polygon
-from worm.statistics.log import log
+from core.geography.geoutils import assign_deso_code, random_points_in_polygon
+from core.statistics.log import log
 
 class ScenarioBuilder:
     DEFAULT_WEIGHT_FIELDS = {
@@ -84,7 +84,7 @@ class ScenarioBuilder:
         return gdf
 
     def fetch_sni_distribution(self, municipal_code, year, deso_code=None, sni_source="municipality"):
-        from worm.database.utils import fetch_with_fallback
+        from core.database.utils import fetch_with_fallback
         cache_key = (deso_code, year) if deso_code else (municipal_code, year)
         if cache_key in self._sni_cache:
             return self._sni_cache[cache_key]

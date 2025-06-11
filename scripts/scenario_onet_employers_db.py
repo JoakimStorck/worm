@@ -8,8 +8,8 @@ import uuid
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from worm.agents import Employer, Job
-from worm.plotting.occupational import plot_occupation_space
+from core.agents import Employer, Job
+from core.plotting.occupational import plot_occupation_space
 
 # --- NYTT: Ladda transformerad O*NET occupation space-data från databasen ---
 def load_occupation_space_from_db(db_path, n_clusters):

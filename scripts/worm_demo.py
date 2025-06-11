@@ -5,8 +5,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from worm import generate_employers, generate_workers, Geography, match_workers_to_jobs
 
-from worm.plotting.geographic import plot_agent_distribution
-from worm.plotting.matching import plot_matches
+from core.plotting.geographic import plot_agent_distribution
+from core.plotting.matching import plot_matches
 
 # 1. Generera data
 employers = generate_employers(10, map_size=100)

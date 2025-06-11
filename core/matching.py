@@ -1,9 +1,9 @@
 import time
 import numpy as np
 import pandas as pd
-from worm.occupations.utils import optimal_assignment
+from core.occupations.utils import optimal_assignment
 
-from worm.statistics.log import log
+from core.statistics.log import log
 
 def batched_communewise_assignment(
     individuals_df, jobs_df,

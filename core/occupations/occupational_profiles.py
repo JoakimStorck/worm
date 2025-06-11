@@ -7,7 +7,7 @@ import sqlite3
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from scipy.stats import entropy
-from worm.occupations.utils import reorder_clusters_by_angle, select_representative_occupations, name_clusters_by_representative_titles
+from core.occupations.utils import reorder_clusters_by_angle, select_representative_occupations, name_clusters_by_representative_titles
 
 
 

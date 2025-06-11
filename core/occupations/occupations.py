@@ -1,6 +1,6 @@
 
-from worm.agents import Worker
-from worm.jobs import Job
+from core.agents import Worker
+from core.jobs import Job
 
 from dataclasses import dataclass
 from typing import Dict

@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from worm.plotting.occupational import replay_plot_occupation_space
+from core.plotting.occupational import replay_plot_occupation_space
 
 replay_plot_occupation_space(
     'output/initial_state_individuals.csv',
