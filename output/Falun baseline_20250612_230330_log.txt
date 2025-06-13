@@ -1,0 +1,52 @@
+[TIMER] generate: startat
+
+--- Kommun 2080 ---
+[TIMER]  ...generera individer: 2.48 s
+Varning: Fallback till år 2020 i employment_municipality_sni för filter {'municipal_code': 2080} (önskat år var 2024)
+Antal arbetsgivare: 2175 (mål: 31387 jobb)
+Total antal jobb (summa storlek): 31387
+[TIMER]  ...generera arbetsgivare: 3.98 s
+Exempel på individer:
+   job_id  employer_id individual_id  municipal_code  ...       chi        xi              x             y
+0  J00000            0          None            2080  ...  0.031411  0.067578  536081.492944  6.719122e+06
+1  J00001            0          None            2080  ...  0.031411  0.067578  536081.492944  6.719122e+06
+2  J00002            0          None            2080  ...  0.031411  0.067578  536081.492944  6.719122e+06
+3  J00003            0          None            2080  ...  0.031411  0.067578  536081.492944  6.719122e+06
+4  J00004            1          None            2080  ...  0.839133  4.396320  534566.176940  6.719193e+06
+
+[5 rows x 13 columns]
+Exempel på DeSO-zoner: 
+   object_id  ...                                           geometry
+0          1  ...  POLYGON ((398220.208 6136028.939, 398131.277 6...
+1          2  ...  POLYGON ((385026.453 6138309.345, 385034.006 6...
+2          3  ...  POLYGON ((384150.992 6138331.01, 384220.768 61...
+3          4  ...  POLYGON ((383184.933 6138362.314, 383335.536 6...
+4          5  ...  POLYGON ((388751.769 6136871.608, 388793.831 6...
+
+[5 rows x 13 columns]
+Individers min/max x/y: 515225.36660589435, 569319.1497185226, 6704737.916696165, 6751861.643782489
+DeSO min/max x/y: minx    2.452092e+05
+miny    6.111269e+06
+maxx    2.806998e+05
+maxy    6.136203e+06
+dtype: float64, minx    9.149900e+05
+miny    7.540813e+06
+maxx    9.211774e+05
+maxy    7.671055e+06
+dtype: float64
+Kolumner i joined efter spatial join: Index(['job_id', 'employer_id', 'individual_id', 'municipal_code', 'layer',
+       'zone_code', 'employer_size', 'sni_code', 'geometry', 'chi', 'xi', 'x',
+       'y', 'index_right', 'deso_code'],
+      dtype='object')
+[TIMER]  ...generera jobb: 2.58 s
+Storleksfördelning (antal arbetsgivare per klass):
+  micro       :  1859 st (1-9 anställda)
+  small       :   241 st (10-49 anställda)
+  medium_large:    67 st (50-250 anställda)
+  very_large  :     8 st (251-1000 anställda)
+[TIMER] Kommun 2080 totalt: 9.05 s
+[TIMER] Sammanfogning/efterarbete: 0.00 s
+[TIMER] generate totalt 9.05 s
+Scenario: scenarios/falun_baseline.yml
+Statistics BEFORE batch matching: {'total_individuals': 59945, 'individual_status_counts': {'unemployed': 33569, 'not_in_labor_force': 26376}, 'total_jobs': 31387, 'matched_pairs': 0, 'unique_matched_individuals': 0, 'unique_matched_jobs': 0, 'unmatched_individuals_in_workforce': 33569, 'unmatched_jobs': 31387}
+Statistics AFTER batch matching (t=0): {'total_individuals': 59945, 'individual_status_counts': {'employed': 31387, 'not_in_labor_force': 26376, 'unemployed': 2182}, 'total_jobs': 31387, 'matched_pairs': 0, 'unique_matched_individuals': 0, 'unique_matched_jobs': 0, 'unmatched_individuals_in_workforce': 2182, 'unmatched_jobs': 0}

@@ -4,7 +4,7 @@ description: >
   Baseline scenario for Falun.
   The purpose is to test matching in a single municipality.
 start_year: 2024
-n_years: 5
+n_years: 1
 seed: 12345
 
 municipalities:

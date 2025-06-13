@@ -1,0 +1,21 @@
+[TIMER] generate: startat
+
+--- Kommun 2080 ---
+[TIMER]  ...generera individer: 2.46 s
+Varning: Fallback till år 2020 i employment_municipality_sni för filter {'municipal_code': 2080} (önskat år var 2024)
+Antal arbetsgivare: 2175 (mål: 31387 jobb)
+Total antal jobb (summa storlek): 31387
+[TIMER]  ...generera arbetsgivare: 3.93 s
+[TIMER]  ...generera jobb: 2.80 s
+Storleksfördelning (antal arbetsgivare per klass):
+  micro       :  1859 st (1-9 anställda)
+  small       :   241 st (10-49 anställda)
+  medium_large:    67 st (50-250 anställda)
+  very_large  :     8 st (251-1000 anställda)
+[TIMER] Kommun 2080 totalt: 9.19 s
+[TIMER] Sammanfogning/efterarbete: 0.00 s
+[TIMER] generate totalt 9.19 s
+simulation_end_time=365.25
+Scenario: scenarios/falun_baseline.yml
+Statistics BEFORE batch matching: {'total_individuals': 59945, 'individual_status_counts': {'unemployed': 33569, 'not_in_labor_force': 26376}, 'total_jobs': 31387, 'matched_pairs': 0, 'unique_matched_individuals': 0, 'unique_matched_jobs': 0, 'unmatched_individuals_in_workforce': 33569, 'unmatched_jobs': 31387}
+Statistics AFTER batch matching (t=0): {'total_individuals': 59945, 'individual_status_counts': {'employed': 31387, 'not_in_labor_force': 26376, 'unemployed': 2182}, 'total_jobs': 31387, 'matched_pairs': 0, 'unique_matched_individuals': 0, 'unique_matched_jobs': 0, 'unmatched_individuals_in_workforce': 2182, 'unmatched_jobs': 0}

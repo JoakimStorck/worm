@@ -63,7 +63,8 @@ class World:
         self.event_queue = EventQueue()
         self.current_time = 0  # Starttid i simuleringen, kan vara t.ex. dagar, månader, år
 
-        self.simulation_end_time = DAYS_PER_YEAR*self.config.get('simulation', {}).get('n_years', 365 * 1)  # Default to 1 year in days
+        self.simulation_end_time = DAYS_PER_YEAR*self.config.get('simulation', {}).get('n_years', 1)  # Default to 1 year in days
+        log(f"simulation_end_time={self.simulation_end_time}")
         # Output/resultat – samlas/uppdateras löpande
         self.matchings = pd.DataFrame()
 

@@ -11,14 +11,14 @@ def assign_deso_code(df, deso_gdf, x_col="x", y_col="y"):
     df["geometry"] = points
     points_gdf = gpd.GeoDataFrame(df, geometry="geometry", crs=deso_gdf.crs)
 
-    log(f"Exempel på individer:\n{df.head()}")
-    log(f"Exempel på DeSO-zoner: \n{deso_gdf.head()}")
-    log(f"Individers min/max x/y: {df['x'].min()}, {df['x'].max()}, {df['y'].min()}, {df['y'].max()}")
-    log(f"DeSO min/max x/y: {deso_gdf.geometry.bounds.min()}, {deso_gdf.geometry.bounds.max()}")
+    #log(f"Exempel på individer:\n{df.head()}")
+    #log(f"Exempel på DeSO-zoner: \n{deso_gdf.head()}")
+    #log(f"Individers min/max x/y: {df['x'].min()}, {df['x'].max()}, {df['y'].min()}, {df['y'].max()}")
+    #log(f"DeSO min/max x/y: {deso_gdf.geometry.bounds.min()}, {deso_gdf.geometry.bounds.max()}")
 
     # Spatial join: vilket DeSO hör punkten till?
     joined = gpd.sjoin(points_gdf, deso_gdf[["deso_code", "geometry"]], how="left", predicate="within")
-    log(f"Kolumner i joined efter spatial join: {joined.columns}")
+    #log(f"Kolumner i joined efter spatial join: {joined.columns}")
 
     return joined["deso_code"].values  # returnerar en array/serie med deso_code
 
