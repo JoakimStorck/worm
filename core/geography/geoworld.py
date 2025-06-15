@@ -49,6 +49,7 @@ class GeoWorld:
         df = pd.read_sql(query, conn)             # Skicka connection till read_sql!
         conn.close()
         gdf = gpd.GeoDataFrame(df, geometry=gpd.GeoSeries.from_wkt(df[wkt_col]))
+        gdf = gdf.set_crs("EPSG:3006") # Antag att vi vet detta /JS 250615
         self._cache[table_name] = gdf
         return gdf
 

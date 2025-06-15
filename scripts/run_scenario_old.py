@@ -24,7 +24,7 @@ from core.geography.geoworld import GeoWorld
 from core.scenariobuilder import ScenarioBuilder
 from core.world import World
 from core.statistics.matching_stats import compute_matching_statistics, compute_commuting_statistics 
-from core.statistics.log import log, save_run_output, log_lines
+from core.log import log, save_run_output, log_lines
 
 def load_config(config_path):
     """Load YAML configuration as Python dict."""

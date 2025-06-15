@@ -1,140 +1,174 @@
-# scripts/run_scenario_modern.py
+# scripts/run_scenario_pipeline.py
 
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-
-import sys
-from pathlib import Path
+import sqlite3
 import yaml
 import pandas as pd
+import numpy as np
 
-# === 1. Ladda scenario ===
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from core.configreader import ConfigReader
+from core.geography.geoworld import GeoWorld
+from core.scenariobuilder import ScenarioBuilder
+from core.world import World
+from core.statistics.matching_stats import compute_matching_statistics, compute_commuting_statistics 
+from core.log import log, save_run_output, log_lines
+from core.analysis.scenario_result import ScenarioResult
+from core.visualization.occupation_space_panel import plot_occupation_space_panel
+from core.visualization.map_panel import plot_selected_municipalities_bokeh_panel
+
+
+# === 1. Ladda scenario (YAML) ===
 def load_scenario(yaml_path):
+    print(f"Laddar scenario från: {yaml_path}")
     with open(yaml_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        scenario = yaml.safe_load(f)
+    print("Scenario inläst, nycklar:", list(scenario.keys()))
+    return scenario
 
 # === 2. Preprocessing och bygg world ===
 def build_world_from_scenario(scenario, db_path):
-    # Din befintliga pipeline här: 
-    # - skapa GeoWorld, 
-    # - skapa individer/arbetsgivare/jobb via ScenarioBuilder,
-    # - lagra i World-objekt
-    from geography.geoworld import GeoWorld
-    from core.scenariobuilder import ScenarioBuilder
-    from core.world import World
-
+    conn = sqlite3.connect(db_path)
+    cfg = ConfigReader(scenario, conn)
+    cfg.validate_scenario(strict=True)
     geoworld = GeoWorld(db_path)
-    scenbuilder = ScenarioBuilder(scenario, conn=None, configreader=None) # Fyll på med rätt init!
-    # Skapa population och jobb etc
-    indiv_df, jobs_df, employers_df = scenbuilder.generate() # Pseudokod, anpassa till din API
-    # Bygg world
+    builder = ScenarioBuilder(scenario, conn, cfg, geoworld=geoworld)
+    individuals, jobs, employers, events = builder.generate()
     world = World(
-        individuals=indiv_df,
-        jobs=jobs_df,
-        employers=employers_df,
-        geoworld=geoworld
+        db_path,
+        config=scenario,
+        individuals=individuals,
+        jobs=jobs,
+        employers=employers,
+        events=events
     )
-    return world
+    return world, geoworld
 
-# === 3. Kör matchning/simulering (minimal version) ===
-def run_simulation(world):
-    from core.matching import match
-    from core.events import run_events
+# === 3. Initial analys/loggning/statistik före matching ===
+def log_pre_matching(world, scenario_path):
+    log("Scenario:", scenario_path)
+    log("Statistics BEFORE batch matching:", world.analyze())
 
-    # Initial matchning
-    match(world) # Modifierar world in-place
-    # Minimal event/sim
-    run_events(world) # Modifierar world och loggar event
-    return world
+# === 4. Matching och update av world ===
+def run_batch_matching(world, config):
+    matchings = world.match_individuals_to_jobs(
+        mode="interleaved_multilevel",
+        alpha_chi=config.get('alpha_chi', 5.0),
+        alpha_xi=config.get('alpha_xi', 5.0),
+        alpha_geo=config.get('alpha_geo', 1.0),
+    )
+    world.update_after_matching(matchings=matchings)
+    log("Statistics AFTER batch matching (t=0):", world.analyze())
+    return matchings
 
-# === 4. Extrahera snapshot/utdata för analys och visualisering ===
+# === 5. Statistik efter matching ===
+def compute_and_save_stats(world, scenario, matchings):
+    match_stats = compute_matching_statistics(world.matchings)
+    commuting_stats = compute_commuting_statistics(
+        world.matchings, world.individuals, world.jobs
+    )
+    scenario_name = scenario.get("scenario_name", "scenario")
+    save_run_output(world.matchings, match_stats, commuting_stats, scenario_name)
+    return match_stats, commuting_stats
+
+# === 6. Event-driven simulering ===
+def run_event_simulation(world):
+    log(f"Starting event-driven simulation, simulation_end_time = {world.simulation_end_time}")
+    world.simulate()
+    log("Statistics AFTER simulation:", world.analyze())
+
+# === 7. Extrahera snapshot/utdata för analys och visualisering ===
 def get_snapshot(world):
     # Samla dataframes för individer, jobb, pathways mm
     return {
         "individuals": world.individuals.copy(),
         "jobs": world.jobs.copy(),
         "employers": world.employers.copy(),
-        "eventlog": world.eventlog.copy() if hasattr(world, "eventlog") else None
+        "eventlog": getattr(world, "eventlog", None)
     }
 
-# === 5. API för analys/visualisering (minimal) ===
-class ScenarioResult:
-    def __init__(self, snapshot):
-        self.individuals = snapshot["individuals"]
-        self.jobs = snapshot["jobs"]
-        self.eventlog = snapshot["eventlog"]
-        # Kan lägga till metoder för pathways, entropi, grupper etc
 
-    def get_individuals(self, filter_func=None):
-        df = self.individuals
-        if filter_func:
-            df = df[df.apply(filter_func, axis=1)]
-        return df
+# === 9. Interaktiv visualisering med Bokeh (occupation space + karta) ===
 
-    def get_jobs(self):
-        return self.jobs
+def show_interactive_dashboard(result: ScenarioResult, geoworld=None, config=None):
+    from core.visualization.map_panel import plot_selected_municipalities_bokeh_panel
+    from core.visualization.occupation_space_panel import plot_occupation_space_panel
+    from bokeh.layouts import row
+    from bokeh.plotting import show, output_file
 
-    def get_eventlog(self):
-        return self.eventlog
+    # 1. Occupation space-panel (all data via ScenarioResult)
+    p_occ, indiv_source = plot_occupation_space_panel(result)
 
-# === 6. Visualisering: enkel occupation space + karta ===
-def show_interactive_dashboard(result: ScenarioResult):
-    from bokeh.plotting import figure, show, output_file
-    from bokeh.models import ColumnDataSource, HoverTool
-    from bokeh.layouts import gridplot, column
+    # 2. Karta-panel – använd samma indiv_source!
+    if (geoworld is not None) and (config is not None):
+        muni_config = config.get("municipalities", [])
+        if isinstance(muni_config, list):
+            muni_codes = [str(m['municipal_code']) if isinstance(m, dict) else str(m) for m in muni_config]
+        else:
+            muni_codes = [str(muni_config)]
+        muni_gdf = geoworld.municipalities
 
-    indiv = result.get_individuals()
-    jobs = result.get_jobs()
+        # Hämta arbetsgivare (från ScenarioResult, inte world)
+        try:
+            employers_gdf = result.get_employers()
+        except AttributeError:
+            employers_gdf = result.employers if hasattr(result, "employers") else None
 
-    # Kartesiska coordinates för occupation space
-    indiv["x_occ"] = indiv["chi"] * np.cos(indiv["xi"])
-    indiv["y_occ"] = indiv["chi"] * np.sin(indiv["xi"])
-    jobs["x_occ"] = jobs["chi"] * np.cos(jobs["xi"])
-    jobs["y_occ"] = jobs["chi"] * np.sin(jobs["xi"])
+        layers = ["municipalities", "urban_areas", "business_zones", "deso_zones", "employers", "individuals"]
+        gdf_layers = {
+            "urban_areas": geoworld.urban_areas,
+            "business_zones": geoworld.business_zones,
+            "deso": geoworld.deso_zones,
+            # etc.
+        }
 
-    # Karta – dummy (anpassa med riktiga koordinater!)
-    indiv["x_map"] = indiv.get("x_map", indiv["x_occ"] + 5)
-    indiv["y_map"] = indiv.get("y_map", indiv["y_occ"] + 5)
+        p_map = plot_selected_municipalities_bokeh_panel(
+            geoworld.municipalities,
+            muni_codes,
+            result=result,
+            layers=layers,
+            gdf_layers=gdf_layers
+        )
+    else:
+        from bokeh.plotting import figure
+        p_map = figure(title="Ingen karta", width=500, height=700)
 
-    indiv_source = ColumnDataSource(indiv)
-    job_source = ColumnDataSource(jobs)
-
-    # Occupation space
-    p_occ = figure(title="Occupation space", width=400, height=400, match_aspect=True, tools="lasso_select,box_select,reset,pan,wheel_zoom")
-    p_occ.circle('x_occ', 'y_occ', source=indiv_source, color="red", alpha=0.6, size=8, legend_label="Individer", selection_color="orange")
-    p_occ.circle('x_occ', 'y_occ', source=job_source, color="blue", alpha=0.3, size=5, legend_label="Jobb", selection_color="green")
-
-    # Karta
-    p_map = figure(title="Karta", width=400, height=400, match_aspect=True, tools="lasso_select,box_select,reset,pan,wheel_zoom")
-    p_map.circle('x_map', 'y_map', source=indiv_source, color="red", alpha=0.6, size=8, selection_color="orange")
-
-    layout = column(gridplot([[p_occ, p_map]]))
-    output_file("first_slice_dashboard.html")
+    layout = row(p_occ, p_map)
+    output_file("html/dashboard_linked.html")
     show(layout)
 
-# === 7. CLI/main – kör pipelinen för ett scenario ===
+
+# === 10. Main pipeline ===
 def main():
-    # Sätt paths
     scenario_path = "scenarios/falun_baseline.yml"
     db_path = "data/worm.sqlite3"
 
     # 1. Ladda scenario
     scenario = load_scenario(scenario_path)
 
-    # 2. Bygg world
-    world = build_world_from_scenario(scenario, db_path)
+    # 2. Bygg world från scenario
+    world, geoworld = build_world_from_scenario(scenario, db_path)
 
-    # 3. Kör simulering
-    world = run_simulation(world)
+    # 3. Logga statistik före matching
+    log_pre_matching(world, scenario_path)
 
-    # 4. Hämta snapshot/resultat
+    # 4. Kör matchning och uppdatering
+    matchings = run_batch_matching(world, scenario)
+
+    # 5. Beräkna och spara statistik
+    compute_and_save_stats(world, scenario, matchings)
+
+    # 6. Kör event-driven simulering
+    run_event_simulation(world)
+
+    # 7. Extrahera snapshot/resultat för analys/viz
     snapshot = get_snapshot(world)
     result = ScenarioResult(snapshot)
 
-    # 5. Visa dashboard
-    show_interactive_dashboard(result)
+    # 8. Visa interaktiv dashboard (Bokeh)
+    show_interactive_dashboard(result, geoworld, scenario)
 
 if __name__ == "__main__":
     main()

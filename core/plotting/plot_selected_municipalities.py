@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 
-from core.statistics.log import log
+from core.log import log
 
 def plot_selected_municipalities(
     geoworld,

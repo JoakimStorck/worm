@@ -11,9 +11,9 @@ from core.geography.geoworld import GeoWorld
 from core.plotting.plot_selected_municipalities import plot_selected_municipalities
 from core.matching import greedy_deso_matching, interleaved_multilevel_batch_matching
 
-from core.statistics.log import log
+from core.log import log
 from core.events import Event, EventQueue
-from core.statistics.log import EventLogger
+from core.log import EventLogger
 
 DAYS_PER_YEAR = 365.25  # Average days per year, accounting for leap years
 MONTH_LENGTHS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
@@ -24,7 +24,7 @@ def is_leap_year(year):
 
 
 class World:
-    def __init__(self, db_path, config, geoworld=None, scope=None, individuals=None, jobs=None, employers=None, events=None):
+    def __init__(self, db_path, config, outdir, geoworld=None, scope=None, individuals=None, jobs=None, employers=None, events=None):
         """
         World collects all core data and manages the simulation for a region or scenario.
         If DataFrames (individuals, jobs, employers) are provided, they are used directly
@@ -71,9 +71,9 @@ class World:
         # Logging configuration
         self.log_to_console = self.config.get('simulation', {}).get('log_to_console', False)
         self.log_to_file = self.config.get('simulation', {}).get('log_to_file', True)
-        self.logfile_path = self.config.get('simulation', {}).get('logfile_path', 'output/worm_simulation.log')
 
-        self.event_logger = EventLogger(filepath=self.logfile_path if self.log_to_file else None)
+        self.eventlog_path = os.path.join(outdir, "eventlog.csv")
+        self.event_logger = EventLogger(filepath=self.eventlog_path if self.log_to_file else None)
 
     def draw_employment_duration(self, avg_employment_duration, employment_duration_std, size=None):
         mean = avg_employment_duration
@@ -159,15 +159,6 @@ class World:
             }
         )
 
-        # Sätt gärna en egen katalog/loggningsnamn om du vill samla olika loggar
-        outdir = "output"
-        os.makedirs(outdir, exist_ok=True)
-
-        # Logga hela individ-tabellen med relevant status
-        self.individuals.to_csv(os.path.join(outdir, "initial_state_individuals.csv"), index=True)
-
-        # Logga hela jobb-tabellen på samma sätt (om du vill)
-        self.jobs.to_csv(os.path.join(outdir, "initial_state_jobs.csv"), index=False)
 
     def analyze(self):
         """

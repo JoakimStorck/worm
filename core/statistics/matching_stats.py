@@ -5,7 +5,7 @@ import json
 import pandas as pd
 from datetime import datetime
 
-from core.statistics.log import log
+from core.log import log
 
 
 def compute_matching_statistics(matchings_df, print_stats=True):

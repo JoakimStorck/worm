@@ -82,35 +82,7 @@ Se [TODO.md](TODO.md) för detaljer kring minnesoptimering, batchning, replay-pr
 * `docs/` – dokumentation, exempelfiler
 * `TODO.md` – aktuell arbetslista, roadmap och arbetsflöde
 
-`├───core
-│   ├───analysis
-│   │   └───__pycache__
-│   ├───database
-│   │   └───__pycache__
-│   ├───geography
-│   │   └───__pycache__
-│   ├───occupations
-│   │   └───__pycache__
-│   ├───pipeline
-│   │   └───__pycache__
-│   ├───plotting
-│   │   └───__pycache__
-│   ├───statistics
-│   │   └───__pycache__
-│   ├───visualization
-│   │   └───__pycache__
-│   └───__pycache__
-├───data
-├───html
-├───onet_data
-├───output
-├───pipeline
-├───scenarios
-├───scripts
-├───todos-history
-└───worm
-    └───plotting
-`
+---
 
 ## 🚀 Kom igång
 

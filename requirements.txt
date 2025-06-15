@@ -1,0 +1,7 @@
+bokeh
+pandas
+numpy
+geopandas
+shapely
+pyyaml
+scikit-learn

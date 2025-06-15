@@ -1,7 +1,7 @@
 # database/utils.py
 
 import pandas as pd
-from core.statistics.log import log 
+from core.log import log 
 
 def fetch_with_fallback(conn, table, filters, year_col='year', desired_year=None, columns='*'):
     """

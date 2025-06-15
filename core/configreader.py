@@ -16,6 +16,8 @@ class ConfigReader:
         self.config = config
         self.conn = conn
 
+        self.municipalities = config.get("municipalities", [])
+
     def _to_list(self, item):
         # Hjälpmetod: alltid lista
         return item if isinstance(item, (list, tuple)) else [item]

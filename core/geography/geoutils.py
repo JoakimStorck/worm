@@ -3,7 +3,7 @@ import numpy as np
 import geopandas as gpd
 from shapely.geometry import Point
 
-from core.statistics.log import log 
+from core.log import log 
 
 def assign_deso_code(df, deso_gdf, x_col="x", y_col="y"):
     points = gpd.GeoSeries([Point(x, y) for x, y in zip(df[x_col], df[y_col])], crs=deso_gdf.crs)

@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from core.occupations.utils import optimal_assignment
 
-from core.statistics.log import log
+from core.log import log
 
 def batched_communewise_assignment(
     individuals_df, jobs_df,

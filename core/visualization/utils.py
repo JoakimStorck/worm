@@ -27,3 +27,4 @@ def gdf_points_to_xy(df, id_col="individual_id"):
     if id_col in df.columns:
         df[id_col] = df[id_col].astype(str)
     return df
+

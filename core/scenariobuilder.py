@@ -7,7 +7,7 @@ import time
 from shapely import wkt
 
 from core.geography.geoutils import assign_deso_code, random_points_in_polygon
-from core.statistics.log import log
+from core.log import log
 
 class ScenarioBuilder:
     DEFAULT_WEIGHT_FIELDS = {
