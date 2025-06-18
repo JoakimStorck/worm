@@ -12,8 +12,11 @@ from core.configreader import ConfigReader
 
 from core.scenario_result import ScenarioResult
 from core.replay_controller import ReplayController
+
 from core.visualization.occupation_space_panel import OccupationSpacePanel
 from core.visualization.map_panel import MapPanel
+from core.visualization.statistics_panel import StatisticsPanel
+
 from core.geography.geoworld import GeoWorld
 from core.scenario_runner import run_and_log_scenario
 from core.ui_state import UIState
@@ -46,6 +49,27 @@ scenario_files = glob.glob("scenarios/*.yml") + glob.glob("scenarios/*.yaml")
 scenario_options = [os.path.basename(f) for f in scenario_files]
 scenario_select = Select(title="Välj scenario/config-fil att köra:", value=None, options=scenario_options)
 run_button = Button(label="Kör simulering", button_type="success")
+
+
+# --- 3.5. Panel registry – bygg ut när du har fler paneler ---
+PANEL_CLASSES = [
+    OccupationSpacePanel,
+    MapPanel,
+    StatisticsPanel,  # Lägg till fler här efterhand
+]
+
+# Helper för att skapa paneler
+def build_dashboard_panels(replay, ui_state, **kwargs):
+    panels = []
+    for PanelClass in PANEL_CLASSES:
+        panel_kwargs = {k: v for k, v in kwargs.items() if hasattr(PanelClass, 'KWARGS') and k in PanelClass.KWARGS}
+        try:
+            panel = PanelClass(replay, ui_state=ui_state, **panel_kwargs)
+            panels.append(panel.layout)
+        except Exception as e:
+            print(f"Fel vid skapande av panel {PanelClass.__name__}: {e}")
+    return panels
+
 
 # --- 4. Funktion för registry-laddning ---
 def load_registry():
@@ -136,36 +160,36 @@ def on_run_selected(attr, old, new):
     result = ScenarioResult.from_run(run_path)
     replay = ReplayController(result)
 
-    # Läs in config och plocka ut valda kommuner via ConfigReader
     metadata_path = os.path.join(run_path, "metadata.txt")
     if os.path.exists(metadata_path):
         config = load_config_from_metadata(metadata_path)
         cfg = ConfigReader(config)
         selected_codes = cfg.municipalities
-        # ...vidare kod...
     else:
-        # Hantera fallback, t.ex. sök .yml-fil som tidigare
         print(f"on_run_selected: Filen {metadata_path} existerar ej")
+        selected_codes = []
 
     selected_codes = [str(code) for code in selected_codes]
-
     muni_gdf_selected = geoworld.municipalities[
         geoworld.municipalities["municipal_code"].isin(selected_codes)
     ]
 
     ui_state = UIState()
 
-    occ_panel = OccupationSpacePanel(replay, ui_state=ui_state)
-    map_panel = MapPanel(
+    # Bygg alla paneler via registry!
+    panels = build_dashboard_panels(
         replay,
+        ui_state=ui_state,
         muni_gdf=muni_gdf_selected,
         selected_codes_or_names=selected_codes,
         layers=layers,
-        gdf_layers=gdf_layers,
-        ui_state=ui_state
+        gdf_layers=gdf_layers
     )
-    new_panel_row = row(occ_panel.layout, map_panel.layout)
+
+    # Visa alla paneler i rad
+    new_panel_row = row(*panels)
     dashboard_layout.children[3:] = [new_panel_row]
+
 
 
 select.on_change('value', on_run_selected)

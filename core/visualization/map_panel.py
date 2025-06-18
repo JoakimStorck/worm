@@ -13,6 +13,7 @@ from core.visualization.utils import gdf_to_bokeh_patches, gdf_points_to_xy
 from core.ui_state import UIState
 
 class MapPanel:
+    KWARGS = ['replay_controller', 'muni_gdf', 'selected_codes_or_names', 'layers', 'gdf_layers', 'width', 'height', 'tools', 'ui_state']
     def __init__(
         self,
         replay_controller,

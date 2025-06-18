@@ -9,6 +9,7 @@ from core.visualization.utils import add_occ_coordinates
 
 
 class OccupationSpacePanel:
+    KWARGS = ['replay_controller', 'show_jobs', 'show_pathways', 'show_H_circle', 'width', 'height', 'tools', 'ui_state']
     def __init__(
         self,
         replay_controller,
