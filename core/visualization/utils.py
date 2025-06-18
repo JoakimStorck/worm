@@ -1,3 +1,8 @@
+# core/visualization/utils.py
+
+import numpy as np
+
+
 def gdf_to_bokeh_patches(gdf):
     # Konvertera polygonkolumn till format xs, ys för Bokeh.patches
     def get_xy(geom):
@@ -28,3 +33,9 @@ def gdf_points_to_xy(df, id_col="individual_id"):
         df[id_col] = df[id_col].astype(str)
     return df
 
+def add_occ_coordinates(df):
+    df = df.copy()
+    if "x_occ" not in df or "y_occ" not in df:
+        df["x_occ"] = df["chi"] * np.cos(df["xi"])
+        df["y_occ"] = df["chi"] * np.sin(df["xi"])
+    return df

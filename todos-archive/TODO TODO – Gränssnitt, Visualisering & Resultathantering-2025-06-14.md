@@ -23,25 +23,25 @@ Här följer en **uppdaterad TODO** som binder ihop *allt* vi har diskuterat:
 
 * [x] ScenarioResult-API: Gemensamt API för åtkomst av individ-, jobb- och arbetsgivardata.
 * [x] Simuleringspipeline: Flöde från scenario/config → world-byggnad → simulering → snapshot/Result.
-* [ ] Dashboard-ramverk: Samla alla paneler (occupation space, karta, filter, statistik, diagram) i en gemensam vy, där allt bygger på samma datamodell och selection state.
+* [x] Dashboard-ramverk: Samla alla paneler (occupation space, karta, filter, statistik, diagram) i en gemensam vy, där allt bygger på samma datamodell och selection state.
 
 ---
 
 ## 2. Organisation och hantering av simuleringsresultat (runs)
 
-* [ ] Standardiserad katalogstruktur för runs:
+* [x] Standardiserad katalogstruktur för runs:
   Varje simulering sparas i egen katalog med alla utdatafiler (`individuals.csv`, `jobs.csv`, `employers.csv`, `eventlog.csv`, `meta.yaml`).
-* [ ] Metadatafil för varje run:
+* [x] Metadatafil för varje run:
   Alla runs har en meta-fil med scenario, parametrar, timestamp, beskrivning.
-* [ ] Central index/register:
+* [x] Central index/register:
   Indexfil (t.ex. `results/index.csv`) med info om alla runs för urval i gränssnittet.
-* [ ] Automatisk uppdatering av index vid varje ny körning.
+* [x] Automatisk uppdatering av index vid varje ny körning.
 
 ---
 
 ## 3. Replay och statehantering
 
-* [ ] Replay-mekanism:
+* [x] Replay-mekanism:
   Eventloggen används för att återskapa hela simuleringen – antingen till slutläge eller valfri tidpunkt/steg. All analys och visualisering ska utgå från återspelat tillstånd.
 * [ ] UI-komponent för replay:
   Tidslinje/slider + knappar (\[<<], \[<], \[Play/Pause], \[>], \[>>]), snabbhopp till event/steg, och visning av aktuell status.
@@ -57,13 +57,13 @@ Här följer en **uppdaterad TODO** som binder ihop *allt* vi har diskuterat:
 
 ## 4. Gränssnittspanel för urval av simulering/resultat
 
-* [ ] Panel för val av indata/config:
+* [x] Panel för val av indata/config:
   Användare kan ladda/skriva in scenariofil och starta ny simulering.
-* [ ] Panel för urval av tidigare runs:
+* [x] Panel för urval av tidigare runs:
   Lista/dropdown över tillgängliga runs, med namn, scenario, tidpunkt, beskrivning.
-* [ ] Laddning av run till dashboard:
+* [x] Laddning av run till dashboard:
   Vid val av run laddas data + eventlogg, replayas och alla paneler uppdateras.
-* [ ] All analys, visualisering, filtrering och export bygger alltid på *faktiskt state* efter replay – inte bara initialdata.
+* [x] All analys, visualisering, filtrering och export bygger alltid på *faktiskt state* efter replay – inte bara initialdata.
 
 ---
 

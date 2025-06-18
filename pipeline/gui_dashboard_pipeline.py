@@ -16,6 +16,7 @@ from core.visualization.occupation_space_panel import OccupationSpacePanel
 from core.visualization.map_panel import MapPanel
 from core.geography.geoworld import GeoWorld
 from core.scenario_runner import run_and_log_scenario
+from core.ui_state import UIState
 
 from bokeh.layouts import row, column
 from bokeh.io import curdoc
@@ -35,6 +36,8 @@ db_path = "data/worm.sqlite3"
 geoworld = GeoWorld(db_path)
 muni_gdf = geoworld.municipalities
 selected_codes_or_names = muni_gdf["municipal_code"].unique().tolist()
+selected_codes_or_names = [str(code) for code in selected_codes_or_names]
+
 gdf_layers = {}
 layers = ["municipalities"]
 
@@ -144,18 +147,22 @@ def on_run_selected(attr, old, new):
         # Hantera fallback, t.ex. sök .yml-fil som tidigare
         print(f"on_run_selected: Filen {metadata_path} existerar ej")
 
+    selected_codes = [str(code) for code in selected_codes]
 
     muni_gdf_selected = geoworld.municipalities[
         geoworld.municipalities["municipal_code"].isin(selected_codes)
     ]
 
-    occ_panel = OccupationSpacePanel(replay)
+    ui_state = UIState()
+
+    occ_panel = OccupationSpacePanel(replay, ui_state=ui_state)
     map_panel = MapPanel(
         replay,
         muni_gdf=muni_gdf_selected,
         selected_codes_or_names=selected_codes,
         layers=layers,
-        gdf_layers=gdf_layers
+        gdf_layers=gdf_layers,
+        ui_state=ui_state
     )
     new_panel_row = row(occ_panel.layout, map_panel.layout)
     dashboard_layout.children[3:] = [new_panel_row]

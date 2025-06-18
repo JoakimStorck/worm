@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import geopandas as gpd
 from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource, HoverTool, CheckboxGroup, CustomJS
 from bokeh.models import Button
@@ -9,7 +10,7 @@ from bokeh.io import curdoc
 
 from bokeh.layouts import row, column
 from core.visualization.utils import gdf_to_bokeh_patches, gdf_points_to_xy
-import geopandas as gpd
+from core.ui_state import UIState
 
 class MapPanel:
     def __init__(
@@ -21,7 +22,8 @@ class MapPanel:
         gdf_layers=None,
         width=600,
         height=700,
-        tools="lasso_select,box_select,box_zoom,reset,pan,wheel_zoom"
+        tools="lasso_select,box_select,box_zoom,reset,pan,wheel_zoom",
+        ui_state=None
     ):
         self.replay = replay_controller
         self.muni_gdf = muni_gdf
@@ -31,6 +33,7 @@ class MapPanel:
         self.width = width
         self.height = height
         self.tools = tools
+        self.ui_state = ui_state
 
         # Kontroll
         print(muni_gdf.crs)
@@ -42,7 +45,9 @@ class MapPanel:
         # Initiera
         self._build_panel()
 
-        self.show_hover_checkbox.on_change("active", self.on_hover_checkbox_change)
+        if self.ui_state:
+            self.ui_state.subscribe(self.set_hover_visibility)
+        self.show_hover_checkbox.on_change("active", self.on_checkbox_change)
 
         # Koppla till replay
         self.replay.subscribe(self.update)
@@ -59,6 +64,12 @@ class MapPanel:
             "employers": "#1f77b4",
             "individuals": "#000000",
         }
+
+
+        print("Valda kommuner (selected_codes_or_names):", self.selected_codes_or_names)
+        print("Typ på varje:", [type(x) for x in self.selected_codes_or_names])
+        print("Antal rader i muni_gdf:", len(self.muni_gdf))
+        print("Kommunkoder i muni_gdf:", self.muni_gdf["municipal_code"].unique())
 
         # Skapa lista av bara strängar (kommunnamn)
         selected_names = [v.lower() for v in self.selected_codes_or_names if isinstance(v, str)]
@@ -78,6 +89,7 @@ class MapPanel:
             margin_y = (bounds[3] - bounds[1]) * 0.05
 
         # Exempel: bounds = [minx, miny, maxx, maxy]
+
         self.figure = figure(
             title="Karta: valda lager",
             width=self.width,
@@ -207,27 +219,33 @@ class MapPanel:
                 self.emp_renderer.data_source.data = emp_df.to_dict("list")
 
         # INDIVIDUALS
-        individuals = state["individuals"]
-        if not individuals.empty:
-            indiv_df = gdf_points_to_xy(individuals, id_col="individual_id")
-            self.indiv_source = ColumnDataSource(indiv_df)
-            if not self.indiv_renderer:
-                self.indiv_renderer = self.figure.scatter(
-                    'x', 'y', source=self.indiv_source, size=5,
-                    color="#000000", alpha=0.4, legend_label="Individuals",
-                    selection_color="orange"
-                )
-            else:
-                self.indiv_renderer.data_source.data = indiv_df.to_dict("list")
+        if self.indiv_source is None:
+            self.indiv_source = self.replay.get_indiv_source()
+            self.indiv_renderer = self.figure.scatter(
+                'x', 'y', source=self.indiv_source, size=5,
+                color="#000000", alpha=0.4, legend_label="Individuals",
+                selection_color="orange"
+            )
+        else:
+            # Uppdatera bara datan i den redan delade källan
+            self.indiv_source.data = self.replay.get_indiv_source().data
+
 
     def update(self):
         self.update_points()
         self.zoom_to_selected()
 
-    def on_hover_checkbox_change(self, attr, old, new):
-        if 0 in self.show_hover_checkbox.active:
-            if self.hover not in self.figure.tools:
+
+    def on_checkbox_change(self, attr, old, new):
+        if self.ui_state:
+            self.ui_state.set_show_hover(0 in new)
+
+    def set_hover_visibility(self, visible: bool):
+        if visible:
+            if self.hover and self.hover not in self.figure.tools:
                 self.figure.add_tools(self.hover)
         else:
-            if self.hover in self.figure.tools:
+            if self.hover and self.hover in self.figure.tools:
                 self.figure.tools.remove(self.hover)
+
+

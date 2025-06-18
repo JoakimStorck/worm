@@ -8,7 +8,7 @@ import time
 import numpy as np
 import pandas as pd
 from core.geography.geoworld import GeoWorld
-from core.plotting.plot_selected_municipalities import plot_selected_municipalities
+#from core.plotting.plot_selected_municipalities import plot_selected_municipalities
 from core.matching import greedy_deso_matching, interleaved_multilevel_batch_matching
 
 from core.log import log
@@ -179,25 +179,25 @@ class World:
         }
         return stats
 
-    def plot(
-        self,
-        layers=("municipalities",),
-        municipal_codes_or_names=None,
-        **kwargs  # fångar employers_gdf=..., individuals_gdf=..., etc
-    ):
-        """
-        Wrapper that plots selected layers.
-        Also supports point layers, e.g. employers_gdf, individuals_gdf.
+    # def plot(
+    #     self,
+    #     layers=("municipalities",),
+    #     municipal_codes_or_names=None,
+    #     **kwargs  # fångar employers_gdf=..., individuals_gdf=..., etc
+    # ):
+    #     """
+    #     Wrapper that plots selected layers.
+    #     Also supports point layers, e.g. employers_gdf, individuals_gdf.
 
-        Example:
-        world.plot(layers=("municipalities", "urban_areas"), individuals_gdf=world.individuals)
-        """
-        plot_selected_municipalities(
-            self.geoworld,
-            layers=layers,
-            municipal_codes_or_names=municipal_codes_or_names,
-            **kwargs
-        )
+    #     Example:
+    #     world.plot(layers=("municipalities", "urban_areas"), individuals_gdf=world.individuals)
+    #     """
+    #     plot_selected_municipalities(
+    #         self.geoworld,
+    #         layers=layers,
+    #         municipal_codes_or_names=municipal_codes_or_names,
+    #         **kwargs
+    #     )
 
     def simulate(self):
         self.wallclock_start = time.time()
