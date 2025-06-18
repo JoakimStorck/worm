@@ -3,9 +3,9 @@
 from bokeh.models import Div
 
 class StatisticsPanel:
-    KWARGS = ['ui_state']
-    def __init__(self, replay, ui_state=None, **kwargs):
-        self.replay = replay
+    KWARGS = ['replay_controller', 'ui_state']
+    def __init__(self, replay_controller, ui_state=None, **kwargs):
+        self.replay = replay_controller
         self.ui_state = ui_state
 
         # Skapa Div för statistik

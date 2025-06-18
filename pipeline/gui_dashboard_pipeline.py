@@ -13,9 +13,7 @@ from core.configreader import ConfigReader
 from core.scenario_result import ScenarioResult
 from core.replay_controller import ReplayController
 
-from core.visualization.occupation_space_panel import OccupationSpacePanel
-from core.visualization.map_panel import MapPanel
-from core.visualization.statistics_panel import StatisticsPanel
+from core.panel_manager import PANEL_REGISTRY, PanelManager
 
 from core.geography.geoworld import GeoWorld
 from core.scenario_runner import run_and_log_scenario
@@ -52,11 +50,8 @@ run_button = Button(label="Kör simulering", button_type="success")
 
 
 # --- 3.5. Panel registry – bygg ut när du har fler paneler ---
-PANEL_CLASSES = [
-    OccupationSpacePanel,
-    MapPanel,
-    StatisticsPanel,  # Lägg till fler här efterhand
-]
+from core.panel_manager import PanelManager
+
 
 # Helper för att skapa paneler
 def build_dashboard_panels(replay, ui_state, **kwargs):
@@ -177,18 +172,20 @@ def on_run_selected(attr, old, new):
     ui_state = UIState()
 
     # Bygg alla paneler via registry!
-    panels = build_dashboard_panels(
+    panel_manager = PanelManager(
         replay,
-        ui_state=ui_state,
-        muni_gdf=muni_gdf_selected,
-        selected_codes_or_names=selected_codes,
-        layers=layers,
-        gdf_layers=gdf_layers
+        ui_state,
+        PANEL_REGISTRY,  # {"Occupation Space": OccupationSpacePanel, "Karta": MapPanel, ...}
+        panel_kwargs={
+            "muni_gdf": muni_gdf_selected,
+            "selected_codes_or_names": selected_codes,
+            "layers": layers,
+            "gdf_layers": gdf_layers
+        },
+        n_panels=2  # eller fler!
     )
 
-    # Visa alla paneler i rad
-    new_panel_row = row(*panels)
-    dashboard_layout.children[3:] = [new_panel_row]
+    dashboard_layout.children[3:] = [panel_manager.layout]
 
 
 
