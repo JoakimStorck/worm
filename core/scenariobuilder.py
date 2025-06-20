@@ -17,16 +17,15 @@ class ScenarioBuilder:
         "urban_areas": ["num_workplaces", "num_employed", "population", "area_ha"],
     }
 
-    def __init__(self, config, conn, configreader, geoworld=None): 
+    def __init__(self, conn, cfg_reader, geoworld=None): 
         """
         config: YAML-dict (laddad)
         conn: sqlite3 connection
-        configreader: instans av ConfigReader
+        cfg_reader: instans av ConfigReader
         """
-        self.config = config
         self.conn = conn
-        self.cfg = configreader  # Kortnamn för enkel access
-        self.seed = self.config.get("seed", None)
+        self.cfg_reader = cfg_reader  # Kortnamn för enkel access
+        self.seed = self.cfg_reader.config.get("seed", None)
         self.rng = np.random.default_rng(self.seed)
         self._sni_cache = {}
         self.geoworld = geoworld
@@ -297,7 +296,7 @@ class ScenarioBuilder:
         df["individual_id"] = [f"{municipal_code}_i{ix:06d}" for ix in range(len(df))]
         rng = self.rng
 
-        indiv_defaults = self.config.get('defaults', {}).get('individuals', {})
+        indiv_defaults = self.cfg_reader.config.get('defaults', {}).get('individuals', {})
         prop_cfg = indiv_defaults.get('propensities', {})
 
         # För varje propensity:
@@ -324,25 +323,25 @@ class ScenarioBuilder:
     def generate(self, year=None):
         t0 = time.time()
         log(f"[TIMER] generate: startat")
-        municipalities = self.config.get("municipalities", [])
+        municipalities = self.cfg_reader.config.get("municipalities", [])
         if not municipalities:
             raise ValueError("Inga kommuner angivna i scenariot.")
         if year is None:
-            year = self.config.get("start_year", 2024)
+            year = self.cfg_reader.config.get("start_year", 2024)
 
         all_individuals = []
         all_jobs = []
         all_employers = []
         all_events = []
 
-        unemployment_rate = self.config.get("unemployment_rate", 0.0)
+        unemployment_rate = self.cfg_reader.config.get("unemployment_rate", 0.0)
 
         for municipal_code in municipalities:
             t1 = time.time()
             log(f"\n--- Kommun {municipal_code} ---")
-            population = self.cfg.get_population(municipal_code)[0]
-            workforce_ratio = self.cfg.get_workforce_ratio(municipal_code)[0]
-            local_unemployment_rate = self.cfg.get_unemployment_rate(municipal_code, year)[0]
+            population = self.cfg_reader.get_population(municipal_code)[0]
+            workforce_ratio = self.cfg_reader.get_workforce_ratio(municipal_code)[0]
+            local_unemployment_rate = self.cfg_reader.get_unemployment_rate(municipal_code, year)[0]
 
             # Individer
             t_ind0 = time.time()
@@ -361,7 +360,7 @@ class ScenarioBuilder:
             n_unemployed = int(round(workforce * local_unemployment_rate))
             target_jobs = workforce - n_unemployed
 
-            employer_dist_cfg = self.cfg.get_employer_distribution(municipal_code)
+            employer_dist_cfg = self.cfg_reader.get_employer_distribution(municipal_code)
             employers = self.generate_employers_with_target_jobs(
                 year,
                 municipal_code,

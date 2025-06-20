@@ -7,7 +7,7 @@ import json
 import datetime
 
 import numpy as np
-
+import pandas as pd
 
 _log_lines = []
 
@@ -84,37 +84,42 @@ class EventLogger:
         self.csv_writer = None
         self.columns = None
 
-    def log_individual_event(self, world, event, extra=None, print_line=False):
-        idx = event.agent_id
-        ind = world.individuals.loc[idx]
-        logdict = build_standard_logdict(
-            event=event,
-            agent_type="individual",
-            agent=ind,
-            agent_id=ind.get("individual_id", idx),
-            extra=extra
-        )
-        self._write_log(logdict, print_line)
+    def log_event(self, world, event, agent_type=None, extra=None, print_line=False):
+        """
+        Loggar ett event oavsett agenttyp (individual, employer, system).
+        Identifierar agent utifrån agent_type och event.agent_id.
+        """
+        # Agent lookup
+        agent = None
+        agent_id = None
 
-    def log_employer_event(self, world, event, extra=None, print_line=False):
-        idx = event.agent_id
-        emp = world.employers.loc[idx]
-        logdict = build_standard_logdict(
-            event=event,
-            agent_type="employer",
-            agent=emp,
-            agent_id=emp.get("employer_id", idx),
-            extra=extra
-        )
-        self._write_log(logdict, print_line)
+        if agent_type is None:
+            # Försök avgöra agenttyp automatiskt
+            if event.agent_id is None:
+                agent_type = "system"
+            elif event.agent_id in getattr(world, "individuals", pd.DataFrame()).index:
+                agent_type = "individual"
+            elif event.agent_id in getattr(world, "employers", pd.DataFrame()).index:
+                agent_type = "employer"
+            else:
+                agent_type = "unknown"
 
-    def log_generic_event(self, event, data=None, print_line=False):
+        if agent_type == "individual":
+            agent = world.individuals.loc[event.agent_id] if event.agent_id in world.individuals.index else None
+            agent_id = agent.get("individual_id", event.agent_id) if agent is not None else event.agent_id
+        elif agent_type == "employer":
+            agent = world.employers.loc[event.agent_id] if event.agent_id in world.employers.index else None
+            agent_id = agent.get("employer_id", event.agent_id) if agent is not None else event.agent_id
+        else:
+            agent = None
+            agent_id = event.agent_id
+
         logdict = build_standard_logdict(
             event=event,
-            agent_type="system",
-            agent=None,
-            agent_id=None,
-            extra=data
+            agent_type=agent_type,
+            agent=agent,
+            agent_id=agent_id,
+            extra=extra
         )
         self._write_log(logdict, print_line)
 

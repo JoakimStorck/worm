@@ -1,0 +1,163 @@
+# === EXAMPLE SCENARIO: Mora Municipality (Agentbaserad struktur) ===
+
+scenario_name: "Mora baseline"
+description: >
+  Baseline scenario for Mora.
+  Testing transition from Falun baseline and working on standardized logging/statistics.
+start_year: 2024
+n_years: 1
+seed: 12345
+
+municipalities:
+  - 2062   # Mora
+
+# === GLOBAL DEFAULTS FOR ALL MUNICIPALITIES ===
+defaults:
+  # Befolkning och grundläggande fördelningar
+  population: auto                # Laddas från databas om möjligt
+  workforce_ratio: 0.52
+  unemployment_rate: 0.07
+  education_levels:
+    low: 0.25
+    medium: 0.60
+    high: 0.15
+  sex_ratio: 0.51
+  occupation_distribution: "realistic"
+  employer_distribution:
+    n_employers: auto
+    employer_ratio_per_population: 0.09
+    allocation_order:
+      - business_zones
+      - commercial_zones
+      - small_localities
+      - urban_areas
+    layer_configs:
+      business_zones:
+        weight_field: num_workplaces
+      commercial_zones:
+        weight_field: num_workplaces
+      small_localities:
+        weight_field: num_workplaces
+      urban_areas:
+        weight_field: population
+    employer_size_distribution:
+      micro:
+        max_size: 9
+        ratio: 0.85
+      small:
+        min_size: 10
+        max_size: 49
+        ratio: 0.12
+      medium_large:
+        min_size: 50
+        max_size: 250
+        ratio: 0.025
+      very_large:
+        min_size: 251
+        max_size: 1000
+        ratio: 0.005
+
+  # === AGENT-PARAMETRAR: INDIVIDUALS ===
+  individuals:
+    propensities:             # Sannolikheter (medelvärden och std) – används för individuell sampling
+      start_education:
+        mean: 0.12
+        std: 0.05
+      internal_training:
+        mean: 0.35
+        std: 0.12
+      quit_job:
+        mean: 0.14
+        std: 0.07
+      career_break:
+        mean: 0.06
+        std: 0.03
+      internal_job_change:
+        mean: 0.10
+        std: 0.04
+    initial_H:                # Initial kompetensbredd
+      min: 0.08
+      max: 0.25
+    # Här kan du fylla på med fler default-attribut för individer!
+
+  # === AGENT-PARAMETRAR: EMPLOYER ===
+  employer:
+    training_prob_by_size:
+      small: 0.05
+      medium: 0.15
+      large: 0.40
+    # Här kan du lägga in fler employer-parametrar
+
+# === MUNICIPALITY-SPECIFIC OVERRIDES ===
+municipality_overrides:
+  2062: # Mora
+    education_levels:
+      low: {curve: linear, start: 0.23, end: 0.18, start_year: 2024, end_year: 2030}
+      medium: 0.63
+      high: {by_year: {2024: 0.14, 2027: 0.18, 2030: 0.19}}
+    workforce_ratio: 0.56
+    unemployment_rate: 0.065
+
+# === POLICY RULES ===
+hiring_policy: "random"
+wage_policy: "market_adjust"
+
+# === SIMULATION PARAMETERS (processregler) ===
+simulation:
+  log_to_console: true
+  log_to_file: true
+  logfile_path: "output/mora_baseline.log"
+  alpha_chi: 5.0
+  alpha_xi: 5.0
+  alpha_geo: 1.0
+
+  # Samla ALLA event-tider på samma ställe – alla tider med enhet!
+  event_timings:
+    start_job_search:
+      dist: exponential
+      mean: 4w      # 4 veckor
+    start_education:
+      dist: uniform
+      min: 5d       # 5 dagar
+      max: 40d      # 40 dagar
+    quit_job:
+      dist: normal
+      mean: 4y      # 4 år
+      std: 2y       # 2 år
+    career_break:
+      dist: uniform
+      min: 2w
+      max: 12w
+    start_internal_training:
+      dist: uniform
+      min: 14d      # 2 veckor
+      max: 60d      # 8 veckor + 4 dagar
+    internal_job_change:
+      dist: exponential
+      mean: 26w     # 6 månader
+
+  # Eventuella effekter av events – ALLTID på events
+  event_effects:
+    start_education:
+      broad:
+        delta_chi: 0.8
+        delta_H: 0.3
+        delta_xi: 10
+        duration: 0.7y   # 0.7 år
+      specialist:
+        delta_chi: 1.5
+        delta_H: 0.1
+        delta_xi: 3
+        duration: 1.2y   # 1.2 år
+    internal_training:
+      delta_chi: 0.05
+      delta_H: 0.2
+      delta_xi: 0
+      duration: 0.15y    # 0.15 år
+    career_break:
+      delta_chi: -0.05
+      delta_H: -0.02
+      delta_xi: 0
+      duration: 0.5y     # 0.5 år
+
+# --- Slut på scenariofil ---

@@ -13,6 +13,8 @@ from core.scenariobuilder import ScenarioBuilder
 from core.world import World
 from core.statistics.matching_stats import compute_matching_statistics, compute_commuting_statistics 
 import core.log as log   # log, save_run_output
+from core.statistics.basic_stats import save_summary_stats
+from core.scenario_result import ScenarioResult
 
 REGISTRY_PATH = "output/runs_registry.csv"
 REGISTRY_HEADER = "run_id,output_path,scenario_name,timestamp\n"
@@ -46,10 +48,10 @@ def run_and_log_scenario(config_path):
 
     db_path = "data/worm.sqlite3"
     conn = sqlite3.connect(db_path)
-    cfg = ConfigReader(config, conn)
-    cfg.validate_scenario(strict=True)
+    cfg_reader = ConfigReader(config, conn)
+    cfg_reader.validate_scenario(strict=True)
     geoworld = GeoWorld(db_path)
-    builder = ScenarioBuilder(config, conn, cfg, geoworld=geoworld)
+    builder = ScenarioBuilder(conn, cfg_reader, geoworld=geoworld)
 
     scenario_name = config.get("scenario_name", os.path.splitext(os.path.basename(config_path))[0])
     outdir, run_id = create_run_output_dir(scenario_name)
@@ -67,7 +69,7 @@ def run_and_log_scenario(config_path):
     # --- 4. Skapa World ---
     world = World(
         db_path,
-        config=config,
+        cfg_reader=cfg_reader,
         outdir=outdir,
         individuals=individuals,
         jobs=jobs,
@@ -78,7 +80,6 @@ def run_and_log_scenario(config_path):
 
     # --- 5. Initial statistik/logg ---
     local_log("Scenario:", config_path)
-    local_log("Statistics BEFORE batch matching:", world.analyze())
 
     # --- 6. Initial batch-matching ---
     matchings = world.match_individuals_to_jobs(
@@ -88,7 +89,7 @@ def run_and_log_scenario(config_path):
         alpha_geo=config.get('alpha_geo', 1.0)
     )
     world.update_after_matching(matchings=matchings)
-    local_log("Statistics AFTER batch matching (t=0):", world.analyze())
+    local_log("Pre-run matching (t=0) completed.")
 
     # --- 7. Statistik för batch-match ---
     match_stats = compute_matching_statistics(world.matchings)
@@ -98,14 +99,14 @@ def run_and_log_scenario(config_path):
     world.individuals.to_csv(os.path.join(outdir, "initial_state_individuals.csv"), index=False)
     world.jobs.to_csv(os.path.join(outdir, "initial_state_jobs.csv"), index=False)
     world.employers.to_csv(os.path.join(outdir, "employers.csv"), index=False)
-    #if isinstance(world.events, pd.DataFrame):
-    #    world.events.to_csv(os.path.join(outdir, "initial_events.csv"), index=False)
     log.save_run_output(world.matchings, match_stats, commuting_stats, scenario_name, outdir=outdir)
 
     # --- 9. Eventdriven simulering ---
     local_log("Starting event-driven simulation ...")
     world.simulate()
-    local_log("Statistics AFTER simulation:", world.analyze())
+
+    result = ScenarioResult.from_run(outdir)
+    save_summary_stats(result, outdir)
 
     world.close()
 

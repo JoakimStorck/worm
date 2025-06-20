@@ -18,6 +18,40 @@ class ConfigReader:
 
         self.municipalities = config.get("municipalities", [])
 
+    @staticmethod
+    def parse_time_with_unit(val, days_per_year=365.25):
+        """
+        Convert a string like '0.083y', '12d', '3w' to number of days.
+        Accepts float/int with no unit as days.
+        """
+        if isinstance(val, (float, int)):
+            return float(val)
+        if isinstance(val, str):
+            val = val.strip().lower()
+            if val.endswith('y'):
+                return float(val[:-1]) * days_per_year
+            elif val.endswith('w'):
+                return float(val[:-1]) * 7
+            elif val.endswith('d'):
+                return float(val[:-1])
+            else:
+                raise ValueError(f"Unknown time unit in {val}, use 'd', 'w', or 'y'")
+        raise ValueError(f"Unsupported time value: {val}")
+
+    def get_event_timing(self, event_name):
+        """
+        Return timing config for a given event (e.g. 'start_job_search'), all units converted to days.
+        Returns a dict with all relevant keys converted.
+        """
+        timing = self.config.get("simulation", {}).get("event_timings", {}).get(event_name, {})
+        result = {}
+        for k, v in timing.items():
+            if k in ("mean", "min", "max", "duration", "std"):  # keys to parse as time
+                result[k] = self.parse_time_with_unit(v)
+            else:
+                result[k] = v
+        return result
+
     def _to_list(self, item):
         # Hjälpmetod: alltid lista
         return item if isinstance(item, (list, tuple)) else [item]

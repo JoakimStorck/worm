@@ -108,6 +108,6 @@ def load_snapshot(run_path):
     return {
         "individuals": individuals,
         "jobs": jobs,
-        "eventlog": eventlog,
-        "employers": employers
+        "employers": employers,
+        "eventlog": eventlog
     }
