@@ -213,8 +213,8 @@ class MapPanel:
             self.emp_source = ColumnDataSource(emp_df)
             if not self.emp_renderer:
                 self.emp_renderer = self.figure.scatter(
-                    "x", "y", source=self.emp_source, size=12,
-                    color="#1f77b4", alpha=0.8, legend_label="Employers"
+                    "x", "y", source=self.emp_source, size=6,
+                    color="#1f77b4", alpha=0.6, legend_label="Employers"
                 )
             else:
                 self.emp_renderer.data_source.data = emp_df.to_dict("list")
@@ -223,7 +223,7 @@ class MapPanel:
         if self.indiv_source is None:
             self.indiv_source = self.replay.get_indiv_source()
             self.indiv_renderer = self.figure.scatter(
-                'x', 'y', source=self.indiv_source, size=5,
+                'x', 'y', source=self.indiv_source, size=3,
                 color="#000000", alpha=0.4, legend_label="Individuals",
                 selection_color="orange"
             )

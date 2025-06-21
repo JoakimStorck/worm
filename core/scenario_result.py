@@ -7,11 +7,13 @@ from typing import Callable, Optional
 from bokeh.models import ColumnDataSource
 
 class ScenarioResult:
-    def __init__(self, snapshot):
-        self.individuals = snapshot["individuals"]
-        self.jobs = snapshot["jobs"]
-        self.eventlog = snapshot["eventlog"]
-        self.employers = snapshot.get("employers")
+    def __init__(self, individuals=None, jobs=None, employers=None, events=None, outdir=None):
+        self.individuals = individuals
+        self.jobs = jobs
+        self.employers = employers
+        self.events = events
+        self.outdir = outdir
+
         self._indiv_source = None
         self._job_source = None
 
@@ -66,23 +68,33 @@ class ScenarioResult:
         return self.employers
 
     @classmethod
-    def from_run(cls, run_path):
-        # Ladda snapshot på samma sätt
-        snapshot = load_snapshot(run_path)
-        return cls(snapshot)
+    def from_run(cls, outdir):
+        # Läs csv/json-filer och bygg dataframes
+        individuals = restore_geometry(pd.read_csv(os.path.join(outdir, "initial_state_individuals.csv")))
+        jobs = restore_geometry(pd.read_csv(os.path.join(outdir, "initial_state_jobs.csv")))
+        employers = restore_geometry(pd.read_csv(os.path.join(outdir, "employers.csv")))
+        events = pd.read_csv(os.path.join(outdir, "eventlog.csv"))
+        return cls(individuals=individuals, jobs=jobs, employers=employers, events=events, outdir=outdir)
 
 import geopandas as gpd
 from shapely import wkt
 
 def restore_geometry(df):
-    if "geometry" in df.columns and df["geometry"].dtype == object:
-        try:
-            df["geometry"] = gpd.GeoSeries.from_wkt(df["geometry"])
-        except Exception:
-            pass
+    """
+    Konverterar strängar i kolumnen 'geometry' till Shapely-objekt med from_wkt,
+    om de inte redan är det.
+    """
+    if "geometry" in df.columns:
+        # Kolla om första entry är en sträng (behövs för vissa edge case där dtype=object ändå innehåller shapely)
+        first = df["geometry"].iloc[0]
+        if isinstance(first, str):
+            try:
+                df["geometry"] = gpd.GeoSeries.from_wkt(df["geometry"])
+            except Exception as e:
+                print(f"[restore_geometry] Misslyckades: {e}")
     return df
 
-def load_snapshot(run_path):
+def load_initial_state(run_path):
     # Läs alltid de tre huvudfilerna (krävs i din pipeline)
     individuals = pd.read_csv(f"{run_path}/initial_state_individuals.csv")
     if "geometry" in individuals.columns:

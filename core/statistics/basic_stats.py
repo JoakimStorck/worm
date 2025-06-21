@@ -4,7 +4,8 @@ import os
 import yaml
 import numpy as np
 
-from core.world import World
+from core.scenario_result import ScenarioResult 
+
 
 def analyze_world(world):
     """
@@ -26,49 +27,57 @@ def analyze_world(world):
     }
     return stats
 
-def save_summary_stats(result, output_path):
-    df_ind = result.get_individuals()
-    df_job = result.get_jobs()
-    df_emp = result.get_employers()
-
-    # Grundläggande summering
-    stats = {
-        "individuals": len(df_ind),
-        "jobs": len(df_job),
-        "employers": len(df_emp) if df_emp is not None else 0,
-        # Fler nyckeltal här ...
+def hist_as_dict(data, bins=20, range=None):
+    hist, bin_edges = np.histogram(data, bins=bins, range=range)
+    return {
+        "counts": hist.tolist(),
+        "bin_edges": bin_edges.tolist()
     }
 
-    # # Exempel: åldersstatistik (om det finns)
-    # if "age" in df_ind.columns:
-    #     stats["age"] = {
-    #         "mean": float(np.mean(df_ind["age"])),
-    #         "std": float(np.std(df_ind["age"])),
-    #         "min": int(np.min(df_ind["age"])),
-    #         "max": int(np.max(df_ind["age"])),
-    #     }
+def save_basic_stats(result, outdir, tag="basic_stats"):
+    ind = result.individuals
+    jobs = result.jobs
+    employers = result.employers
 
-    # # Exempel: matchning/utility (lägg till din egen logik)
-    # if "matched_job_id" in df_ind.columns:
-    #     match_rate = np.mean(df_ind["matched_job_id"].notna())
-    #     stats["matching"] = {
-    #         "matched": int(df_ind["matched_job_id"].notna().sum()),
-    #         "unmatched": int(df_ind["matched_job_id"].isna().sum()),
-    #         "match_rate": float(match_rate),
-    #     }
+    print(f'tag={tag}')
 
-    # # Exempel: utility – här placeholder, byt mot din faktiska utility
-    # if "utility" in df_ind.columns:
-    #     stats["utility"] = {
-    #         "mean": float(np.mean(df_ind["utility"])),
-    #         "std": float(np.std(df_ind["utility"])),
-    #         "min": float(np.min(df_ind["utility"])),
-    #         "max": float(np.max(df_ind["utility"])),
-    #     }
+    stats = {
+        "tag": tag,
+        "n_individuals": len(ind),
+        "n_jobs": len(jobs),
+        "n_employers": len(employers),
+        "individual_status_counts": ind['status'].value_counts().to_dict(),
+        "job_vacancy_counts": {
+            "vacant": int(jobs['individual_id'].isna().sum()),
+            "filled": int(jobs['individual_id'].notna().sum())
+        },
+        "OCS_individuals": {
+            "chi": {
+                "mean": float(ind['chi'].mean()),
+                "std": float(ind['chi'].std()),
+                "min": float(ind['chi'].min()),
+                "max": float(ind['chi'].max()),
+                "hist": hist_as_dict(ind['chi'], bins=20)
+            },
+            "xi": {
+                "mean": float(ind['xi'].mean()),
+                "std": float(ind['xi'].std()),
+                "min": float(ind['xi'].min()),
+                "max": float(ind['xi'].max()),
+                "hist": hist_as_dict(ind['xi'], bins=20)
+            },
+            "H": {
+                "mean": float(ind['H'].mean()),
+                "std": float(ind['H'].std()),
+                "min": float(ind['H'].min()),
+                "max": float(ind['H'].max()),
+                "hist": hist_as_dict(ind['H'], bins=20)
+            }
+        },
+        # Skriv motsvarande för jobs och ev. annat.
+    }
 
-    # Eventuella andra mått – fyll på här
-
-    # Spara till YAML
-    with open(os.path.join(output_path, "summary_stats.yaml"), "w") as f:
-        yaml.dump(stats, f, sort_keys=False, allow_unicode=True, default_flow_style=False)
-
+    # Spara till JSON och/eller CSV
+    import json
+    with open(f"{outdir}/basic_stats_{tag}.json", "w") as f:
+        json.dump(stats, f, indent=2)

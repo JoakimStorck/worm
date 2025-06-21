@@ -9,7 +9,8 @@ import numpy as np
 import pandas as pd
 from core.geography.geoworld import GeoWorld
 #from core.plotting.plot_selected_municipalities import plot_selected_municipalities
-from core.matching import greedy_deso_matching, interleaved_multilevel_batch_matching
+#from core.matching import greedy_deso_matching, interleaved_multilevel_batch_matching
+from core.matching import interleaved_multilevel_batch_matching
 
 from core.log import log
 from core.events import Event, EventQueue
@@ -418,11 +419,12 @@ class World:
         )
         if not matches.empty:
             job_id = matches.iloc[0]['job_id']            
+            utility = matches.iloc[0]['utility']            
 
             t_start = event.time
             start_event = Event(t_start, idx, 'start_job', {'job_id': job_id})
             self.push_event(start_event)
-            self.event_logger.log_event(self, event, extra={"event_detail": "match_completed", "job_id": job_id})
+            self.event_logger.log_event(self, event, extra={"event_detail": "match_completed", "job_id": job_id, "utility": utility})
         else:
             timing = self.cfg_reader.get_event_timing('start_job_search')
             if timing['dist'] == 'exponential':

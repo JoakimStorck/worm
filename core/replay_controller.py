@@ -36,9 +36,16 @@ class ReplayController:
         self.initial_state = {
             "individuals": scenario_result.individuals.copy(),
             "jobs": scenario_result.jobs.copy(),
-            "employers": scenario_result.employers.copy()
+            "employers": scenario_result.employers.copy(),
+            "events": scenario_result.events.copy()
         }
-        self.eventlog = scenario_result.eventlog
+        # self.initial_state = {
+        #     "individuals": scenario_result.individuals.copy(),
+        #     "jobs": scenario_result.jobs.copy(),
+        #     "employers": scenario_result.employers.copy()
+        # }
+        self.scenario = scenario_result
+        self.eventlog = scenario_result.events
         self.current_step = 0
         self.state = deepcopy(self.initial_state)
         self.max_step = len(self.eventlog) if self.eventlog is not None else 0

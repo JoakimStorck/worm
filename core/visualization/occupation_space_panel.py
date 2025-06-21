@@ -49,8 +49,8 @@ class OccupationSpacePanel:
             'x_occ', 'y_occ',
             source=self.indiv_source,
             color="red",
-            alpha=0.6,
-            size=8,
+            alpha=0.4,
+            size=3,
             legend_label="Individer",
             selection_color="orange"
         )
@@ -61,8 +61,8 @@ class OccupationSpacePanel:
                 'x_occ', 'y_occ',
                 source=self.job_source,
                 color="blue",
-                alpha=0.3,
-                size=5,
+                alpha=0.6,
+                size=6,
                 legend_label="Jobb",
                 selection_color="green"
             )
