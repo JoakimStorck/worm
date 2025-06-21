@@ -10,7 +10,7 @@ import pandas as pd
 from core.geography.geoworld import GeoWorld
 #from core.plotting.plot_selected_municipalities import plot_selected_municipalities
 #from core.matching import greedy_deso_matching, interleaved_multilevel_batch_matching
-from core.matching import interleaved_multilevel_batch_matching
+from core.matching import interleaved_multilevel_batch_matching, multilevel_exhaustive_matching
 
 from core.log import log
 from core.events import Event, EventQueue
@@ -130,6 +130,16 @@ class World:
                 batch_frac_muni=kwargs.get("batch_frac_muni", 0.1),
                 batch_frac_global=kwargs.get("batch_frac_global", 0.05),
                 min_batch=kwargs.get("min_batch", 10),
+                verbose=kwargs.get("verbose", False)
+            )
+        elif mode == "exhaustive_multilevel":
+            # Import your matching function!
+            return multilevel_exhaustive_matching(
+                workforce,
+                vacant_jobs,
+                alpha_chi=kwargs.get("alpha_chi", 5.0),
+                alpha_xi=kwargs.get("alpha_xi", 5.0),
+                alpha_geo=kwargs.get("alpha_geo", 1.0),
                 verbose=kwargs.get("verbose", False)
             )
         else:
@@ -412,7 +422,7 @@ class World:
         df = self.individuals.loc[[idx]]
         matches = self.match_individuals_to_jobs(
             individuals=df,
-            mode="interleaved_multilevel",
+            mode="exhaustive_multilevel",
             alpha_chi=self.cfg_reader.config['simulation']['alpha_chi'],
             alpha_xi=self.cfg_reader.config['simulation']['alpha_xi'],
             alpha_geo=self.cfg_reader.config['simulation']['alpha_geo'],

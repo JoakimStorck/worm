@@ -36,15 +36,22 @@ class OccupationSpacePanel:
         # Initierar datakällor
         self.indiv_source = replay_controller.get_indiv_source()
         self.job_source = ColumnDataSource(self._get_job_data().to_dict("list")) if show_jobs else None
+        self.employment_lines_source = ColumnDataSource(data=dict(xs=[], ys=[]))
 
         # Skapar plot
         self.plot = figure(
             title="Occupation Space",
-            width=self.width,
-            height=self.height,
             match_aspect=True,
+            sizing_mode="stretch_both",
             tools=self.tools
         )
+
+        self.plot.min_width = 600
+        self.plot.min_height = 600
+        self.plot.max_width = 2000
+        self.plot.max_height = 1200
+        self.plot.sizing_mode = "stretch_both"
+
 
         from bokeh.transform import factor_cmap
 
@@ -69,18 +76,30 @@ class OccupationSpacePanel:
                 source=self.job_source,
                 color="blue",
                 alpha=0.6,
-                size=6,
+                size='size_marker',
                 legend_label="Jobb",
                 selection_color="green"
             )
+
+
+        self.lines_renderer = self.plot.multi_line(
+            xs="xs", ys="ys",
+            source=self.employment_lines_source,
+            line_color="black", line_alpha=0.08, line_width=1
+        )
 
         self.status_select = MultiSelect(
             title="Visa status:",
             value=statuses,     # Start med alla valda
             options=[(s, s.capitalize()) for s in statuses]
         )
-
         self.status_select.on_change("value", lambda attr, old, new: self.update())
+
+        self.show_employment_lines = CheckboxGroup(
+            labels=["Visa jobb-linjer"], 
+            active=[0] if self.show_pathways else []
+        )
+        self.show_employment_lines.on_change("active", lambda attr, old, new: self.update())
 
         # Pathways och H-cirklar – reserverat för utbyggnad
 
@@ -96,9 +115,13 @@ class OccupationSpacePanel:
         self.plot.legend.location = "top_left"
         self.plot.legend.click_policy = "hide"
 
-        from bokeh.layouts import column
+        from bokeh.layouts import column, row
 
-        self.layout = column(self.status_select, self.plot)
+        self.layout = column(
+            row(self.status_select, self.show_employment_lines, sizing_mode="stretch_both"),
+            self.plot,
+            sizing_mode="stretch_both"
+        )
 
         # Koppla panelen till replay-uppdateringar
         self.replay.subscribe(self.update)
@@ -126,6 +149,11 @@ class OccupationSpacePanel:
             jobs["y_occ"] = jobs["chi"] * np.sin(jobs["xi"])
         if "geometry" in jobs.columns:
             jobs = jobs.drop(columns=["geometry"])
+        if "employer_size" in jobs.columns:
+            jobs["size_marker"] = 2 + 1 * np.log1p(jobs["employer_size"])
+        else:
+            jobs["size_marker"] = 6
+
         return jobs
 
     def update(self):
@@ -133,11 +161,29 @@ class OccupationSpacePanel:
         df = add_occ_coordinates(df)
         if "geometry" in df.columns:
             df = df.drop(columns=["geometry"])
-        
-        # Filtrera på status från MultiSelect
         selected_statuses = self.status_select.value
         filtered_df = df[df['status'].isin(selected_statuses)]
         self.indiv_source.data = filtered_df.to_dict("list")
+
+        # Hantera linjer till jobb
+        if 0 in self.show_employment_lines.active:
+            # Endast employed
+            employed = filtered_df[filtered_df["status"] == "employed"].copy()
+            if len(employed) > 0:
+                jobs = self.replay.get_state()["jobs"]
+                jobs = add_occ_coordinates(jobs)
+                jobs_dict = {j["job_id"]: (j["x_occ"], j["y_occ"]) for j in jobs.to_dict("records")}
+                xs, ys = [], []
+                for _, row in employed.iterrows():
+                    jid = row.get("job_id")
+                    if jid and jid in jobs_dict:
+                        xs.append([row["x_occ"], jobs_dict[jid][0]])
+                        ys.append([row["y_occ"], jobs_dict[jid][1]])
+                self.employment_lines_source.data = dict(xs=xs, ys=ys)
+            else:
+                self.employment_lines_source.data = dict(xs=[], ys=[])
+        else:
+            self.employment_lines_source.data = dict(xs=[], ys=[])
 
 
     def set_hover_visibility(self, visible: bool):

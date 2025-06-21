@@ -161,7 +161,10 @@ def global_greedy_matching(
     )
 
     # 5. Matchningslogik som tidigare
-    inds_i, jobs_j = np.where(utility > 0)
+    P_MIN = 1e-4  # eller vad du tycker är rimligt
+
+    inds_i, jobs_j = np.where(utility > P_MIN)
+
     utility_flat = utility[inds_i, jobs_j]
     matches = list(zip(utility_flat, inds_i, jobs_j))
 

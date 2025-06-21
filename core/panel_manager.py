@@ -12,47 +12,45 @@ PANEL_REGISTRY = {
 }
 
 from bokeh.layouts import row, column
-from bokeh.models import Select, Div
+from bokeh.models import Select, Div, RadioButtonGroup
 
 class PanelManager:
     def __init__(self, replay, ui_state, panel_registry, panel_kwargs=None, n_panels=2):
-        """
-        replay: ReplayController (eller motsvarande state)
-        ui_state: UIState
-        panel_registry: dict, ex {"Karta": MapPanel, ...}
-        panel_kwargs: dict med alla potentiella kwargs för paneler
-        n_panels: antal panel-platser i layouten
-        """
         self.replay = replay
         self.ui_state = ui_state
         self.registry = panel_registry
         self.panel_kwargs = panel_kwargs or {}
         self.n_panels = n_panels
 
-        # Initiera selectors (en för varje plats/panel)
+        self.view_mode = RadioButtonGroup(labels=["Delad vy", "Helskärm"], active=0)
+        self.view_mode.on_change("active", lambda attr, old, new: self.refresh_layout())
+
         panel_keys = list(panel_registry.keys())
         default_panels = panel_keys[:n_panels] if len(panel_keys) >= n_panels else (panel_keys + [""] * n_panels)
         self.selectors = [
             Select(title=f"Panel {i+1}", value=default_panels[i], options=panel_keys)
             for i in range(n_panels)
         ]
-        # Här: använd en *tom Div* som placeholder
         self.panel_layouts = [Div(text="") for _ in self.selectors]
 
-        # Knyt ihop change-callbacks
         for idx, selector in enumerate(self.selectors):
             selector.on_change("value", self._make_update_panel(idx))
 
-        # Sätt layouten först, tomt
-        self.layout = row(*(column(sel, self.panel_layouts[i]) for i, sel in enumerate(self.selectors)))
+        # Viktigt: Sätt sizing_mode här
+        self.layout = column(
+            self.view_mode,
+            row(
+                *(column(sel, self.panel_layouts[i], sizing_mode="stretch_both") for i, sel in enumerate(self.selectors)),
+                sizing_mode="stretch_both"
+            ),
+            sizing_mode="stretch_both"
+        )
         self.instantiate_panels()
 
     def _make_update_panel(self, idx):
-        # Workaround: lambda i loop binder på fel sätt utan default-argument
         return lambda attr, old, new: self.update_panel(idx, new)
 
     def _build_panel(self, panel_cls):
-        # Sätt ihop samtliga kwargs, filtrera mot panelens KWARGS
         base_kwargs = dict(
             replay_controller=self.replay,
             ui_state=self.ui_state,
@@ -65,7 +63,9 @@ class PanelManager:
             kwargs = base_kwargs
         try:
             instance = panel_cls(**kwargs)
-            # Alltid ett .layout-attribut (ex: plot, layout, Div)
+            # Sätt även sizing_mode på layout om möjligt
+            if hasattr(instance, "layout"):
+                instance.layout.sizing_mode = "stretch_both"
             return getattr(instance, "layout", instance)
         except Exception as e:
             print(f"Fel vid skapande av panel {panel_cls.__name__}: {e}")
@@ -74,12 +74,9 @@ class PanelManager:
     def instantiate_panels(self):
         for idx, selector in enumerate(self.selectors):
             panel_cls = self.registry[selector.value]
-            # Hämta listan av tillåtna kwargs för panelen, annars tom lista
             accepted_kwargs = getattr(panel_cls, "KWARGS", [])
-            # Bygg kwargs: alltid med replay-argument i rätt namn
             kwargs = {}
             for k in accepted_kwargs:
-                # Hantera replay/replay_controller
                 if k == "replay" and hasattr(self, "replay"):
                     kwargs[k] = self.replay
                 elif k == "replay_controller" and hasattr(self, "replay"):
@@ -90,12 +87,14 @@ class PanelManager:
                     kwargs[k] = self.panel_kwargs[k]
             try:
                 panel_instance = panel_cls(**kwargs)
+                # Sätt sizing_mode även här!
+                if hasattr(panel_instance, "layout"):
+                    panel_instance.layout.sizing_mode = "stretch_both"
                 self.panel_layouts[idx] = panel_instance.layout
             except Exception as e:
                 print(f"Fel vid initiering av panel {panel_cls.__name__}: {e}")
                 self.panel_layouts[idx] = Div(text=f"Fel vid initiering av panel:<br>{e}")
         self.refresh_layout()
-
 
     def update_panel(self, idx, new_panel_name):
         panel_cls = self.registry[new_panel_name]
@@ -112,15 +111,36 @@ class PanelManager:
                 kwargs[k] = self.panel_kwargs[k]
         try:
             panel_instance = panel_cls(**kwargs)
+            if hasattr(panel_instance, "layout"):
+                panel_instance.layout.sizing_mode = "stretch_both"
             self.panel_layouts[idx] = panel_instance.layout
         except Exception as e:
             print(f"Fel vid initiering av panel {panel_cls.__name__}: {e}")
             self.panel_layouts[idx] = Div(text=f"Fel vid initiering av panel:<br>{e}")
         self.refresh_layout()
 
-    def refresh_layout(self):
-        from bokeh.layouts import column
-        self.layout.children = [
-            column(self.selectors[i], self.panel_layouts[i]) for i in range(len(self.selectors))
-        ]
+    def refresh_layout(self, *args, **kwargs):
+        from bokeh.layouts import column, row
 
+        if hasattr(self, "view_mode") and getattr(self.view_mode, "active", 0) == 1:
+            # Helskärmsläge – bara panelen direkt under view_mode
+            self.layout.children = [
+                self.view_mode,
+                self.panel_layouts[0]
+            ]
+            self.layout.sizing_mode = "stretch_both"
+            if hasattr(self.panel_layouts[0], "sizing_mode"):
+                self.panel_layouts[0].sizing_mode = "stretch_both"
+        else:
+            self.layout.children = [
+                self.view_mode,
+                row(
+                    *(column(self.selectors[i], self.panel_layouts[i], sizing_mode="stretch_both")
+                    for i in range(len(self.selectors))),
+                    sizing_mode="stretch_both"
+                )
+            ]
+            self.layout.sizing_mode = "stretch_both"
+            for pnl in self.panel_layouts:
+                if hasattr(pnl, "sizing_mode"):
+                    pnl.sizing_mode = "stretch_both"

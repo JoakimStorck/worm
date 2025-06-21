@@ -107,9 +107,9 @@ simulation:
   log_to_console: true
   log_to_file: true
   logfile_path: "output/mora_baseline.log"
-  alpha_chi: 5.0
-  alpha_xi: 5.0
-  alpha_geo: 1.0
+  alpha_chi: 1.0
+  alpha_xi: 1.0
+  alpha_geo: 0.1
 
   # Samla ALLA event-tider på samma ställe – alla tider med enhet!
   event_timings:
