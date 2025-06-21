@@ -1,8 +1,14 @@
 import geopandas as gpd
 import pandas as pd
+import numpy as np
 import re
 import sqlite3
 import locale
+import json
+
+from core.occupations.utils import select_representative_occupations, name_clusters_by_representative_titles, reorder_clusters_by_angle
+
+from core.log import log 
 
 locale.setlocale(locale.LC_NUMERIC, "C")
 
@@ -255,33 +261,6 @@ def load_deso_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     log(f"{len(gdf)} DeSO-zoner inlästa och sparade i databasen.")
 
 
-# def update_deso_population_from_csv(pop_csv, db_path="data/worm.sqlite3"):
-#     # Läs in befolkningsdata
-#     df = pd.read_csv(pop_csv, encoding="latin1")
-#     # Filtrera: endast totalbefolkning per DeSO
-#     df_total = df[(df['ålder'] == 'totalt') & (df['kön'] == 'totalt')]
-
-#     # Rensa kolumnernas citationstecken om det behövs
-#     df_total.columns = [col.replace('"', '') for col in df_total.columns]
-#     df_total['region'] = df_total['region'].astype(str)
-#     df_total = df_total.rename(columns={"region": "deso_code", "2024": "population"})
-#     df_total['population'] = df_total['population'].astype(int)
-
-#     # Koppla mot SQLite
-#     conn = sqlite3.connect(db_path)
-#     cur = conn.cursor()
-
-#     # Loopa och uppdatera population för varje DeSO
-#     for _, row in df_total.iterrows():
-#         cur.execute(
-#             "UPDATE deso SET population = ? WHERE deso_code = ?",
-#             (row['population'], row['deso_code'])
-#         )
-#     conn.commit()
-#     conn.close()
-#     log(f"Uppdaterade population för {len(df_total)} DeSO-zoner.")
-
-
 def update_deso_population_from_csv(pop_csv, db_path="data/worm.sqlite3"):
     # Läs in populationsfilen
     pop = pd.read_csv(pop_csv, encoding="latin1")
@@ -305,7 +284,6 @@ def update_deso_population_from_csv(pop_csv, db_path="data/worm.sqlite3"):
     deso.to_sql("deso", conn, if_exists="replace", index=False)
     conn.close()
     log(f"Uppdaterade population för {len(pop)} DeSO-zoner (skrev om hela tabellen).")
-
 
 
 def extract_sni_code(s):
@@ -424,3 +402,130 @@ def load_occupation_skill_link(skills_path, db_path="data/worm.sqlite3"):
     link.to_sql("occupation_skill_link", conn, if_exists="replace", index=False)
     conn.close()
     log(f"Loaded {len(link)} rows into occupation_skill_link.")
+
+def load_education_level_scb_json(json_path, db_path="data/worm.sqlite3", year=2024):
+    with open(json_path, encoding="utf-8") as f:
+        scb = json.load(f)
+    dim = scb["dataset"]["dimension"]
+    reg_index = dim["Region"]["category"]["index"]
+    reg_labels = dim["Region"]["category"]["label"]
+    level_index = dim["UtbildningsNiva"]["category"]["index"]
+    level_labels = dim["UtbildningsNiva"]["category"]["label"]
+    n_levels = len(level_index)
+    n_regions = len(reg_index)
+    n_genders = len(dim["Kon"]["category"]["index"])
+
+    data = []
+    # Plocka ut kommun, nivå och antal för båda kön (all ålder)
+    for region_code, region_idx in reg_index.items():
+        for level_code, level_idx in level_index.items():
+            # Plats i value-arrayen: 
+            # region*level*n_genders + level*n_genders + gender
+            base = int(region_idx) * n_levels * n_genders + int(level_idx) * n_genders
+            n_male = scb["dataset"]["value"][base + 0]
+            n_female = scb["dataset"]["value"][base + 1]
+            n_total = n_male + n_female
+            data.append({
+                "municipal_code": region_code,
+                "year": year,
+                "education_level_code": level_code,
+                "education_level_label": level_labels[level_code],
+                "n_male": n_male,
+                "n_female": n_female,
+                "n_total": n_total
+            })
+    # Ladda till SQLite
+    df = pd.DataFrame(data)
+    conn = sqlite3.connect(db_path)
+    df.to_sql("education_level_municipality", conn, if_exists="replace", index=False)
+    conn.close()
+    print(f"Loaded {len(df)} rows into education_level_municipality.")
+
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+from scipy.stats import entropy
+
+# Importera ev. egna hjälpfunktioner här
+# from .your_helpers import reorder_clusters_by_angle, select_representative_occupations, name_clusters_by_representative_titles
+
+def load_onet_occupation_space(n_clusters=50, db_path="data/worm.sqlite3"):
+    """
+    Bygger och laddar O*NET occupation space till tabellen onet_occupation_space.
+    """
+    # Läs från databas
+    conn = sqlite3.connect(db_path)
+    occ_df = pd.read_sql("SELECT onet_code, title FROM onet_occupations", conn)
+    skill_df = pd.read_sql("SELECT skill_id, skill_name FROM onet_skills", conn)
+    link_df = pd.read_sql("SELECT onet_code, skill_id, scale_id, data_value FROM occupation_skill_link", conn)
+    conn.close()
+
+    imp_df = link_df[link_df['scale_id'] == 'IM']
+    lvl_df = link_df[link_df['scale_id'] == 'LV']
+    merged = pd.merge(
+        imp_df[['onet_code', 'skill_id', 'data_value']],
+        lvl_df[['onet_code', 'skill_id', 'data_value']],
+        on=['onet_code', 'skill_id'],
+        suffixes=('_IM', '_LV')
+    )
+    merged['Weighted'] = merged['data_value_IM'].astype(float) * merged['data_value_LV'].astype(float)
+    skill_matrix = merged.pivot(index='onet_code', columns='skill_id', values='Weighted').fillna(0)
+
+    # PCA och klustring
+    pca = PCA(n_components=2)
+    skill_coords = pca.fit_transform(skill_matrix.values)
+    kmeans = KMeans(n_clusters=n_clusters, n_init=10, random_state=0)
+    labels = kmeans.fit_predict(skill_coords)
+
+    def scaled_entropy(row):
+        values = row.values + 1e-9
+        probs = values / values.sum()
+        base_entropy = entropy(probs, base=2)
+        logsum = np.log2(values.sum())
+        return base_entropy * logsum
+
+    H = skill_matrix.apply(scaled_entropy, axis=1)
+    xi = np.arctan2(skill_coords[:, 1], skill_coords[:, 0])
+    chi = np.linalg.norm(skill_coords, axis=1)
+
+    # Skala chi till [0, 1]
+    chi_min, chi_max = chi.min(), chi.max()
+    if chi_max > chi_min:
+        chi_scaled = (chi - chi_min) / (chi_max - chi_min)
+    else:
+        chi_scaled = np.zeros_like(chi)
+
+    occ_titles = occ_df.set_index('onet_code').reindex(skill_matrix.index)['title']
+
+    final_df = pd.DataFrame({
+        'onet_code': skill_matrix.index,
+        'title': occ_titles.values,
+        'pc1': skill_coords[:, 0],
+        'pc2': skill_coords[:, 1],
+        'cluster': labels,
+        'chi': chi_scaled,    # <-- använd skalad chi här!
+        'xi': xi,
+        'h': H.values
+    })    
+
+    # -- Omordning och klusternamn (lägg in om du vill, annars ta bort eller importera egna funktioner) --
+    final_df = reorder_clusters_by_angle(final_df)
+    reps = select_representative_occupations(final_df)
+    names = name_clusters_by_representative_titles(reps)
+    final_df['cluster_name'] = final_df['cluster'].map(names)
+
+    final_df['n_clusters'] = n_clusters
+    cols = ['onet_code', 'n_clusters', 'title', 'pc1', 'pc2', 'cluster', 'cluster_name', 'chi', 'xi', 'h']
+    conn = sqlite3.connect(db_path)
+    final_df[cols].to_sql("onet_occupation_space", conn, if_exists="replace", index=False)
+    conn.close()
+    print(f"Sparade {len(final_df)} rader till onet_occupation_space (n_clusters={n_clusters})")
+    return final_df
+
+def load_sni_onet_link(csv_path, db_path="data/worm.sqlite3"):
+    df = pd.read_csv(csv_path, usecols=["SNI-kod", "O*NET-yrkes-id", "Freq"])
+    df = df.rename(columns={"SNI-kod": "sni_code", "O*NET-yrkes-id": "onet_code", "Freq": "freq"})
+    df = df[df["onet_code"].notnull() & (df["onet_code"] != "None") & (df["onet_code"].str.strip() != "")]
+    conn = sqlite3.connect(db_path)
+    df.to_sql("sni_onet_link", conn, if_exists="replace", index=False)
+    conn.close()
+    print(f"Laddade {len(df)} SNI–O*NET-kopplingar till databasen.")

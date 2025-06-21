@@ -1,13 +1,15 @@
 import sys
 import os
 import locale
-
+ 
 # Sätt rätt decimalpunkt för WKT
 locale.setlocale(locale.LC_NUMERIC, "C")
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.database import schema, loader
+from core.log import log
+
 
 DB_PATH = "data/worm.sqlite3"
 
@@ -88,6 +90,26 @@ if file_exists(onet_skills_path):
     loader.load_occupation_skill_link(onet_skills_path, db_path=DB_PATH)
 else:
     log("OBS: Laddar inte onet_skills/occupation_skill_link, filen saknas.")
+
+# Bygg occupation space (PCA+klustring) till tabellen
+try:
+    loader.load_onet_occupation_space(n_clusters=50, db_path=DB_PATH)
+except Exception as e:
+    log(f"Fel vid skapande av O*NET occupation space: {e}")
+
+# Ladda utbildningsnivåer från SCB (JSON)
+edu_json = "data/Utbildningsnivaer_2024.json"
+if file_exists(edu_json):
+    loader.load_education_level_scb_json(edu_json, db_path=DB_PATH, year=2024)
+else:
+    log("OBS: Laddar inte utbildningsnivåer, filen saknas.")
+
+# Ladda utbildningsnivåer från SCB (JSON)
+sni_onet_path = "data/onet_sni_longform.csv"
+if file_exists(sni_onet_path):
+    loader.load_sni_onet_link(sni_onet_path, db_path=DB_PATH)
+else:
+    log(f"Not loading SNI-O*NET cross table, file {sni_onet_path} missing.")
 
 
 log("Alla laddningar är färdiga.")

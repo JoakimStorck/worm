@@ -3,10 +3,12 @@
 import numpy as np
 from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource, HoverTool
+from bokeh.models import Dropdown, CheckboxGroup, CustomJS
 
 from core.ui_state import UIState
 from core.visualization.utils import add_occ_coordinates
 
+from bokeh.models import MultiSelect
 
 class OccupationSpacePanel:
     KWARGS = ['replay_controller', 'show_jobs', 'show_pathways', 'show_H_circle', 'width', 'height', 'tools', 'ui_state']
@@ -44,14 +46,19 @@ class OccupationSpacePanel:
             tools=self.tools
         )
 
-        # Individer
+        from bokeh.transform import factor_cmap
+
+        # Lägg till detta före skapandet av scatter:
+        statuses = ["employed", "unemployed", "not_in_labor_force"]
+        palette = ["green", "red", "gray"]
+
         self.indiv_renderer = self.plot.scatter(
             'x_occ', 'y_occ',
             source=self.indiv_source,
-            color="red",
+            color=factor_cmap('status', palette=palette, factors=statuses),
             alpha=0.4,
             size=3,
-            legend_label="Individer",
+            legend_field="status",        # så att legend visar färgerna
             selection_color="orange"
         )
 
@@ -67,6 +74,14 @@ class OccupationSpacePanel:
                 selection_color="green"
             )
 
+        self.status_select = MultiSelect(
+            title="Visa status:",
+            value=statuses,     # Start med alla valda
+            options=[(s, s.capitalize()) for s in statuses]
+        )
+
+        self.status_select.on_change("value", lambda attr, old, new: self.update())
+
         # Pathways och H-cirklar – reserverat för utbyggnad
 
         # Hover och legend
@@ -81,7 +96,9 @@ class OccupationSpacePanel:
         self.plot.legend.location = "top_left"
         self.plot.legend.click_policy = "hide"
 
-        self.layout = self.plot
+        from bokeh.layouts import column
+
+        self.layout = column(self.status_select, self.plot)
 
         # Koppla panelen till replay-uppdateringar
         self.replay.subscribe(self.update)
@@ -114,16 +131,13 @@ class OccupationSpacePanel:
     def update(self):
         df = self.replay.get_state()["individuals"]
         df = add_occ_coordinates(df)
-
         if "geometry" in df.columns:
             df = df.drop(columns=["geometry"])
-
-        self.indiv_source.data = df.to_dict("list")
-
-        #if self.show_jobs and self.job_source is not None:
-        #    self.job_source.data = self._get_job_data().to_dict("list")
-
-        print("🔴 Indiv data (antal rader):", len(self.indiv_source.data.get("x_occ", [])))
+        
+        # Filtrera på status från MultiSelect
+        selected_statuses = self.status_select.value
+        filtered_df = df[df['status'].isin(selected_statuses)]
+        self.indiv_source.data = filtered_df.to_dict("list")
 
 
     def set_hover_visibility(self, visible: bool):

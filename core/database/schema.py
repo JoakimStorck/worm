@@ -186,6 +186,28 @@ def create_schema(db_path="data/worm.sqlite3"):
             FOREIGN KEY (onet_code) REFERENCES onet_occupations(onet_code)
         )
     """)
+    # Cross table for SNI-codes to O*NET occupations, that occur in that industry
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS sni_onet_link (
+            sni_code TEXT,
+            onet_code TEXT,
+            freq REAL,
+            PRIMARY KEY (sni_code, onet_code)
+        )
+    """)
+    # Tabell för utbildningsnivå per kommun, år, nivå, kön (eller summerat om du föredrar)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS education_level_municipality (
+            municipal_code TEXT,
+            year INTEGER,
+            education_level_code TEXT,   -- t.ex. '1'–'7', 'US'
+            education_level_label TEXT,  -- t.ex. 'Förgymnasial <9 år', etc.
+            n_male INTEGER,
+            n_female INTEGER,
+            n_total INTEGER,
+            PRIMARY KEY (municipal_code, year, education_level_code)
+        )
+    """)
 
 
     conn.commit()

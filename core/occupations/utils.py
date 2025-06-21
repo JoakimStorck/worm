@@ -114,6 +114,9 @@ def compute_utility_matrix(
 
     return U
 
+import numpy as np
+import pandas as pd
+
 def global_greedy_matching(
     individuals_df, jobs_df, 
     alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0
@@ -134,33 +137,34 @@ def global_greedy_matching(
     jobs_y = jobs_df["y"].values
     jobs_id = jobs_df["job_id"].values
 
-    # 1. Beräkna occupation space-avstånd
+    # 1. Occupation space-avstånd
     chi_diff = inds_chi[:, None] - jobs_chi[None, :]
-    xi_diff = np.abs(inds_xi[:, None] - jobs_xi[None, :]) % (2*np.pi)
-    xi_diff = np.minimum(xi_diff, 2*np.pi - xi_diff)
+    xi_diff = np.abs(inds_xi[:, None] - jobs_xi[None, :]) % (2 * np.pi)
+    xi_diff = np.minimum(xi_diff, 2 * np.pi - xi_diff)
     occ_dist = np.sqrt(chi_diff**2 + xi_diff**2)
-    within_circle = occ_dist <= inds_H[:, None]
 
-    # 2. Beräkna geografiskt avstånd i kilometer
+    # 2. Geografiskt avstånd i kilometer
     dx = inds_x[:, None] - jobs_x[None, :]
     dy = inds_y[:, None] - jobs_y[None, :]
-    geo_dist_m = np.sqrt(dx ** 2 + dy ** 2)         # meter
-    geo_dist_km = geo_dist_m / 1000.0               # konvertera till km
+    geo_dist_m = np.sqrt(dx ** 2 + dy ** 2)
+    geo_dist_km = geo_dist_m / 1000.0
 
-    # 3. Utility: endast där inom cirkel
-    utility = np.full((N, M), -np.inf)
-    utility[within_circle] = np.exp(
-        -alpha_chi * np.abs(chi_diff[within_circle])
-        - alpha_xi * xi_diff[within_circle]
-        - alpha_geo * geo_dist_km[within_circle]    # använd km!
+    # 3. Halvnormal sannolikhet för matchning utifrån occupational distance (mjuk gräns)
+    # (H broadcastas över jobb)
+    occ_prob = np.exp(-0.5 * (occ_dist / inds_H[:, None])**2)
+
+    # 4. Utility: nu överallt (ingen -inf utanför cirkel!)
+    utility = occ_prob * np.exp(
+        -alpha_chi * np.abs(chi_diff)
+        - alpha_xi * xi_diff
+        - alpha_geo * geo_dist_km
     )
 
-    # 4. Lista alla möjliga par med utility och index
-    inds_i, jobs_j = np.where(~np.isinf(utility))
+    # 5. Matchningslogik som tidigare
+    inds_i, jobs_j = np.where(utility > 0)
     utility_flat = utility[inds_i, jobs_j]
     matches = list(zip(utility_flat, inds_i, jobs_j))
 
-    # 5. Sortera efter utility (högst först)
     matches.sort(reverse=True, key=lambda t: t[0])
 
     used_inds = set()
@@ -180,6 +184,7 @@ def global_greedy_matching(
             break
 
     return pd.DataFrame(results)
+
 
 
 # def optimal_assignment(individuals_df, jobs_df, alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0):

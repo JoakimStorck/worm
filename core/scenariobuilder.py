@@ -207,6 +207,36 @@ class ScenarioBuilder:
         log(f"Total antal jobb (summa storlek): {employers_df['size'].sum()}")
         return employers_df
 
+    def get_onet_codes_with_freq_for_sni(self, sni_code, db_path="data/worm.sqlite3"):
+        """
+        Returnerar en lista av tupler: (onet_code, freq) för alla O*NET-yrkeskoder knutna till en given SNI-kod.
+        """
+        c = self.conn.cursor()
+        c.execute(
+            "SELECT onet_code, freq FROM sni_onet_link WHERE sni_code = ?",
+            (sni_code,)
+        )
+        result = c.fetchall()  # [(onet_code1, freq1), (onet_code2, freq2), ...]
+
+        return result
+
+    def get_chi_xi_for_onet_code(self, onet_code, db_path="data/worm.sqlite3"):
+        """
+        Returnerar (chi, xi) för given onet_code.
+        """
+        c = self.conn.cursor()
+        c.execute(
+            "SELECT chi, xi FROM onet_occupation_space WHERE onet_code = ?",
+            (onet_code,)
+        )
+        row = c.fetchone()
+
+        if row:
+            return row[0], row[1]
+        else:
+            return None, None  # Hantera ej funnen kod
+
+
     def generate_jobs_from_employers(self, employers_df):
         """
         Skapar DataFrame med alla jobb. 
@@ -217,10 +247,17 @@ class ScenarioBuilder:
         for idx, row in employers_df.iterrows():
             geom = row['geometry']
             x, y = geom.x, geom.y
-            rng = self.rng
-            chi = rng.uniform(0, 1)
-            xi = rng.uniform(0, 2 * np.pi)
             for _ in range(int(row['size'])):
+                sni = row['sni_code']
+
+                occ_freq = self.get_onet_codes_with_freq_for_sni(sni)
+                onet_codes, freqs = zip(*occ_freq)
+
+                # Välj ett onet_code slumpmässigt enligt frekvens
+                onet_code = np.random.choice(onet_codes, p=np.array(freqs)/np.sum(freqs))
+
+                chi, xi = self.get_chi_xi_for_onet_code(onet_code)
+
                 jobs.append({
                     "job_id": f"J{job_id:05d}",
                     "employer_id": row.get('employer_id', idx),     # använd employer_id om det finns, annars index
@@ -229,12 +266,13 @@ class ScenarioBuilder:
                     "layer": row['layer'],
                     "zone_code": row['zone_code'],
                     "employer_size": row['size'],
-                    "sni_code": row['sni_code'],
+                    "sni_code": sni,
+                    "onet_code": onet_code,
                     "geometry": geom,
-                    "chi": chi,
-                    "xi": xi,
                     "x": x,
                     "y": y,
+                    "chi": chi,
+                    "xi": xi,
                 })
                 job_id += 1
 
@@ -243,53 +281,87 @@ class ScenarioBuilder:
 
         return df
 
-    def generate_individuals(self, municipal_code, population, workforce_ratio, unemployment_rate):
+    def get_education_props(self, municipal_code, year):
+
+        df = pd.read_sql("""
+            SELECT education_level_code, n_total 
+            FROM education_level_municipality 
+            WHERE municipal_code = ? AND year = ?
+        """, self.conn, params=(str(municipal_code), year))
+
+        low_codes = ['1', '2']
+        medium_codes = ['3', '4']
+        high_codes = ['5', '6', '7']
+        low = df[df.education_level_code.isin(low_codes)]["n_total"].sum()
+        medium = df[df.education_level_code.isin(medium_codes)]["n_total"].sum()
+        high = df[df.education_level_code.isin(high_codes)]["n_total"].sum()
+        total = low + medium + high
+        props = {
+            "low": low/total,
+            "medium": medium/total,
+            "high": high/total
+        }
+        return props
+
+    def generate_individuals(self, municipal_code, population, workforce_ratio, unemployment_rate, year=2024):
         """
-        Vektoriserad version: individer fördelas över DeSO-zoner enligt folkmängd,
-        och koordinater slumpar vi i batch per DeSO.
+        Skapar individer med verklig utbildningsnivå-fördelning från SCB.
+        Arbetskraften fördelas enligt chi-utbildningsnivå, övriga (not_in_labor_force) får låg chi.
         """
         rng = self.rng
 
         n_workforce = int(round(population * workforce_ratio))
         n_not_in_labor_force = population - n_workforce
 
-        # Hämta DeSO med befolkning > 0
+        # 1. Hämta utbildningsproportioner från databas
+        edu_props = self.get_education_props(municipal_code, year)
+        n_low = int(round(n_workforce * edu_props["low"]))
+        n_medium = int(round(n_workforce * edu_props["medium"]))
+        n_high = n_workforce - n_low - n_medium  # Resterande
+
+        # 2. Skapa utbildningsnivå-lista för arbetskraft
+        education_levels = (["low"] * n_low) + (["medium"] * n_medium) + (["high"] * n_high)
+        rng.shuffle(education_levels)
+
+        # 3. Slumpa status för hela befolkningen
+        status_list = ["unemployed"] * n_workforce + ["not_in_labor_force"] * n_not_in_labor_force
+        rng.shuffle(status_list)
+
+        # 4. Fördela individer över DeSO
         deso_gdf = self.geoworld.deso_zones
         deso_gdf = deso_gdf[(deso_gdf["municipal_code"] == str(municipal_code)) & (deso_gdf["population"] > 0)].reset_index(drop=True)
-
         if len(deso_gdf) == 0:
             raise ValueError(f"Inga DeSO-zoner med befolkning > 0 hittades för kommun {municipal_code}")
 
         pop_weights = deso_gdf["population"].values
         pop_probs = pop_weights / pop_weights.sum()
-
-        N = population  # total number of individuals
-
-        # Hur många individer ska skapas i varje DeSO? Multinomial!
+        N = population
         n_per_deso = rng.multinomial(N, pop_probs)
-        # Bygg upp alla individer i vektoriserad form
-        records = []
-        status_list = ["unemployed"] * n_workforce + ["not_in_labor_force"] * n_not_in_labor_force
-        rng.shuffle(status_list)  # Slumpa ordningen direkt
 
+        records = []
         i = 0
+        edu_idx = 0
         for deso_idx, n_ind in enumerate(n_per_deso):
             if n_ind == 0:
                 continue
             deso_row = deso_gdf.iloc[deso_idx]
-            # Slumpa n_ind punkter i polygonen
             points = self.random_points_in_polygon(deso_row.geometry, n_ind)
             for pt in points:
-                # Vi tar status-listan i ordning
+                status = status_list[i]
+                # Endast arbetskraften får utbildningsnivå, övriga sätts till None
+                education_level = education_levels[edu_idx] if status == "unemployed" else None
                 records.append({
                     'municipal_code': municipal_code,
-                    'status': status_list[i],
+                    'status': status,
                     'job_id': None,
                     'deso_code': deso_row['deso_code'],
                     'x': pt.x,
                     'y': pt.y,
-                    'geometry': pt
+                    'geometry': pt,
+                    'education_level': education_level
                 })
+                if status == "unemployed":
+                    edu_idx += 1
                 i += 1
 
         df = pd.DataFrame(records)
@@ -299,24 +371,57 @@ class ScenarioBuilder:
         indiv_defaults = self.cfg_reader.config.get('defaults', {}).get('individuals', {})
         prop_cfg = indiv_defaults.get('propensities', {})
 
-        # För varje propensity:
+        # 5. Propensiteter
         for name in ['start_education', 'internal_training', 'quit_job', 'career_break', 'internal_job_change']:
             pblock = prop_cfg.get(name, {})
-            mean = pblock.get('mean', 0.1)  # Välj defaultvärde
+            mean = pblock.get('mean', 0.1)
             std = pblock.get('std', 0.05)
             col = f'propensity_{name}'
             df[col] = np.clip(
                 rng.normal(mean, std, size=len(df)), 0, 1
             )
 
-        # Slumpa individens position inom occupation space
-        df["chi"] = rng.uniform(0, 1, size=len(df))
+        # 6. Sampla chi enligt utbildningsnivå
+        def sample_chi_for_education_levels(education_levels, rng):
+            chi = np.zeros(len(education_levels))
+            for i, level in enumerate(education_levels):
+                if level == "low":
+                    chi[i] = rng.lognormal(mean=np.log(0.13), sigma=0.32)
+                elif level == "medium":
+                    chi[i] = rng.lognormal(mean=np.log(0.32), sigma=0.27)
+                elif level == "high":
+                    chi[i] = rng.lognormal(mean=np.log(0.65), sigma=0.22)
+                else:
+                    chi[i] = rng.lognormal(mean=np.log(0.15), sigma=0.33)
+                # Om du vill klippa maximalt till 1.0
+                chi[i] = min(chi[i], 1.0)
+            return chi
+
+            # chi = np.zeros(len(education_levels))
+            # for i, level in enumerate(education_levels):
+            #     if level == "low":
+            #         chi[i] = np.clip(rng.normal(0.12, 0.03), 0.05, 0.20)
+            #     elif level == "medium":
+            #         chi[i] = np.clip(rng.normal(0.29, 0.06), 0.18, 0.40)
+            #     elif level == "high":
+            #         chi[i] = np.clip(rng.normal(0.7, 0.12), 0.35, 1.0)
+            #     else:
+            #         chi[i] = rng.uniform(0.05, 0.25)  # fallback: låg chi
+            # return chi
+
+        df["chi"] = sample_chi_for_education_levels(df["education_level"].fillna("low"), rng)
+
+        # 7. xi – fortfarande uniform slumpning över [0, 2pi]
         df["xi"] = rng.uniform(0, 2 * np.pi, size=len(df))
-        # H för individen
+
+        # 8. H (kompetensbredd) – som tidigare, eller gör beroende av chi om du vill
         H_cfg = indiv_defaults.get('initial_H', {})
         H_min = H_cfg.get('min', 0.08)
         H_max = H_cfg.get('max', 0.25)
         df['H'] = rng.uniform(H_min, H_max, size=len(df))
+
+        # 9. Z (kompetensbredd/specialisering) – valfritt, kan läggas in här
+        # df['Z'] = ... (exempelvis beroende av chi)
 
         return df
 
