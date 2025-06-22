@@ -20,7 +20,7 @@ class OccupationSpacePanel:
         show_H_circle=False,
         width=500,
         height=700,
-        tools="lasso_select,box_select,reset,pan,wheel_zoom",
+        tools="lasso_select,box_select,reset,pan,wheel_zoom,save",
         ui_state=None
     ):
         self.replay = replay_controller

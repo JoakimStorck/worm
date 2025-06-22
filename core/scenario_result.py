@@ -70,9 +70,9 @@ class ScenarioResult:
     @classmethod
     def from_run(cls, outdir):
         # Läs csv/json-filer och bygg dataframes
-        individuals = restore_geometry(pd.read_csv(os.path.join(outdir, "initial_state_individuals.csv")))
-        jobs = restore_geometry(pd.read_csv(os.path.join(outdir, "initial_state_jobs.csv")))
-        employers = restore_geometry(pd.read_csv(os.path.join(outdir, "employers.csv")))
+        individuals = restore_geometry(pd.read_csv(os.path.join(outdir, "final_state_individuals.csv")))
+        jobs = restore_geometry(pd.read_csv(os.path.join(outdir, "final_state_jobs.csv")))
+        employers = restore_geometry(pd.read_csv(os.path.join(outdir, "final_state_employers.csv")))
         events = pd.read_csv(os.path.join(outdir, "eventlog.csv"))
         return cls(individuals=individuals, jobs=jobs, employers=employers, events=events, outdir=outdir)
 
@@ -102,7 +102,7 @@ def load_initial_state(run_path):
     jobs = pd.read_csv(f"{run_path}/initial_state_jobs.csv")
     if "geometry" in jobs.columns:
         jobs = restore_geometry(jobs)
-    employers_path = os.path.join(run_path, "employers.csv")
+    employers_path = os.path.join(run_path, "initial_state_employers.csv")
     if os.path.exists(employers_path):
         employers = pd.read_csv(employers_path)
         if "geometry" in employers.columns:

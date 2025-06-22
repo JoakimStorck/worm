@@ -88,37 +88,6 @@ def transform_onet_skills_scaled_from_db(n_clusters=50, db_path="data/worm.sqlit
     return final_df
 
 
-# def save_occupation_space_to_db(df, db_path="data/worm.sqlite3", n_clusters=None):
-#     """
-#     Sparar occupation space-DataFrame till tabellen onet_occupation_space i SQLite.
-#     Antag att df har rätt kolumner: Occupation Code, Title, PC1, PC2, Cluster, Chi, Xi, H, Cluster Name.
-#     """
-#     # Sätt rätt kolumnnamn och inkludera n_clusters i alla rader
-#     df = df.rename(columns={
-#         "Occupation Code": "onet_code",
-#         "Title": "title",
-#         "PC1": "pc1",
-#         "PC2": "pc2",
-#         "Cluster": "cluster",
-#         "Cluster Name": "cluster_name",
-#         "Chi": "chi",
-#         "Xi": "xi",
-#         "H": "h"
-#     })
-#     # Om n_clusters saknas, använd argument eller tvinga in det
-#     if "n_clusters" not in df.columns:
-#         if n_clusters is None:
-#             raise ValueError("n_clusters måste anges!")
-#         df["n_clusters"] = n_clusters
-#     # Se till att kolumnordning och datatyper matchar exakt
-#     df = df[["onet_code", "n_clusters", "title", "pc1", "pc2", "cluster", "cluster_name", "chi", "xi", "h"]]
-#     # Skriv till SQL
-#     conn = sqlite3.connect(db_path)
-#     df.to_sql("onet_occupation_space", conn, if_exists="append", index=False)
-#     conn.close()
-#     log(f"Sparade {len(df)} rader till onet_occupation_space (n_clusters={df['n_clusters'].iloc[0]})")
-
-
 # Om du vill köra modulen direkt för test
 if __name__ == "__main__":
     df = transform_onet_skills_scaled_from_db(n_clusters=50)

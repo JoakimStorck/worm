@@ -107,7 +107,7 @@ def run_and_log_scenario(config_path):
         # --- 8. Spara snapshots och batchresultat ---
         world.individuals.to_csv(os.path.join(outdir, "initial_state_individuals.csv"), index=False)
         world.jobs.to_csv(os.path.join(outdir, "initial_state_jobs.csv"), index=False)
-        world.employers.to_csv(os.path.join(outdir, "employers.csv"), index=False)
+        world.employers.to_csv(os.path.join(outdir, "initial_state_employers.csv"), index=False)
         log.save_run_output(world.matchings, match_stats, commuting_stats, scenario_name, outdir=outdir)
 
         save_basic_stats(result, outdir, tag="before")
@@ -116,11 +116,16 @@ def run_and_log_scenario(config_path):
         local_log("Starting event-driven simulation ...")
         world.simulate()
 
+        # --- 10. Spara post-sim statistik ---
         save_basic_stats(result, outdir, tag="after")
+        world.individuals.to_csv(os.path.join(outdir, "final_state_individuals.csv"), index=False)
+        world.jobs.to_csv(os.path.join(outdir, "final_state_jobs.csv"), index=False)
+        world.employers.to_csv(os.path.join(outdir, "final_state_employers.csv"), index=False)
+        log.save_run_output(world.matchings, match_stats, commuting_stats, scenario_name, outdir=outdir)
 
         world.close()
 
-        # --- 10. Uppdatera registry ---
+        # --- 11. Uppdatera registry ---
         ensure_registry_exists()
         with open(REGISTRY_PATH, "a") as reg:
             reg.write(f"{run_id},{os.path.abspath(outdir)},{scenario_name},{datetime.datetime.now().isoformat()}\n")

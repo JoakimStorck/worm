@@ -5,9 +5,11 @@ import pandas as pd
 import geopandas as gpd
 import time
 from shapely import wkt
+import sqlite3
 
 from core.geography.geoutils import assign_deso_code, random_points_in_polygon
 from core.log import log
+from core.occupations.utils import sample_from_centers_jitter
 
 class ScenarioBuilder:
     DEFAULT_WEIGHT_FIELDS = {
@@ -29,6 +31,9 @@ class ScenarioBuilder:
         self.rng = np.random.default_rng(self.seed)
         self._sni_cache = {}
         self.geoworld = geoworld
+
+        self.onet_space_df = self.load_onet_occupation_space_table()
+
 
     def print_employer_size_stats(self, employers_df, employer_dist_cfg):
         bins, probs, class_names = self.get_size_distribution_from_config(employer_dist_cfg)
@@ -236,6 +241,56 @@ class ScenarioBuilder:
         else:
             return None, None  # Hantera ej funnen kod
 
+    def load_onet_occupation_space_table(self, db_path="data/worm.sqlite3"):
+        import sqlite3
+        import pandas as pd
+        conn = sqlite3.connect(db_path)
+        df = pd.read_sql("SELECT onet_code, chi, xi FROM onet_occupation_space", conn)
+        conn.close()
+        return df.set_index("onet_code")
+
+
+    def municipality_occupational_profile(self, municipal_code, year):
+        """
+        Returnerar en DataFrame med alla O*NET-yrken och deras totala frekvens (prob) för en kommun och ett år.
+        Kombinerar kommunens SNI-struktur och kopplingen SNI→O*NET.
+        Kolumner: onet_code, freq, prob
+        """
+        # 1. Hämta kommunens SNI-fördelning (med probabilitet)
+        sni_dist = self.fetch_sni_distribution(municipal_code, year)
+        all_onet = []
+
+        # 2. Gå igenom alla SNI, vikta dess sannolikhet med kopplad O*NET-fördelning
+        for _, sni_row in sni_dist.iterrows():
+            sni_code = sni_row['sni_code']
+            sni_prob = sni_row['prob']
+            # Hämtar lista av (onet_code, freq) för SNI
+            onet_links = self.get_onet_codes_with_freq_for_sni(sni_code)
+            if not onet_links:
+                continue  # Ingen SNI→O*NET-länk
+            total_freq = sum(freq for _, freq in onet_links)
+            for onet_code, freq in onet_links:
+                # Multiplicera SNI-fördelningen med O*NET-fördelningen (normaliserad inom SNI)
+                freq_norm = freq / total_freq if total_freq > 0 else 1.0 / len(onet_links)
+                all_onet.append({
+                    "onet_code": onet_code,
+                    "sni_code": sni_code,
+                    "freq": sni_prob * freq_norm  # Joint sannolikhet
+                })
+
+        # 3. Summera över alla SNI (gruppera O*NET)
+        onet_df = pd.DataFrame(all_onet)
+        profile = (
+            onet_df.groupby("onet_code")["freq"].sum()
+            .reset_index()
+            .sort_values("freq", ascending=False)
+            .reset_index(drop=True)
+        )
+
+        # 4. Gör om till sannolikhet (prob)
+        profile["prob"] = profile["freq"] / profile["freq"].sum()
+
+        return profile  # Kolumner: onet_code, freq, prob
 
     def generate_jobs_from_employers(self, employers_df):
         """
@@ -302,6 +357,20 @@ class ScenarioBuilder:
             "high": high/total
         }
         return props
+
+
+    # 1. Ladda occupation space EN gång, spara som self.onet_space_df
+    def load_onet_occupation_space_table(self, db_path="data/worm.sqlite3"):
+        conn = sqlite3.connect(db_path)
+        df = pd.read_sql("SELECT onet_code, chi, xi FROM onet_occupation_space", conn)
+        conn.close()
+        return df.set_index("onet_code")
+
+    # 2. Batchfunktion för att hämta chi/xi för en lista av onet_codes
+    def get_chi_xi_for_onet_codes(self, onet_codes):
+        # Hämtar en DataFrame (kan ha NaN om kod saknas!)
+        result = self.onet_space_df.reindex(onet_codes)
+        return result["chi"].values, result["xi"].values
 
     def generate_individuals(self, municipal_code, population, workforce_ratio, unemployment_rate, year=2024):
         """
@@ -381,38 +450,30 @@ class ScenarioBuilder:
                 rng.normal(mean, std, size=len(df)), 0, 1
             )
 
-        # 6. Sampla chi enligt utbildningsnivå
-        def sample_chi_for_education_levels(education_levels, rng):
-            chi = np.zeros(len(education_levels))
-            for i, level in enumerate(education_levels):
-                if level == "low":
-                    chi[i] = rng.lognormal(mean=np.log(0.13), sigma=0.32)
-                elif level == "medium":
-                    chi[i] = rng.lognormal(mean=np.log(0.32), sigma=0.27)
-                elif level == "high":
-                    chi[i] = rng.lognormal(mean=np.log(0.65), sigma=0.22)
-                else:
-                    chi[i] = rng.lognormal(mean=np.log(0.15), sigma=0.33)
-                # Om du vill klippa maximalt till 1.0
-                chi[i] = min(chi[i], 1.0)
-            return chi
+        # ---- Sampla (xi, chi) för ALLA individer ur occupation-space-KDE ----
 
-            # chi = np.zeros(len(education_levels))
-            # for i, level in enumerate(education_levels):
-            #     if level == "low":
-            #         chi[i] = np.clip(rng.normal(0.12, 0.03), 0.05, 0.20)
-            #     elif level == "medium":
-            #         chi[i] = np.clip(rng.normal(0.29, 0.06), 0.18, 0.40)
-            #     elif level == "high":
-            #         chi[i] = np.clip(rng.normal(0.7, 0.12), 0.35, 1.0)
-            #     else:
-            #         chi[i] = rng.uniform(0.05, 0.25)  # fallback: låg chi
-            # return chi
+        # Bygg KDE över occupation space
+        profile = self.municipality_occupational_profile(municipal_code, year)
+        chi_vals, xi_vals = self.get_chi_xi_for_onet_codes(profile["onet_code"].values)
+        weights = profile["prob"].values
 
-        df["chi"] = sample_chi_for_education_levels(df["education_level"].fillna("low"), rng)
+        # Hantera ev. saknade koder
+        valid = ~np.isnan(xi_vals) & ~np.isnan(chi_vals)
+        xi_vals = xi_vals[valid]
+        chi_vals = chi_vals[valid]
+        weights = weights[valid]
 
-        # 7. xi – fortfarande uniform slumpning över [0, 2pi]
-        df["xi"] = rng.uniform(0, 2 * np.pi, size=len(df))
+        # Sätt jitter (smidiga defaultvärden)
+        rel_bw = 0.1
+        sigma_chi = rel_bw * 1.0         # chi i [0,1]
+        sigma_xi  = rel_bw * 2 * np.pi   # xi i [0,2pi]
+
+        n_inds = len(df)
+        xi_sample, chi_sample = sample_from_centers_jitter(
+            xi_vals, chi_vals, weights, n_inds, sigma_xi, sigma_chi
+        )
+        df["xi"] = xi_sample
+        df["chi"] = chi_sample
 
         # 8. H (kompetensbredd) – som tidigare, eller gör beroende av chi om du vill
         H_cfg = indiv_defaults.get('initial_H', {})
