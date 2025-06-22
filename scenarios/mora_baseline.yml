@@ -5,7 +5,7 @@ description: >
   Baseline scenario for Mora.
   Testing transition from Falun baseline and working on standardized logging/statistics.
 start_year: 2024
-n_years: 5
+n_years: 1
 seed: 12345
 
 municipalities:
@@ -76,8 +76,8 @@ defaults:
         mean: 0.10
         std: 0.04
     initial_H:                # Initial kompetensbredd
-      min: 0.08
-      max: 0.25
+      min: 0.025
+      max: 0.1
     # Här kan du fylla på med fler default-attribut för individer!
 
   # === AGENT-PARAMETRAR: EMPLOYER ===
@@ -159,5 +159,10 @@ simulation:
       delta_H: -0.02
       delta_xi: 0
       duration: 0.5y     # 0.5 år
+    internal_job_change:
+      delta_chi: 0.01
+      delta_H: 0.1
+      delta_xi: 0
+      
 
 # --- Slut på scenariofil ---

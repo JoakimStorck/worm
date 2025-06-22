@@ -48,33 +48,6 @@ def angular_distance_vec(xi1, xi2):
     diff = np.abs(xi1[:, None] - xi2[None, :]) % (2 * np.pi)
     return np.minimum(diff, 2 * np.pi - diff)
 
-# def compute_utility_matrix(individuals_df, jobs_df, alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0):
-#     inds_chi = individuals_df["chi"].values  # (n_ind,)
-#     inds_xi = individuals_df["xi"].values
-#     inds_x = individuals_df["x"].values
-#     inds_y = individuals_df["y"].values
-
-#     jobs_chi = jobs_df["chi"].values  # (n_jobs,)
-#     jobs_xi = jobs_df["xi"].values
-#     jobs_x = jobs_df["x"].values
-#     jobs_y = jobs_df["y"].values
-
-#     # |chi_i - chi_j|
-#     chi_diff = np.abs(inds_chi[:, None] - jobs_chi[None, :])  # (n_ind, n_jobs)
-
-#     # angular distance (wrap-around)
-#     xi_diff = angular_distance_vec(inds_xi, jobs_xi)  # (n_ind, n_jobs)
-
-#     # Geografiskt avstånd
-#     dx = inds_x[:, None] - jobs_x[None, :]  # (n_ind, n_jobs)
-#     dy = inds_y[:, None] - jobs_y[None, :]
-#     geo_dist = np.sqrt(dx ** 2 + dy ** 2)  # (n_ind, n_jobs)
-
-#     # Utility: exponentiell penalty för diffar i occupation space och geografi
-#     U = np.exp(-alpha_chi * chi_diff - alpha_xi * xi_diff - alpha_geo * geo_dist)
-
-#     return U
-
 def compute_utility_matrix(
     individuals_df, jobs_df,
     alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0
@@ -189,42 +162,30 @@ def global_greedy_matching(
     return pd.DataFrame(results)
 
 
+import numpy as np
 
-# def optimal_assignment(individuals_df, jobs_df, alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0):
-#     """
-#     Utför optimal matchning mellan individer och jobb med hjälp av Hungarian-algoritmen.
-#     """
-#     n_inds = len(individuals_df)
-#     n_jobs = len(jobs_df)
-#     if n_inds == 0 or n_jobs == 0:
-#         return pd.DataFrame(columns=["individual_id", "job_id", "utility"])
-#     U = compute_utility_matrix(individuals_df, jobs_df, alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo)
+def chi_add(chi, delta):
+    """Lägg till delta till chi och klipp till [0,1]."""
+    return min(max(chi + delta, 0.0), 1.0)
 
-#     # Hitta giltiga rader och kolumner
-#     valid_row_mask = np.any(np.isfinite(U), axis=1)
-#     valid_col_mask = np.any(np.isfinite(U), axis=0)
-#     valid_inds = np.where(valid_row_mask)[0]
-#     valid_jobs = np.where(valid_col_mask)[0]
+def H_add(H, delta):
+    """Lägg till delta till H och klipp till [0,1]."""
+    return min(max(H + delta, 0.0), 1.0)
 
-#     if not np.any(valid_row_mask) or not np.any(valid_col_mask):
-#         return pd.DataFrame(columns=["individual_id", "job_id", "utility"])
+def xi_add(xi, delta):
+    """Lägg till delta till xi och wrap:a till [0, 2π)."""
+    return (xi + delta) % (2 * np.pi)
 
-#     U_valid = U[np.ix_(valid_row_mask, valid_col_mask)]
-
-#     if not np.all(np.isfinite(U_valid)):
-#         min_utility = np.nanmin(U_valid[np.isfinite(U_valid)]) if np.any(np.isfinite(U_valid)) else 0
-#         U_valid = np.where(np.isfinite(U_valid), U_valid, min_utility - 1e6)
-
-#     row_ind, col_ind = linear_sum_assignment(-U_valid)
-
-#     # Vektorisera plock av id och utility
-#     individual_ids = individuals_df.iloc[valid_inds[row_ind]]["individual_id"].values
-#     job_ids = jobs_df.iloc[valid_jobs[col_ind]]["job_id"].values
-#     utilities = U_valid[row_ind, col_ind]
-
-#     # Skapa DataFrame direkt
-#     return pd.DataFrame({
-#         "individual_id": individual_ids,
-#         "job_id": job_ids,
-#         "utility": utilities
-#     })
+def sample_from_centers_jitter(xi_vals, chi_vals, weights, n_samples, sigma_xi, sigma_chi):
+    weights = np.array(weights)
+    weights = weights / weights.sum()
+    power = 1.5   # eller 2 för ännu starkare fokus
+    adj_weights = weights ** power
+    adj_weights = adj_weights / adj_weights.sum()
+    indices = np.random.choice(len(xi_vals), size=n_samples, p=adj_weights)
+    #indices = np.random.choice(len(xi_vals), size=n_samples, p=weights)
+    xi_base = xi_vals[indices]
+    chi_base = chi_vals[indices]
+    xi = (xi_base + np.random.normal(0, sigma_xi, size=n_samples)) % (2 * np.pi)
+    chi = np.clip(chi_base + np.random.normal(0, sigma_chi, size=n_samples), 0, 1)
+    return xi, chi

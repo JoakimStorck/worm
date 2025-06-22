@@ -15,6 +15,7 @@ from core.matching import interleaved_multilevel_batch_matching, multilevel_exha
 from core.log import log
 from core.events import Event, EventQueue
 from core.log import EventLogger
+from core.occupations.utils import xi_add, chi_add, H_add
 
 import traceback
 
@@ -217,9 +218,14 @@ class World:
                 print(f"Unknown event: {event.event_type}")
             # Logging/statistics can be added here
 
+        # Simulation completed
+        self.close()
+
+
     def close(self):
         """ Shut down after simulation is done. Closes any open resources, e.g. log files.
         """
+        self.event_logger.close()
         if self.log_to_console:
             elapsed = time.time() - self.wallclock_start
             print(f"[TIMER] {elapsed:8.2f}s | simulation_ended")
@@ -244,6 +250,22 @@ class World:
                 raise ValueError(f"Unknown dist for quit_job: {timing['dist']}")
             for idx, t_quit in zip(self.individuals.index[employed_mask], durations):
                 event = Event(self.current_time + t_quit, idx, 'quit_job')
+                self.push_event(event)
+
+        # Schemalägg start_job_search för arbetslösa från början
+        unemployed_mask = self.individuals['status'] == 'unemployed'
+        n_unemp = unemployed_mask.sum()
+        if n_unemp > 0:
+            timing = self.cfg_reader.get_event_timing('start_job_search')
+            for idx in self.individuals.index[unemployed_mask]:
+                # Sätt första intervallet (t.ex. dra från exponential eller ta 0 om du vill starta direkt)
+                if timing['dist'] == 'exponential':
+                    interval = np.random.exponential(timing['mean'])
+                elif timing['dist'] == 'uniform':
+                    interval = np.random.uniform(timing['min'], timing['max'])
+                else:
+                    interval = 0.0  # Kör direkt
+                event = Event(self.current_time + interval, idx, 'start_job_search')
                 self.push_event(event)
 
         # Add new_month/new_year events if desired
@@ -373,13 +395,16 @@ class World:
             else:
                 interval = 28  # fallback, 4 veckor
             t_training = event.time + interval
+            # Get deltas
+            delta_H = np.random.uniform(0.05, 0.15)
+            delta_chi = np.random.uniform(0.01, 0.04)
             training_event = Event(
                 t_training,
                 idx,
                 'start_internal_training',
                 {
-                    'delta_H': np.random.uniform(0.05, 0.15),
-                    'delta_chi': np.random.uniform(0.01, 0.04)
+                    'delta_H': delta_H,
+                    'delta_chi': delta_chi,
                 }
             )
             self.push_event(training_event)
@@ -395,14 +420,19 @@ class World:
             else:
                 interval = 182  # fallback, 26 veckor
             t_change = event.time + interval
+            # Get effects
+            effects = self.cfg_reader.config['simulation']['event_effects']['internal_job_change']
+            delta_xi = effects.get('delta_xi', 0.0)
+            delta_chi = effects.get('delta_chi', 0.0)
+            delta_H = effects.get('delta_H', 0.0)
             change_event = Event(
                 t_change,
                 idx,
                 'internal_job_change',
                 {
-                    'delta_xi': np.random.uniform(2, 7),
-                    'delta_H': np.random.uniform(0.10, 0.25),
-                    'delta_chi': np.random.uniform(0.01, 0.03)
+                    'delta_xi': delta_xi,
+                    'delta_chi': delta_chi,
+                    'delta_H': delta_H
                 }
             )
             self.push_event(change_event)
@@ -442,44 +472,51 @@ class World:
             self.push_event(start_event)
             self.event_logger.log_event(self, event, extra={"event_detail": "match_completed", "job_id": job_id, "utility": utility})
         else:
+            # Anpassning: öka propensity_start_education vid missad matchning
+            current_prop = self.individuals.at[idx, 'propensity_start_education']
+            new_prop = min(current_prop + 0.1, 1.0)  # max 1.0
+            self.individuals.at[idx, 'propensity_start_education'] = new_prop
+
             timing = self.cfg_reader.get_event_timing('start_job_search')
             if timing['dist'] == 'exponential':
                 interval = np.random.exponential(timing['mean'])
             else:
-                # fallback/varning
                 interval = 30.0
             t_retry = event.time + interval
 
             retry_event = Event(t_retry, idx, 'start_job_search')
             self.push_event(retry_event)
-            self.event_logger.log_event(self, event, extra={"event_detail": "match_failed"})
+            self.event_logger.log_event(
+                self, event,
+                extra={"event_detail": "match_failed", "new_propensity_start_education": new_prop}
+            )
 
     def handle_start_education(self, event):
         idx = event.agent_id
         education_type = event.params.get('education_type', 'specialist')
         
         # Ta ut parametrar, med default och explicit kontroll mot None
-        delta_chi = event.params.get('delta_chi', 1.0)
+        delta_chi = event.params.get('delta_chi', 0.2)
         delta_H = event.params.get('delta_H', 0.1)
-        delta_xi = event.params.get('delta_xi', 10.0)  # relevant för 'broad'
+        delta_xi = event.params.get('delta_xi', 0.5)  # relevant för 'broad'
 
         # Om någon är None, använd default och logga en varning
         if delta_chi is None:
             print(f"[VARNING] delta_chi är None i start_education för individ {idx}. Default 1.0 används.")
-            delta_chi = 1.0
+            delta_chi = 0.2
         if delta_H is None:
             print(f"[VARNING] delta_H är None i start_education för individ {idx}. Default 0.1 används.")
             delta_H = 0.1
         if delta_xi is None:
             print(f"[VARNING] delta_xi är None i start_education för individ {idx}. Default 10.0 används.")
-            delta_xi = 10.0
+            delta_xi = 0.5
 
         if education_type == 'specialist':
-            self.individuals.at[idx, 'chi'] += delta_chi
-            self.individuals.at[idx, 'H'] += delta_H
+            self.individuals.at[idx, 'chi'] = chi_add(self.individuals.at[idx, 'chi'], delta_chi)
+            self.individuals.at[idx, 'H']   = H_add(self.individuals.at[idx, 'H'], delta_H)
         elif education_type == 'broad':
-            self.individuals.at[idx, 'H'] += delta_H
-            self.individuals.at[idx, 'xi'] += delta_xi
+            self.individuals.at[idx, 'H']   = H_add(self.individuals.at[idx, 'H'], delta_H)
+            self.individuals.at[idx, 'xi']  = xi_add(self.individuals.at[idx, 'xi'], delta_xi)
 
         self.individuals.at[idx, 'status'] = 'in_education'
         self.event_logger.log_event(self, event, extra={'education_type': education_type})
@@ -529,8 +566,8 @@ class World:
             print(f"[VARNING] delta_chi är None i start_internal_training för individ {idx}. Default 0.05 används.")
             delta_chi = 0.05
 
-        self.individuals.at[idx, 'H'] += delta_H
-        self.individuals.at[idx, 'chi'] += delta_chi
+        self.individuals.at[idx, 'H'] = H_add(self.individuals.at[idx, 'H'],delta_H)
+        self.individuals.at[idx, 'chi'] = chi_add(self.individuals.at[idx, 'chi'], delta_chi)
         self.event_logger.log_event(self, event, extra={'event_detail': 'start_internal_training'})
 
         # Möjlighet till rekursiv internutbildning (med låg sannolikhet)
@@ -572,26 +609,44 @@ class World:
             print(f"[VARNING] delta_chi är None i internal_job_change för individ {idx}. Default 0.03 används.")
             delta_chi = 0.03
 
-        self.individuals.at[idx, 'xi'] += delta_xi
-        self.individuals.at[idx, 'H'] += delta_H
-        self.individuals.at[idx, 'chi'] += delta_chi
+        self.individuals.at[idx, 'xi'] = xi_add(self.individuals.at[idx, 'xi'],delta_xi)
+        self.individuals.at[idx, 'H'] = H_add(self.individuals.at[idx, 'H'],delta_H)
+        self.individuals.at[idx, 'chi'] = chi_add(self.individuals.at[idx, 'chi'],delta_chi)
 
         self.event_logger.log_event(self, event, extra={'event_detail': 'internal_job_change'})
 
     def handle_career_break(self, event):
         idx = event.agent_id
         self.individuals.at[idx, 'status'] = 'career_break'
-        self.individuals.at[idx, 'chi'] -= event.params.get('delta_chi', 0.05)
-        self.individuals.at[idx, 'H'] -= event.params.get('delta_H', 0.02)
+        delta_chi = -1*event.params.get('delta_chi', 0.05)
+        delta_H = -1*event.params.get('delta_H', 0.02)
+        self.individuals.at[idx, 'chi'] = chi_add(self.individuals.at[idx, 'chi'], delta_chi)
+        self.individuals.at[idx, 'H'] = H_add(self.individuals.at[idx, 'H'], delta_H)
         self.event_logger.log_event(self, event, extra={'event_detail': 'career_break'})
         break_duration = event.params.get('duration', 0.5 * DAYS_PER_YEAR)
         end_event = Event(event.time + break_duration, idx, 'start_job_search')
         self.push_event(end_event)
 
     def handle_new_month(self, event):
+        from core.statistics.basic_stats import analyze_world
+
         year = event.params.get('year')
         month = event.params.get('month')
-        self.event_logger.log_event(self, event, extra={"year": year, "month": month}, print_line=True)
+
+        stats = analyze_world(self)
+        employed = stats['individual_status_counts'].get('employed', 0)
+        unemployed = stats['individual_status_counts'].get('unemployed', 0)
+        matched = stats.get('matched_pairs', 0)
+        unmatched_jobs = stats.get('unmatched_jobs', 0)
+        self.event_logger.log_event(self, event, extra={
+            "month": month,
+            "employed": employed,
+            "unemployed": unemployed,
+            "matched": matched,
+            "unmatched_jobs": unmatched_jobs
+        }, print_line=True)
+
+        #self.event_logger.log_event(self, event, extra={"year": year, "month": month}, print_line=True)
 
     def handle_new_year(self, event):
         from core.statistics.basic_stats import analyze_world
@@ -619,3 +674,7 @@ class World:
         else:
             return tr_cfg.get('large', 0.40)
 
+def assert_not_none(**kwargs):
+    for name, val in kwargs.items():
+        if val is None:
+            raise ValueError(f"Parametern {name} är None!")

@@ -484,7 +484,9 @@ def load_onet_occupation_space(n_clusters=50, db_path="data/worm.sqlite3"):
         return base_entropy * logsum
 
     H = skill_matrix.apply(scaled_entropy, axis=1)
-    xi = np.arctan2(skill_coords[:, 1], skill_coords[:, 0])
+
+    xi = np.arctan2(skill_coords[:, 1], skill_coords[:, 0])  # [-pi, pi)
+    xi = xi % (2 * np.pi)                                   # [0, 2*pi)
     chi = np.linalg.norm(skill_coords, axis=1)
 
     # Skala chi till [0, 1]
