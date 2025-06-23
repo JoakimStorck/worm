@@ -8,6 +8,201 @@ from core.occupations.utils import global_greedy_matching
 from core.log import log
 
 
+def multilevel_exhaustive_matching(
+    individuals, jobs,
+    alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0,
+    verbose=True
+):
+    inds = individuals.copy()
+    jobs_df = jobs.copy()
+
+    # Sätt kategorityper (snabbare filter)
+    for col in ("deso_code", "municipal_code"):
+        inds[col] = inds[col].astype("category")
+        jobs_df[col] = jobs_df[col].astype("category")
+
+    # Lägg till matched-flagga
+    inds["matched"] = False
+    jobs_df["matched"] = False
+
+    all_matchings = []
+
+    # --- 1. DeSO-nivå ---
+    changed = True
+    round_num = 1
+    while changed and (~inds["matched"]).any() and (~jobs_df["matched"]).any():
+        changed = False
+        deso_codes = inds.loc[~inds["matched"], "deso_code"].dropna().unique()
+        if verbose:
+            print(f"\n[ROUND {round_num}] DeSO-matchning, {len(deso_codes)} zoner")
+        for deso in deso_codes:
+            inds_batch = inds[(inds["deso_code"] == deso) & (~inds["matched"])]
+            jobs_batch = jobs_df[(jobs_df["deso_code"] == deso) & (~jobs_df["matched"])]
+            if len(inds_batch) == 0 or len(jobs_batch) == 0:
+                continue
+            matches = global_greedy_matching(
+                inds_batch, jobs_batch,
+                alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo
+            )
+            if len(matches) > 0:
+                changed = True
+                all_matchings.append(matches)
+                inds.loc[inds["individual_id"].isin(matches["individual_id"]), "matched"] = True
+                jobs_df.loc[jobs_df["job_id"].isin(matches["job_id"]), "matched"] = True
+                if verbose:
+                    print(f"  - DeSO {deso}: matched {len(matches)}")
+        round_num += 1
+
+    # --- 2. Kommun-nivå ---
+    changed = True
+    round_num = 1
+    while changed and (~inds["matched"]).any() and (~jobs_df["matched"]).any():
+        changed = False
+        muni_codes = inds.loc[~inds["matched"], "municipal_code"].dropna().unique()
+        if verbose:
+            print(f"\n[ROUND {round_num}] Kommun-matchning, {len(muni_codes)} kommuner")
+        for muni in muni_codes:
+            inds_batch = inds[(inds["municipal_code"] == muni) & (~inds["matched"])]
+            jobs_batch = jobs_df[(jobs_df["municipal_code"] == muni) & (~jobs_df["matched"])]
+            if len(inds_batch) == 0 or len(jobs_batch) == 0:
+                continue
+            matches = global_greedy_matching(
+                inds_batch, jobs_batch,
+                alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo
+            )
+            if len(matches) > 0:
+                changed = True
+                all_matchings.append(matches)
+                inds.loc[inds["individual_id"].isin(matches["individual_id"]), "matched"] = True
+                jobs_df.loc[jobs_df["job_id"].isin(matches["job_id"]), "matched"] = True
+                if verbose:
+                    print(f"  - Kommun {muni}: matched {len(matches)}")
+        round_num += 1
+
+    # --- 3. Global nivå ---
+    changed = True
+    round_num = 1
+    while changed and (~inds["matched"]).any() and (~jobs_df["matched"]).any():
+        changed = False
+        inds_batch = inds[~inds["matched"]]
+        jobs_batch = jobs_df[~jobs_df["matched"]]
+        if len(inds_batch) == 0 or len(jobs_batch) == 0:
+            break
+        matches = global_greedy_matching(
+            inds_batch, jobs_batch,
+            alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo
+        )
+        if len(matches) > 0:
+            changed = True
+            all_matchings.append(matches)
+            inds.loc[inds["individual_id"].isin(matches["individual_id"]), "matched"] = True
+            jobs_df.loc[jobs_df["job_id"].isin(matches["job_id"]), "matched"] = True
+            if verbose:
+                print(f"  - Globalt: matched {len(matches)}")
+        round_num += 1
+
+    # --- Sammanställ resultat ---
+    if all_matchings:
+        result = pd.concat(all_matchings, ignore_index=True)
+    else:
+        result = pd.DataFrame(columns=["individual_id", "job_id", "utility"])
+    return result
+
+
+# def multilevel_exhaustive_matching(
+#     individuals, jobs,
+#     alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0,
+#     verbose=True
+# ):
+#     inds = individuals.copy()
+#     jobs_df = jobs.copy()
+#     inds["deso_code"] = inds["deso_code"].astype(str)
+#     jobs_df["deso_code"] = jobs_df["deso_code"].astype(str)
+#     inds["municipal_code"] = inds["municipal_code"].astype(str)
+#     jobs_df["municipal_code"] = jobs_df["municipal_code"].astype(str)
+
+#     all_matchings = []
+#     total_matched = 0
+
+#     # 1. DeSO-nivå: Kör tills ingen mer matchning sker på denna nivå
+#     changed = True
+#     round_num = 1
+#     while changed and len(inds) > 0 and len(jobs_df) > 0:
+#         changed = False
+#         deso_codes = inds["deso_code"].dropna().unique()
+#         if verbose: print(f"\n[ROUND {round_num}] DeSO matchning, {len(deso_codes)} zoner")
+#         for deso in deso_codes:
+#             i_mask = inds["deso_code"] == deso
+#             j_mask = jobs_df["deso_code"] == deso
+#             inds_batch = inds[i_mask]
+#             jobs_batch = jobs_df[j_mask]
+#             if len(inds_batch) == 0 or len(jobs_batch) == 0:
+#                 continue
+#             matches = global_greedy_matching(
+#                 inds_batch, jobs_batch,
+#                 alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo
+#             )
+#             if len(matches) > 0:
+#                 changed = True
+#                 all_matchings.append(matches)
+#                 inds = inds[~inds["individual_id"].isin(matches["individual_id"])]
+#                 jobs_df = jobs_df[~jobs_df["job_id"].isin(matches["job_id"])]
+#                 if verbose:
+#                     print(f"  - DeSO {deso}: matched {len(matches)}")
+#         round_num += 1
+
+#     # 2. Kommunnivå: Kör tills ingen mer matchning sker på denna nivå
+#     changed = True
+#     round_num = 1
+#     while changed and len(inds) > 0 and len(jobs_df) > 0:
+#         changed = False
+#         muni_codes = inds["municipal_code"].dropna().unique()
+#         if verbose: print(f"\n[ROUND {round_num}] Kommun-matchning, {len(muni_codes)} kommuner")
+#         for muni in muni_codes:
+#             i_mask = inds["municipal_code"] == muni
+#             j_mask = jobs_df["municipal_code"] == muni
+#             inds_batch = inds[i_mask]
+#             jobs_batch = jobs_df[j_mask]
+#             if len(inds_batch) == 0 or len(jobs_batch) == 0:
+#                 continue
+#             matches = global_greedy_matching(
+#                 inds_batch, jobs_batch,
+#                 alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo
+#             )
+#             if len(matches) > 0:
+#                 changed = True
+#                 all_matchings.append(matches)
+#                 inds = inds[~inds["individual_id"].isin(matches["individual_id"])]
+#                 jobs_df = jobs_df[~jobs_df["job_id"].isin(matches["job_id"])]
+#                 if verbose:
+#                     print(f"  - Kommun {muni}: matched {len(matches)}")
+#         round_num += 1
+
+#     # 3. Global nivå: Kör tills ingen mer matchning sker
+#     changed = True
+#     round_num = 1
+#     while changed and len(inds) > 0 and len(jobs_df) > 0:
+#         changed = False
+#         matches = global_greedy_matching(
+#             inds, jobs_df,
+#             alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo
+#         )
+#         if len(matches) > 0:
+#             changed = True
+#             all_matchings.append(matches)
+#             inds = inds[~inds["individual_id"].isin(matches["individual_id"])]
+#             jobs_df = jobs_df[~jobs_df["job_id"].isin(matches["job_id"])]
+#             if verbose:
+#                 print(f"  - Globalt: matched {len(matches)}")
+#         round_num += 1
+
+#     # Sammanställ resultat
+#     if all_matchings:
+#         result = pd.concat(all_matchings, ignore_index=True)
+#     else:
+#         result = pd.DataFrame(columns=["individual_id", "job_id", "utility"])
+#     return result
+
 
 def interleaved_multilevel_batch_matching(
     individuals, jobs,
@@ -122,100 +317,6 @@ def interleaved_multilevel_batch_matching(
     if verbose:
         log(f"\nFinal summary: total matched: {total_matched}, time: {total_time:.2f} s")
 
-    if all_matchings:
-        result = pd.concat(all_matchings, ignore_index=True)
-    else:
-        result = pd.DataFrame(columns=["individual_id", "job_id", "utility"])
-    return result
-
-def multilevel_exhaustive_matching(
-    individuals, jobs,
-    alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0,
-    verbose=True
-):
-    inds = individuals.copy()
-    jobs_df = jobs.copy()
-    inds["deso_code"] = inds["deso_code"].astype(str)
-    jobs_df["deso_code"] = jobs_df["deso_code"].astype(str)
-    inds["municipal_code"] = inds["municipal_code"].astype(str)
-    jobs_df["municipal_code"] = jobs_df["municipal_code"].astype(str)
-
-    all_matchings = []
-    total_matched = 0
-
-    # 1. DeSO-nivå: Kör tills ingen mer matchning sker på denna nivå
-    changed = True
-    round_num = 1
-    while changed and len(inds) > 0 and len(jobs_df) > 0:
-        changed = False
-        deso_codes = inds["deso_code"].dropna().unique()
-        if verbose: print(f"\n[ROUND {round_num}] DeSO matchning, {len(deso_codes)} zoner")
-        for deso in deso_codes:
-            i_mask = inds["deso_code"] == deso
-            j_mask = jobs_df["deso_code"] == deso
-            inds_batch = inds[i_mask]
-            jobs_batch = jobs_df[j_mask]
-            if len(inds_batch) == 0 or len(jobs_batch) == 0:
-                continue
-            matches = global_greedy_matching(
-                inds_batch, jobs_batch,
-                alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo
-            )
-            if len(matches) > 0:
-                changed = True
-                all_matchings.append(matches)
-                inds = inds[~inds["individual_id"].isin(matches["individual_id"])]
-                jobs_df = jobs_df[~jobs_df["job_id"].isin(matches["job_id"])]
-                if verbose:
-                    print(f"  - DeSO {deso}: matched {len(matches)}")
-        round_num += 1
-
-    # 2. Kommunnivå: Kör tills ingen mer matchning sker på denna nivå
-    changed = True
-    round_num = 1
-    while changed and len(inds) > 0 and len(jobs_df) > 0:
-        changed = False
-        muni_codes = inds["municipal_code"].dropna().unique()
-        if verbose: print(f"\n[ROUND {round_num}] Kommun-matchning, {len(muni_codes)} kommuner")
-        for muni in muni_codes:
-            i_mask = inds["municipal_code"] == muni
-            j_mask = jobs_df["municipal_code"] == muni
-            inds_batch = inds[i_mask]
-            jobs_batch = jobs_df[j_mask]
-            if len(inds_batch) == 0 or len(jobs_batch) == 0:
-                continue
-            matches = global_greedy_matching(
-                inds_batch, jobs_batch,
-                alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo
-            )
-            if len(matches) > 0:
-                changed = True
-                all_matchings.append(matches)
-                inds = inds[~inds["individual_id"].isin(matches["individual_id"])]
-                jobs_df = jobs_df[~jobs_df["job_id"].isin(matches["job_id"])]
-                if verbose:
-                    print(f"  - Kommun {muni}: matched {len(matches)}")
-        round_num += 1
-
-    # 3. Global nivå: Kör tills ingen mer matchning sker
-    changed = True
-    round_num = 1
-    while changed and len(inds) > 0 and len(jobs_df) > 0:
-        changed = False
-        matches = global_greedy_matching(
-            inds, jobs_df,
-            alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo
-        )
-        if len(matches) > 0:
-            changed = True
-            all_matchings.append(matches)
-            inds = inds[~inds["individual_id"].isin(matches["individual_id"])]
-            jobs_df = jobs_df[~jobs_df["job_id"].isin(matches["job_id"])]
-            if verbose:
-                print(f"  - Globalt: matched {len(matches)}")
-        round_num += 1
-
-    # Sammanställ resultat
     if all_matchings:
         result = pd.concat(all_matchings, ignore_index=True)
     else:

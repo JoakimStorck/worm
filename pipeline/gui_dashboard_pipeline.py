@@ -1,5 +1,13 @@
 # pipeline/gui_dashboard_pipeline.py
 
+import cProfile
+import atexit
+
+profiler = cProfile.Profile()
+profiler.enable()
+atexit.register(profiler.dump_stats, "profile.out")
+
+
 import os
 import sys
 import glob
