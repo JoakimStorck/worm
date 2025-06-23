@@ -117,12 +117,12 @@ class World:
         Batch-matches individuals to jobs. If individuals is None, all unemployed individuals are used.
         Returns DataFrame with 'individual_id', 'job_id', etc.
         """
+        # Undvik onödiga kopior
         if individuals is None:
-            workforce = self.individuals[self.individuals['status'] == 'unemployed'].copy()
+            workforce = self.individuals[self.individuals['status'] == 'unemployed']
         else:
-            workforce = individuals.copy()
+            workforce = individuals  # Utgå från redan vald DataFrame
         
-        # I din matchningsfunktion eller precis före
         vacant_jobs = self.jobs[self.jobs['individual_id'].isna()]
 
         if mode == "interleaved_multilevel":
@@ -171,64 +171,75 @@ class World:
         job_idx = self.jobs['job_id'].isin(job_to_ind.index)
         self.jobs.loc[job_idx, 'individual_id'] = self.jobs.loc[job_idx, 'job_id'].map(job_to_ind)
 
-        n_emp = (self.individuals['status'] == 'employed').sum()
-        n_unemp = (self.individuals['status'] == 'unemployed').sum()
-        n_notlf = (self.individuals['status'] == 'not_in_labor_force').sum()
-        n_vacant = (self.jobs['individual_id'].isna()).sum()
-
-        self.event_logger.log_event(
-            self,
-            Event(0.00, None, "batch_matching"),
-            extra={
-                "employed": n_emp,
-                "unemployed": n_unemp,
-                "not_in_labor_force": n_notlf,
-                "vacant_jobs": n_vacant
-            }
-        )
-
     def simulate(self):
         self.wallclock_start = time.time()
         self._init_events()
 
-        for ev in self.event_queue.queue:
-            if not isinstance(ev.event_type, str):
-                print("Event type is not str!", ev)
+        n_emp = (self.individuals['status'] == 'employed').sum()
+        n_unemp = (self.individuals['status'] == 'unemployed').sum()
+        n_notlf = (self.individuals['status'] == 'not_in_labor_force').sum()
+        n_vacant = (self.jobs['individual_id'].isna()).sum()
+        self.event_logger.log_event(
+            self,
+            Event(0.00, None, "simulation_started"),
+            extra={
+                "employed": n_emp,
+                "unemployed": n_unemp,
+                "not_in_labor_force": n_notlf,
+                "vacant_jobs": n_vacant,
+                "timer":  0.0
+            }
+        )
 
         while not self.event_queue.is_empty():
             event = self.event_queue.pop()
-        
             self.current_time = event.time
-            handler = self.event_handlers.get(event.event_type)
+
             if event.time > self.simulation_end_time:
                 print(f"FEL: Executing event {event.event_type} at {event.time}, which is after simulation end time {self.simulation_end_time}")
-                break  # <-- AVBRYT SIMULERINGEN!
+                break
 
-            if handler:
-                try:
-                    handler(event)
-                except Exception as e:
-                    print(f"[FATAL] Exception in handler for event {event.event_type} (agent {event.agent_id}): {e}")
-                    import traceback
-                    traceback.print_exc()
-                    print(f"[DEBUG] event.params: {getattr(event, 'params', None)}")
-                    print(f"[DEBUG] individual row: {self.individuals.loc[[event.agent_id]] if event.agent_id in self.individuals.index else 'N/A'}")
-                    raise
-            else:
+            handler = self.event_handlers.get(event.event_type)
+            if handler is None:
                 print(f"Unknown event: {event.event_type}")
-            # Logging/statistics can be added here
+                continue
+
+            try:
+                handler(event)
+            except Exception as e:
+                print(f"[FATAL] Exception in handler for event {event.event_type} (agent {event.agent_id}): {e}")
+                import traceback
+                traceback.print_exc()
+                print(f"[DEBUG] event.params: {getattr(event, 'params', None)}")
+                print(f"[DEBUG] individual row: {self.individuals.loc[[event.agent_id]] if event.agent_id in self.individuals.index else 'N/A'}")
+                raise
+
+            # Logging/statistics kan läggas här, men håll den så lätt som möjligt
 
         # Simulation completed
-        self.close()
+
+        n_emp = (self.individuals['status'] == 'employed').sum()
+        n_unemp = (self.individuals['status'] == 'unemployed').sum()
+        n_notlf = (self.individuals['status'] == 'not_in_labor_force').sum()
+        n_vacant = (self.jobs['individual_id'].isna()).sum()
+        self.event_logger.log_event(
+            self,
+            Event(self.current_time, None, "simulation_ended"),
+            extra={
+                "employed": n_emp,
+                "unemployed": n_unemp,
+                "not_in_labor_force": n_notlf,
+                "vacant_jobs": n_vacant,
+                "timer":  time.time()-self.wallclock_start
+            }
+        )
+
 
 
     def close(self):
         """ Shut down after simulation is done. Closes any open resources, e.g. log files.
         """
         self.event_logger.close()
-        if self.log_to_console:
-            elapsed = time.time() - self.wallclock_start
-            print(f"[TIMER] {elapsed:8.2f}s | simulation_ended")
 
     def _init_events(self):
         employed_mask = self.individuals['status'] == 'employed'
