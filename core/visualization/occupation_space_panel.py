@@ -2,74 +2,74 @@
 
 import numpy as np
 from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, HoverTool
-from bokeh.models import Dropdown, CheckboxGroup, CustomJS
-
+from bokeh.models import (
+    ColumnDataSource, HoverTool, CheckboxGroup, MultiSelect, TabPanel
+)
 from core.ui_state import UIState
 from core.visualization.utils import add_occ_coordinates
 
-from bokeh.models import MultiSelect
+def make_panel(replay_controller, ui_state, indiv_source, job_source=None, emp_source=None):
+    panel = OccupationSpacePanel(
+        replay_controller=replay_controller,
+        ui_state=ui_state,
+        indiv_source=indiv_source,
+        job_source=job_source,
+        emp_source=emp_source
+    )
+    return TabPanel(child=panel.layout, title="Occupation Space")
 
 class OccupationSpacePanel:
-    KWARGS = ['replay_controller', 'show_jobs', 'show_pathways', 'show_H_circle', 'width', 'height', 'tools', 'ui_state']
     def __init__(
         self,
         replay_controller,
+        ui_state,
+        indiv_source,
+        job_source=None,
+        emp_source=None,
         show_jobs=True,
         show_pathways=False,
         show_H_circle=False,
-        width=500,
-        height=700,
-        tools="lasso_select,box_select,reset,pan,wheel_zoom,save",
-        ui_state=None
+        tools="lasso_select,box_select,reset,pan,wheel_zoom,save"
     ):
         self.replay = replay_controller
+        self.ui_state = ui_state
+        self.indiv_source = indiv_source
+        self.job_source = job_source
+        self.emp_source = emp_source
         self.show_jobs = show_jobs
         self.show_pathways = show_pathways
         self.show_H_circle = show_H_circle
-        self.width = width
-        self.height = height
         self.tools = tools
 
-        self.ui_state = ui_state
-
-        # Initierar datakällor
-        self.indiv_source = replay_controller.get_indiv_source()
-        self.job_source = ColumnDataSource(self._get_job_data().to_dict("list")) if show_jobs else None
+        # Kopplingslinjer individ-jobb
         self.employment_lines_source = ColumnDataSource(data=dict(xs=[], ys=[]))
 
-        # Skapar plot
+        # --- Skapa figur ---
         self.plot = figure(
             title="Occupation Space",
             match_aspect=True,
             sizing_mode="stretch_both",
-            tools=self.tools
+            height_policy="max",
+            min_height=800,
+            tools=self.tools,
         )
 
-        self.plot.min_width = 600
-        self.plot.min_height = 600
-        self.plot.max_width = 2000
-        self.plot.max_height = 1200
-        self.plot.sizing_mode = "stretch_both"
-
-
         from bokeh.transform import factor_cmap
-
-        # Lägg till detta före skapandet av scatter:
         statuses = ["employed", "unemployed", "not_in_labor_force"]
         palette = ["green", "red", "gray"]
 
+        # Individer
         self.indiv_renderer = self.plot.scatter(
             'x_occ', 'y_occ',
             source=self.indiv_source,
             color=factor_cmap('status', palette=palette, factors=statuses),
             alpha=0.4,
             size=3,
-            legend_field="status",        # så att legend visar färgerna
+            legend_field="status",
             selection_color="orange"
         )
 
-        # Jobb
+        # Jobb (yrken)
         if self.show_jobs and self.job_source:
             self.plot.scatter(
                 'x_occ', 'y_occ',
@@ -81,34 +81,46 @@ class OccupationSpacePanel:
                 selection_color="green"
             )
 
+        # Arbetsgivare (employers)
+        if self.emp_source is not None:
+            self.emp_renderer = self.plot.scatter(
+                'x_occ', 'y_occ',
+                source=self.emp_source,
+                color="navy",
+                alpha=0.7,
+                size=8,
+                legend_label="Employers",
+                marker="diamond",
+                selection_color="blue"
+            )
+        else:
+            self.emp_renderer = None
 
+        # Linjer mellan individer och jobb
         self.lines_renderer = self.plot.multi_line(
             xs="xs", ys="ys",
             source=self.employment_lines_source,
             line_color="black", line_alpha=0.08, line_width=1
         )
 
+        # --- UI-kontroller ---
         self.status_select = MultiSelect(
             title="Visa status:",
-            value=statuses,     # Start med alla valda
+            value=statuses,
             options=[(s, s.capitalize()) for s in statuses]
         )
         self.status_select.on_change("value", lambda attr, old, new: self.update())
 
         self.show_employment_lines = CheckboxGroup(
-            labels=["Visa jobb-linjer"], 
+            labels=["Visa jobb-linjer"],
             active=[0] if self.show_pathways else []
         )
         self.show_employment_lines.on_change("active", lambda attr, old, new: self.update())
 
-        # Pathways och H-cirklar – reserverat för utbyggnad
-
-        # Hover och legend
-        # Hoververktyg – hanteras via UIState
+        # --- Hover och legend ---
         self.hover = HoverTool(tooltips=[("ID", "@individual_id")], renderers=[self.indiv_renderer])
         if self.ui_state and self.ui_state.show_hover:
             self.plot.add_tools(self.hover)
-
         if self.ui_state:
             self.ui_state.subscribe(self.set_hover_visibility)
 
@@ -116,17 +128,16 @@ class OccupationSpacePanel:
         self.plot.legend.click_policy = "hide"
 
         from bokeh.layouts import column, row
-
         self.layout = column(
-            row(self.status_select, self.show_employment_lines, sizing_mode="stretch_both"),
+            row(self.status_select, self.show_employment_lines, sizing_mode="fixed"),
             self.plot,
-            sizing_mode="stretch_both"
+            sizing_mode="stretch_both",
+            height=None,
         )
 
-        # Koppla panelen till replay-uppdateringar
-        self.replay.subscribe(self.update)
-
-        self.update() 
+        if self.replay:
+            self.replay.subscribe(self.update)
+        self.update()
 
     def _get_indiv_data(self):
         state = self.replay.get_state()
@@ -134,7 +145,6 @@ class OccupationSpacePanel:
         if "x_occ" not in df or "y_occ" not in df:
             df["x_occ"] = df["chi"] * np.cos(df["xi"])
             df["y_occ"] = df["chi"] * np.sin(df["xi"])
-        # TA BORT GEOMETRY om den finns
         if "geometry" in df.columns:
             df = df.drop(columns=["geometry"])
         return df
@@ -153,10 +163,11 @@ class OccupationSpacePanel:
             jobs["size_marker"] = 2 + 1 * np.log1p(jobs["employer_size"])
         else:
             jobs["size_marker"] = 6
-
         return jobs
 
     def update(self):
+        if self.replay is None:
+            return
         df = self.replay.get_state()["individuals"]
         df = add_occ_coordinates(df)
         if "geometry" in df.columns:
@@ -167,7 +178,6 @@ class OccupationSpacePanel:
 
         # Hantera linjer till jobb
         if 0 in self.show_employment_lines.active:
-            # Endast employed
             employed = filtered_df[filtered_df["status"] == "employed"].copy()
             if len(employed) > 0:
                 jobs = self.replay.get_state()["jobs"]
@@ -184,7 +194,6 @@ class OccupationSpacePanel:
                 self.employment_lines_source.data = dict(xs=[], ys=[])
         else:
             self.employment_lines_source.data = dict(xs=[], ys=[])
-
 
     def set_hover_visibility(self, visible: bool):
         if visible:

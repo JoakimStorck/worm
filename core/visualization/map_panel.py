@@ -5,15 +5,37 @@ import pandas as pd
 import geopandas as gpd
 from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource, HoverTool, CheckboxGroup, CustomJS
-from bokeh.models import Button
+from bokeh.models import Button, TabPanel
 from bokeh.io import curdoc
 
 from bokeh.layouts import row, column
 from core.visualization.utils import gdf_to_bokeh_patches, gdf_points_to_xy
 from core.ui_state import UIState
 
+
+def make_panel(
+    replay_controller,
+    muni_gdf,
+    selected_codes_or_names,
+    layers,
+    gdf_layers,
+    ui_state,
+    indiv_source,
+    emp_source,
+):
+    panel = MapPanel(
+        replay_controller,
+        muni_gdf,
+        selected_codes_or_names,
+        layers=layers,
+        gdf_layers=gdf_layers,
+        ui_state=ui_state,
+        indiv_source=indiv_source,
+        emp_source=emp_source
+    )
+    return TabPanel(child=panel.layout, title="Karta")
+
 class MapPanel:
-    KWARGS = ['replay_controller', 'muni_gdf', 'selected_codes_or_names', 'layers', 'gdf_layers', 'width', 'height', 'tools', 'ui_state']
     def __init__(
         self,
         replay_controller,
@@ -21,36 +43,30 @@ class MapPanel:
         selected_codes_or_names,
         layers=None,
         gdf_layers=None,
-        width=600,
-        height=700,
         tools="lasso_select,box_select,box_zoom,reset,pan,wheel_zoom,save",
-        ui_state=None
+        ui_state=None,
+        indiv_source=None,
+        emp_source=None,
     ):
         self.replay = replay_controller
         self.muni_gdf = muni_gdf
         self.selected_codes_or_names = selected_codes_or_names
         self.layers = layers or ["municipalities"]
         self.gdf_layers = gdf_layers or {}
-        self.width = width
-        self.height = height
         self.tools = tools
         self.ui_state = ui_state
+        self.indiv_source = indiv_source
+        self.emp_source = emp_source
 
-        # Kontroll
-        print(muni_gdf.crs)
-
-        # Checkbox för hover med id
+        # Checkbox för hover
         self.show_hover_checkbox = CheckboxGroup(labels=["Visa ID vid hover"], active=[])
-        self.hover = None  # Sätts i _build_panel()
+        self.hover = None
 
-        # Initiera
         self._build_panel()
 
         if self.ui_state:
             self.ui_state.subscribe(self.set_hover_visibility)
         self.show_hover_checkbox.on_change("active", self.on_checkbox_change)
-
-        # Koppla till replay
         self.replay.subscribe(self.update)
 
     def _build_panel(self):
@@ -66,18 +82,12 @@ class MapPanel:
             "individuals": "#000000",
         }
 
-
-        print("Valda kommuner (selected_codes_or_names):", self.selected_codes_or_names)
-        print("Typ på varje:", [type(x) for x in self.selected_codes_or_names])
-        print("Antal rader i muni_gdf:", len(self.muni_gdf))
-        print("Kommunkoder i muni_gdf:", self.muni_gdf["municipal_code"].unique())
-
-        # Skapa lista av bara strängar (kommunnamn)
+        # Filtrera valda kommuner för att sätta zoom-bounds
         selected_names = [v.lower() for v in self.selected_codes_or_names if isinstance(v, str)]
         if selected_names:
             name_mask = self.muni_gdf["municipality"].str.lower().str.contains('|'.join(selected_names))
         else:
-            name_mask = False  # Eller: name_mask = pd.Series([False] * len(self.muni_gdf))
+            name_mask = False
 
         selected = self.muni_gdf[
             self.muni_gdf["municipal_code"].isin(self.selected_codes_or_names) |
@@ -88,17 +98,19 @@ class MapPanel:
             bounds = selected.total_bounds  # [minx, miny, maxx, maxy]
             margin_x = (bounds[2] - bounds[0]) * 0.05
             margin_y = (bounds[3] - bounds[1]) * 0.05
-
-        # Exempel: bounds = [minx, miny, maxx, maxy]
+        else:
+            bounds = [0, 0, 1, 1]
+            margin_x = margin_y = 0
 
         self.figure = figure(
             title="Karta: valda lager",
-            width=self.width,
-            height=self.height,
             match_aspect=True,
             tools=self.tools,
+            sizing_mode="stretch_both",
+            aspect_ratio=1,
+            height=800,
             x_range=(bounds[0] - margin_x, bounds[2] + margin_x),
-            y_range=(bounds[1] - margin_y, bounds[3] + margin_y)
+            y_range=(bounds[1] - margin_y, bounds[3] + margin_y),
         )
 
         self.renderers = {}
@@ -112,10 +124,12 @@ class MapPanel:
                 ]
                 if not selected.empty:
                     source = ColumnDataSource(gdf_to_bokeh_patches(selected))
-                    renderer = self.figure.patches('xs', 'ys', source=source,
-                                                   fill_color=colors.get(layer, "#CCCCCC"),
-                                                   line_color="#888888",
-                                                   alpha=0.8, legend_label="Kommun")
+                    renderer = self.figure.patches(
+                        'xs', 'ys', source=source,
+                        fill_color=colors.get(layer, "#CCCCCC"),
+                        line_color="#888888",
+                        alpha=0.8, legend_label="Kommun"
+                    )
                     self.renderers[layer] = renderer
             else:
                 gdf = self.gdf_layers.get(layer)
@@ -140,18 +154,14 @@ class MapPanel:
                         )
                         self.renderers[layer] = renderer
 
-        # Points: Employers och Individuals läses ur REPLAY
+        # Punktlager: Employers och Individuals
         self.emp_renderer = None
         self.indiv_renderer = None
-        self.emp_source = None
-        self.indiv_source = None
         self.update_points()
 
-        # Hover och legend
+        # Hover för individer
         if self.indiv_renderer:
-            if self.indiv_renderer:
-                self.hover = HoverTool(tooltips=[("ID", "@individual_id")], renderers=[self.indiv_renderer])
-                # Lägg INTE till hover här ännu
+            self.hover = HoverTool(tooltips=[("ID", "@individual_id")], renderers=[self.indiv_renderer])
 
         self.figure.legend.location = "top_left"
         self.figure.legend.click_policy = "hide"
@@ -166,21 +176,24 @@ class MapPanel:
         self.checkbox_group.js_on_change('active', callback)
 
         self.zoom_button = Button(label="Zooma till valda kommuner", width=220)
-        def zoom_callback():
-            self.zoom_to_selected()
-        self.zoom_button.on_click(zoom_callback)
+        self.zoom_button.on_click(self.zoom_to_selected)
 
-
-        # Lägg till i layout sist i _build_panel
-        self.layout = row(self.figure, column(self.checkbox_group, self.show_hover_checkbox, self.zoom_button))
+        # I _build_panel
+        control_column = column(self.checkbox_group, self.show_hover_checkbox, self.zoom_button, width=220)
+        self.layout = row(
+            self.figure,
+            control_column,
+            sizing_mode="stretch_both",
+            height=800,
+        )
 
         curdoc().add_next_tick_callback(self.zoom_to_selected)
         curdoc().add_next_tick_callback(self._lock_range)
+        self.zoom_to_selected()
 
     def _lock_range(self):
         self.figure.x_range.bounds = (self.figure.x_range.start, self.figure.x_range.end)
         self.figure.y_range.bounds = (self.figure.y_range.start, self.figure.y_range.end)
-
 
     def zoom_to_selected(self):
         selected = self.muni_gdf[
@@ -199,43 +212,37 @@ class MapPanel:
         self.figure.x_range.bounds = (self.figure.x_range.start, self.figure.x_range.end)
         self.figure.y_range.bounds = (self.figure.y_range.start, self.figure.y_range.end)
 
-        print("Zoom bounds:", bounds)
-        print("x_range före:", self.figure.x_range.start, self.figure.x_range.end)
-        print("y_range före:", self.figure.y_range.start, self.figure.y_range.end)
-
-
     def update_points(self):
         # EMPLOYERS
         state = self.replay.get_state()
-        employers = state["employers"] if "employers" in state else None
+        employers = state.get("employers")
         if employers is not None and not employers.empty:
             emp_df = gdf_points_to_xy(employers, id_col="employer_id")
-            self.emp_source = ColumnDataSource(emp_df)
+            if self.emp_source is None:
+                self.emp_source = ColumnDataSource(emp_df)
+            else:
+                self.emp_source.data = emp_df.to_dict("list")
             if not self.emp_renderer:
                 self.emp_renderer = self.figure.scatter(
-                    "x", "y", source=self.emp_source, size=6,
-                    color="#1f77b4", alpha=0.6, legend_label="Employers"
+                    "x", "y", source=self.emp_source, size=8,
+                    color="#1f77b4", alpha=0.7, legend_label="Employers", marker="diamond"
                 )
-            else:
-                self.emp_renderer.data_source.data = emp_df.to_dict("list")
 
         # INDIVIDUALS
         if self.indiv_source is None:
             self.indiv_source = self.replay.get_indiv_source()
+        else:
+            self.indiv_source.data = dict(self.replay.get_indiv_source().data)
+        if not self.indiv_renderer:
             self.indiv_renderer = self.figure.scatter(
                 'x', 'y', source=self.indiv_source, size=3,
                 color="#000000", alpha=0.4, legend_label="Individuals",
                 selection_color="orange"
             )
-        else:
-            # Uppdatera bara datan i den redan delade källan
-            self.indiv_source.data = self.replay.get_indiv_source().data
-
 
     def update(self):
         self.update_points()
         self.zoom_to_selected()
-
 
     def on_checkbox_change(self, attr, old, new):
         if self.ui_state:
@@ -248,5 +255,3 @@ class MapPanel:
         else:
             if self.hover and self.hover in self.figure.tools:
                 self.figure.tools.remove(self.hover)
-
-

@@ -179,6 +179,7 @@ class World:
         n_unemp = (self.individuals['status'] == 'unemployed').sum()
         n_notlf = (self.individuals['status'] == 'not_in_labor_force').sum()
         n_vacant = (self.jobs['individual_id'].isna()).sum()
+        log(f"Simulation started: {len(self.individuals)} individuals, {len(self.jobs)} jobs, {len(self.employers)} employers.")
         self.event_logger.log_event(
             self,
             Event(0.00, None, "simulation_started"),
