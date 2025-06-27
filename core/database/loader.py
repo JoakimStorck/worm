@@ -480,7 +480,8 @@ def load_onet_occupation_space(n_clusters=50, db_path="data/worm.sqlite3"):
         values = row.values + 1e-9
         probs = values / values.sum()
         base_entropy = entropy(probs, base=2)
-        logsum = np.log2(values.sum())
+        #logsum = np.log2(values.sum())
+        logsum=1
         return base_entropy * logsum
 
     H = skill_matrix.apply(scaled_entropy, axis=1)
@@ -489,12 +490,11 @@ def load_onet_occupation_space(n_clusters=50, db_path="data/worm.sqlite3"):
     xi = xi % (2 * np.pi)                                   # [0, 2*pi)
     chi = np.linalg.norm(skill_coords, axis=1)
 
+    # --- SKALNING (med bevarad H/chi-kvot) ---
     # Skala chi till [0, 1]
     chi_min, chi_max = chi.min(), chi.max()
-    if chi_max > chi_min:
-        chi_scaled = (chi - chi_min) / (chi_max - chi_min)
-    else:
-        chi_scaled = np.zeros_like(chi)
+    chi_scaled = chi / chi_max
+    H_scaled = H / chi_max
 
     occ_titles = occ_df.set_index('onet_code').reindex(skill_matrix.index)['title']
 
@@ -506,7 +506,7 @@ def load_onet_occupation_space(n_clusters=50, db_path="data/worm.sqlite3"):
         'cluster': labels,
         'chi': chi_scaled,    # <-- använd skalad chi här!
         'xi': xi,
-        'h': H.values
+        'h': H_scaled.values
     })    
 
     # -- Omordning och klusternamn (lägg in om du vill, annars ta bort eller importera egna funktioner) --

@@ -1,25 +1,20 @@
 import heapq
-
-class Event:
-    def __init__(self, time, agent_id, event_type, params=None):
-        self.time = time
-        self.agent_id = agent_id
-        self.event_type = event_type
-        self.params = params or {}
-
-    def __lt__(self, other):
-        return self.time < other.time
+import itertools
 
 class EventQueue:
     def __init__(self):
         self.queue = []
+        self.counter = itertools.count()  # unik sekvens för att skilja events
 
     def push(self, event):
-        heapq.heappush(self.queue, event)
+        # Lägg till en unik sekvens för att hantera events med exakt samma tid
+        heapq.heappush(self.queue, (event["time"], next(self.counter), event))
 
     def pop(self):
-        return heapq.heappop(self.queue)
+        return heapq.heappop(self.queue)[2]  # returnera bara event-dict
+
+    def peek(self):
+        return self.queue[0][2] if self.queue else None  # returnera bara event-dict
 
     def is_empty(self):
         return not self.queue
-

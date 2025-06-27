@@ -11,19 +11,15 @@ def analyze_world(world):
     """
     Returns extended statistics about the current world.
     """
-    n_unique_individuals = len(world.matchings['individual_id'].unique()) if not world.matchings.empty else 0
-    n_unique_jobs = len(world.matchings['job_id'].unique()) if not world.matchings.empty else 0
 
     stats = {
         "total_individuals": len(world.individuals),
-        "individual_status_counts": world.individuals['status'].value_counts().to_dict(),
         "total_jobs": len(world.jobs),
         "total_employers": len(world.employers),
-        "matched_pairs": len(world.matchings),
-        "unique_matched_individuals": n_unique_individuals,
-        "unique_matched_jobs": n_unique_jobs,
-        "unmatched_individuals_in_workforce": len(world.individuals[(world.individuals['status'] == 'unemployed') & (~world.individuals['individual_id'].isin(world.matchings['individual_id']) if not world.matchings.empty else True)]),
-        "unmatched_jobs": world.jobs['individual_id'].isna().sum()
+        "employed_individuals": len(world.individuals[(world.individuals['status'] == 'employed')]),
+        "unemployed_individuals": len(world.individuals[(world.individuals['status'] == 'unemployed')]),
+        "unmatched_jobs": world.jobs['individual_id'].isna().sum(),
+        "individuals_not_in_labour_force": len(world.individuals[(world.individuals['status'] == 'not_in_labor_force')]),   
     }
     return stats
 

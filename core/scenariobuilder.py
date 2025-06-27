@@ -192,6 +192,7 @@ class ScenarioBuilder:
             sni_code = rng.choice(sni_dist['sni_code'], p=sni_dist['prob'])
 
             employers.append({
+                'employer_id': f"{municipal_code}_e{len(employers):06d}",
                 'municipal_code': municipal_code,
                 'layer': layer,
                 'zone_code': row.get('zone_code', None),
@@ -294,8 +295,9 @@ class ScenarioBuilder:
 
     def generate_jobs_from_employers(self, employers_df):
         """
-        Skapar DataFrame med alla jobb. 
+        Skapar DataFrame med alla jobb.
         Alla har nödvändiga kolumner för utility-matchning: job_id, chi, xi, x, y.
+        Lägger även in medianposition i occ-space för varje arbetsgivare.
         """
         jobs = []
         job_id = 0
@@ -315,8 +317,8 @@ class ScenarioBuilder:
 
                 jobs.append({
                     "job_id": f"J{job_id:05d}",
-                    "employer_id": row.get('employer_id', idx),     # använd employer_id om det finns, annars index
-                    "individual_id" : None,                         # Ingen matchning än
+                    "employer_id": row.get('employer_id', idx),
+                    "individual_id" : None,
                     "municipal_code": row['municipal_code'],
                     "layer": row['layer'],
                     "zone_code": row['zone_code'],
@@ -334,7 +336,18 @@ class ScenarioBuilder:
         df = pd.DataFrame(jobs)
         df["deso_code"] = assign_deso_code(df, self.geoworld.deso_zones, x_col="x", y_col="y")
 
-        return df
+        # --- Median av occ-space för arbetsgivare ---
+        occ_stats = df.groupby('employer_id').agg({
+            'chi': 'median',
+            'xi':  'median'
+        }).rename(columns={'chi': 'chi_median', 'xi': 'xi_median'})
+
+        # Lägg till medianvärden till employers_df
+        employers_df = employers_df.set_index('employer_id').join(occ_stats, how='left').reset_index()
+        employers_df['x_occ'] = employers_df['chi_median'] * np.cos(employers_df['xi_median'])
+        employers_df['y_occ'] = employers_df['chi_median'] * np.sin(employers_df['xi_median'])
+
+        return df, employers_df
 
     def get_education_props(self, municipal_code, year):
 
@@ -538,7 +551,7 @@ class ScenarioBuilder:
 
             # Jobb
             t_job0 = time.time()
-            jobs = self.generate_jobs_from_employers(employers)
+            jobs, employers = self.generate_jobs_from_employers(employers)
             t_job1 = time.time()
             log(f"[TIMER]  ...generera jobb: {t_job1-t_job0:.2f} s")
 

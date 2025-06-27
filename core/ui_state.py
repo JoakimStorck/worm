@@ -1,4 +1,3 @@
-
 # core/ui_state.py
 
 class UIState:
@@ -13,3 +12,11 @@ class UIState:
         self.show_hover = value
         for cb in self._subscribers:
             cb(value)
+
+    def reset(self):
+        # Om du i framtiden vill återställa state, gör det här
+        self.show_hover = False
+        # Nollställ ev. annan state här
+        # Notifiera subscribers om det behövs
+        for cb in self._subscribers:
+            cb(self.show_hover)

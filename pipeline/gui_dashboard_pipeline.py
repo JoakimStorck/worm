@@ -1,38 +1,30 @@
-# pipeline/gui_dashboard_pipeline.py
-
-import cProfile
-import atexit
-
-profiler = cProfile.Profile()
-profiler.enable()
-atexit.register(profiler.dump_stats, "profile.out")
-
-
 import os
 import sys
 import glob
 import pandas as pd
-import yaml
+import traceback
+import ast
 
+from bokeh.io import curdoc
+from bokeh.models import Tabs, Select, Button, Div
+from bokeh.layouts import column
+from bokeh.models import ColumnDataSource
+
+# Gör projektets root path tillgänglig för imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.configreader import ConfigReader
-
 from core.scenario_result import ScenarioResult
 from core.replay_controller import ReplayController
-
-from core.panel_manager import PANEL_REGISTRY, PanelManager
-
 from core.geography.geoworld import GeoWorld
 from core.scenario_runner import run_and_log_scenario
 from core.ui_state import UIState
 
-from bokeh.layouts import row, column
-from bokeh.io import curdoc
-from bokeh.models import Select, Div, Button
-from bokeh.events import ButtonClick
+# Panel-funktioner
+from core.visualization.occupation_space_panel import make_panel as occspace_panel
+from core.visualization.map_panel import make_panel as map_panel
 
-# --- 1. Registry-säkerställning ---
+# --- 1. Säkerställ registry för simuleringskörningar ---
 REGISTRY_PATH = "output/runs_registry.csv"
 REGISTRY_HEADER = "run_id,output_path,scenario_name,timestamp\n"
 if not os.path.exists(REGISTRY_PATH):
@@ -40,49 +32,100 @@ if not os.path.exists(REGISTRY_PATH):
     with open(REGISTRY_PATH, "w") as f:
         f.write(REGISTRY_HEADER)
 
-# --- 2. GEO ---
-db_path = "data/worm.sqlite3"
-geoworld = GeoWorld(db_path)
-muni_gdf = geoworld.municipalities
-selected_codes_or_names = muni_gdf["municipal_code"].unique().tolist()
-selected_codes_or_names = [str(code) for code in selected_codes_or_names]
-
-gdf_layers = {}
-layers = ["municipalities"]
-
-# --- 3. Scenarioväljare ---
-scenario_files = glob.glob("scenarios/*.yml") + glob.glob("scenarios/*.yaml")
-scenario_options = [os.path.basename(f) for f in scenario_files]
-scenario_select = Select(title="Välj scenario/config-fil att köra:", value=None, options=scenario_options)
-run_button = Button(label="Kör simulering", button_type="success")
-
-
-# --- 3.5. Panel registry – bygg ut när du har fler paneler ---
-from core.panel_manager import PanelManager
-
-
-# Helper för att skapa paneler
-def build_dashboard_panels(replay, ui_state, **kwargs):
-    panels = []
-    for PanelClass in PANEL_CLASSES:
-        panel_kwargs = {k: v for k, v in kwargs.items() if hasattr(PanelClass, 'KWARGS') and k in PanelClass.KWARGS}
-        try:
-            panel = PanelClass(replay, ui_state=ui_state, **panel_kwargs)
-            panels.append(panel.layout)
-        except Exception as e:
-            print(f"Fel vid skapande av panel {PanelClass.__name__}: {e}")
-    return panels
-
-
-# --- 4. Funktion för registry-laddning ---
 def load_registry():
     if os.path.exists(REGISTRY_PATH):
         return pd.read_csv(REGISTRY_PATH)
     else:
         return pd.DataFrame(columns=["run_id", "output_path", "scenario_name", "timestamp"])
 
-# --- 5. Kör-simulering callback (nu RÄTT version) ---
+# --- 2. Ladda geografidata och lager ---
+db_path = "data/worm.sqlite3"
+geoworld = GeoWorld(db_path)
+muni_gdf = geoworld.municipalities
+layers = ["municipalities"]
+gdf_layers = {}
+
+# --- 3. Scenario-väljare och startknapp ---
+scenario_files = glob.glob("scenarios/*.yml") + glob.glob("scenarios/*.yaml")
+scenario_options = [os.path.basename(f) for f in scenario_files]
+scenario_select = Select(title="Välj scenario/config-fil att köra:", value=None, options=scenario_options)
+run_button = Button(label="Kör simulering", button_type="success")
+info_div = Div(text="<b>Ingen simulering vald.</b>")
+
+# --- 4. Bygg run-selector dynamiskt utifrån registry ---
+def build_run_selector():
+    df = load_registry()
+    if not df.empty:
+        run_options = [
+            f"{row['timestamp']} - {row['scenario_name']} ({row['run_id']})"
+            for _, row in df.iterrows()
+        ]
+        run_paths = [row['output_path'] for _, row in df.iterrows()]
+    else:
+        run_options = []
+        run_paths = []
+    select = Select(title="Välj simulering (run):", value=None, options=run_options)
+    return select, run_paths
+
+run_selector, run_selector_paths = build_run_selector()
+
+# --- 5. Skapa datakällor för individer, jobb och arbetsgivare ---
+
+indiv_source = ColumnDataSource(data={
+    "x_occ": [],
+    "y_occ": [],
+    "status": [],
+    "individual_id": [],
+    "job_id": [],
+    # Alla fält som används i hover/scatter här!
+})
+
+job_source = ColumnDataSource(data={
+    "x_occ": [],
+    "y_occ": [],
+    "job_id": [],
+    "employer_id": [],
+    "size_marker": [],
+})
+
+emp_source = ColumnDataSource(data={
+    "x_occ": [],
+    "y_occ": [],
+    "employer_id": [],
+})
+
+
+# --- 6. Hantera UI-state och replay ---
+ui_state = UIState()
+replay = None
+
+# --- 7. Bygg paneler för tabs ---
+def build_panels():
+    occ_panel = occspace_panel(
+        replay_controller=replay,
+        ui_state=ui_state,
+        indiv_source=indiv_source,
+        job_source=job_source,
+        emp_source=emp_source
+    )
+    map_pnl = map_panel(
+        replay_controller=replay,
+        muni_gdf=muni_gdf,
+        selected_codes_or_names=[],
+        layers=layers,
+        gdf_layers=gdf_layers,
+        ui_state=ui_state,
+        indiv_source=indiv_source,
+        emp_source=emp_source
+    )
+    return [occ_panel, map_pnl]
+
+# --- 8. Tabs-widget som fylls på dynamiskt ---
+tabs = Tabs(tabs=[], sizing_mode="stretch_both")  # <-- Här!
+
+# --- 9. Kör simulering och uppdatera registry och UI ---
 def run_simulation():
+    global run_selector_paths
     scenario = scenario_select.value
     if not scenario:
         info_div.text = "<b>Välj ett scenario först!</b>"
@@ -90,51 +133,39 @@ def run_simulation():
     full_scenario_path = os.path.join("scenarios", scenario)
     try:
         output_text = run_and_log_scenario(full_scenario_path)
-        info_div.text = f"<b>Simulering klar!</b> <br>Scenario: {scenario}<br>Utdata:<pre>{output_text}</pre>"
-        reload_registry()
+        info_div.text = f"<b>Simulering klar!</b><br>Scenario: {scenario}<br>Utdata:<pre>{output_text}</pre>"
+        # Uppdatera run-selector så ny simulering syns direkt
+        updated_selector, updated_paths = build_run_selector()
+        run_selector.options = updated_selector.options
+        run_selector.value = None  # Reset selection
+        run_selector_paths = updated_paths
     except Exception as e:
         info_div.text = f"<b>Fel vid körning av simulering:</b><br>{e}"
 
-def on_run_button_click(event):
-    run_simulation()
-run_button.on_event(ButtonClick, on_run_button_click)
+run_button.on_click(run_simulation)
 
-# --- 6. Initial registry och väljare ---
-def build_run_selector():
-    global registry_df, run_options, run_paths
-    registry_df = load_registry()
-    if not registry_df.empty:
-        run_options = [
-            f"{row['timestamp']} - {row['scenario_name']} ({row['run_id']})"
-            for _, row in registry_df.iterrows()
-        ]
-        run_paths = [
-            row['output_path']
-            for _, row in registry_df.iterrows()
-        ]
+# --- 10. Välj run och ladda paneler/datakällor från rätt körning ---
+def _cds_data(obj):
+    # Returnerar alltid en _kopierad_ dict
+    from bokeh.models import ColumnDataSource
+    import pandas as pd
+    if isinstance(obj, ColumnDataSource):
+        return dict(obj.data)  # Viktigt! Skapar en vanlig dict
+    elif isinstance(obj, pd.DataFrame):
+        return obj.to_dict("list")
+    elif isinstance(obj, dict):
+        return dict(obj)  # Säkerställer kopia även här
     else:
-        run_options = []
-        run_paths = []
-    select_label = "Välj simulering (run):"
-    select = Select(title=select_label, value=None, options=run_options)
-    return select
+        return {}
 
-# --- 7. Panelval och layout (initial) ---
-info_div = Div(text="<b>Ingen simulering vald.</b><br>Välj en run för att visa dashboarden.")
-select = build_run_selector()
-
-def reload_registry():
-    # Bygg om run-väljaren och ersätt i layouten
-    global select
-    old_value = select.value
-    new_select = build_run_selector()
-    new_select.on_change('value', on_run_selected)
-    dashboard_layout.children[2] = new_select
-    select = new_select
-    select.value = old_value  # återställ val om möjligt
+def set_cds_data_with_keys(cds, new_data, keys):
+    """
+    Sätter .data på en ColumnDataSource så att alla nycklar alltid finns,
+    även om new_data saknar någon av dem.
+    """
+    cds.data = {k: list(new_data.get(k, [])) for k in keys}
 
 
-import ast
 
 def load_config_from_metadata(metadata_path):
     with open(metadata_path, "r", encoding="utf-8") as f:
@@ -143,71 +174,110 @@ def load_config_from_metadata(metadata_path):
     if config_line:
         config_str = config_line[len("Config: "):].strip()
         # Om dict-strängen är fördelad över flera rader, slå ihop dem
+        lines_iter = iter(lines)
         while not config_str.endswith("}"):
-            next_line = lines.pop(0)
+            next_line = next(lines_iter)
             config_str += next_line.strip()
-        # Konvertera sträng till dict på ett säkert sätt
         config = ast.literal_eval(config_str)
         return config
     else:
         raise FileNotFoundError("Ingen 'Config:'-rad hittad i metadata.txt")
 
-
-# --- 8. Callback för att visa dashboard ---
 def on_run_selected(attr, old, new):
-    if select.value is None:
-        info_div.text = "<b>Ingen simulering vald.</b><br>Välj en run för att visa dashboarden."
+    global replay
+    global run_selector_paths
+    if run_selector.value is None:
         return
-    idx = run_options.index(select.value)
-    run_path = run_paths[idx]
-    result = ScenarioResult.from_run(run_path)
-    replay = ReplayController(result)
+    try:
+        idx = run_selector.options.index(run_selector.value)
+        run_path = run_selector_paths[idx]
+        result = ScenarioResult.from_run(run_path)
+        replay = ReplayController(result)
+        if hasattr(ui_state, "reset"):
+            ui_state.reset()
 
-    metadata_path = os.path.join(run_path, "metadata.txt")
-    if os.path.exists(metadata_path):
-        config = load_config_from_metadata(metadata_path)
-        cfg = ConfigReader(config)
-        selected_codes = cfg.municipalities
-    else:
-        print(f"on_run_selected: Filen {metadata_path} existerar ej")
+        # -------- Skapa och fyll datakällor HÄR --------
+        indiv_keys = ["x_occ", "y_occ", "status", "individual_id", "job_id"]
+        job_keys = ["x_occ", "y_occ", "job_id", "employer_id", "size_marker"]
+        emp_keys = ["x_occ", "y_occ", "employer_id"]
+
+        set_cds_data_with_keys(indiv_source, _cds_data(replay.get_indiv_source()), indiv_keys)
+        set_cds_data_with_keys(job_source, _cds_data(replay.get_job_source()), job_keys)
+        set_cds_data_with_keys(emp_source, _cds_data(replay.get_emp_source()), emp_keys)
+
+        # -------- Återställ logik för urval av kommuner från metadata --------
+        metadata_path = os.path.join(run_path, "metadata.txt")
         selected_codes = []
+        muni_gdf_selected = muni_gdf
+        if os.path.exists(metadata_path):
+            try:
+                config = load_config_from_metadata(metadata_path)
+                cfg = ConfigReader(config)
+                selected_codes = [str(code) for code in getattr(cfg, "municipalities", [])]
+                if selected_codes:
+                    muni_gdf_selected = muni_gdf[muni_gdf["municipal_code"].isin(selected_codes)]
+            except Exception as config_e:
+                print(f"Fel vid läsning av config ur metadata: {config_e}")
+                # Faller tillbaka på att visa alla kommuner
+        # Om ingen metadata, eller inget urval – visa allt
 
-    selected_codes = [str(code) for code in selected_codes]
-    muni_gdf_selected = geoworld.municipalities[
-        geoworld.municipalities["municipal_code"].isin(selected_codes)
-    ]
+        # ---- Panel rebuild och layout fixar ----
+        def build_panels_with_selected():
+            occ_panel = occspace_panel(
+                replay_controller=replay,
+                ui_state=ui_state,
+                indiv_source=indiv_source,
+                job_source=job_source,
+                emp_source=emp_source
+            )
+            map_pnl = map_panel(
+                replay_controller=replay,
+                muni_gdf=muni_gdf_selected,
+                selected_codes_or_names=selected_codes,
+                layers=layers,
+                gdf_layers=gdf_layers,
+                ui_state=ui_state,
+                indiv_source=indiv_source,
+                emp_source=emp_source,
+                job_source=job_source
+            )
+            return [occ_panel, map_pnl]
 
-    ui_state = UIState()
+        new_tabs = build_panels_with_selected()
+        tabs.tabs = new_tabs
+        tabs.sizing_mode = "stretch_both"
+        # Efter panels skapats – trigga update igen!
+        for panel in new_tabs:
+            if hasattr(panel.child, 'update'):
+                panel.child.update()
 
-    # Bygg alla paneler via registry!
-    panel_manager = PanelManager(
-        replay,
-        ui_state,
-        PANEL_REGISTRY,  # {"Occupation Space": OccupationSpacePanel, "Karta": MapPanel, ...}
-        panel_kwargs={
-            "muni_gdf": muni_gdf_selected,
-            "selected_codes_or_names": selected_codes,
-            "layers": layers,
-            "gdf_layers": gdf_layers
-        },
-        n_panels=2  # eller fler!
-    )
+        def force_redraw():
+            import time
+            time.sleep(0.5)
+            panel.child.update()
 
-    dashboard_layout.children[3:] = [panel_manager.layout]
+        curdoc().add_next_tick_callback(force_redraw)
+
+        info_div.text = "<b>Dashboard uppdaterad!</b>"
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        info_div.text = f"<b>Kunde inte ladda run:</b><br>{e}<br><pre>{tb}</pre>"
+        print(tb)
 
 
+run_selector.on_change('value', on_run_selected)
 
-select.on_change('value', on_run_selected)
-
-# --- 9. Slutgiltig layout ---
-dashboard_layout = column(
+# --- 11. Slutlig layout och app-init ---
+layout = column(
     scenario_select,
     run_button,
-    select,
-    info_div
+    run_selector,
+    info_div,
+    tabs,
+    sizing_mode="stretch_both"   # <-- Också här!
 )
-curdoc().clear()
-curdoc().add_root(dashboard_layout)
-curdoc().title = "WORM Dashboard"
+curdoc().add_root(layout)
+curdoc().title = "WORM Dashboard (NY)"
 
-print("PIPELINE FILE IMPORTERAD!")
+print("NY PIPELINE IMPORTERAD!")
