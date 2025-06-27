@@ -1,6 +1,5 @@
 # worm/statistics/log.py
 
-
 import os
 import csv
 import json
@@ -17,24 +16,6 @@ def log(*args, print_also=True):
     if print_also:
         print(msg)
 
-
-# def save_log(scenario_name=None, output_dir="output"):
-#     """Save the global log to a file with scenario name and timestamp."""
-#     # Skapa katalog om den inte finns
-#     os.makedirs(output_dir, exist_ok=True)
-#     # Tid för filnamnet
-#     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-#     # Bygg filnamnet
-#     if scenario_name:
-#         safe_scenario = scenario_name.replace("/", "_").replace("\\", "_")
-#         filename = f"{output_dir}/log_{safe_scenario}_{timestamp}.txt"
-#     else:
-#         filename = f"{output_dir}/log_{timestamp}.txt"
-#     # Skriv till fil
-#     with open(filename, "w", encoding="utf-8") as f:
-#         f.write('\n'.join(log_lines))
-#     return filename  # så att du kan visa namnet på filen efteråt
-
 def default_converter(o):
     if isinstance(o, np.generic):
         return o.item()
@@ -42,8 +23,8 @@ def default_converter(o):
 
 def build_standard_logdict(event, agent_type, agent=None, agent_id=None, extra=None, free_text=""):
     return {
-        "time": event.time,
-        "event": event.event_type,
+        "time": event["time"],
+        "event": event["event_type"],
         "agent_type": agent_type,
         "agent_id": agent_id,
         "chi": agent.get("chi") if agent is not None else None,
@@ -64,18 +45,16 @@ def create_run_output_dir(scenario_name):
         f.write(f"Timestamp: {run_id}\n")
     return outdir, run_id
 
-def save_run_output(matchings, matching_stats, commuting_stats, scenario_name, outdir="output"):
+def save_run_output(matching_stats, commuting_stats, scenario_name, outdir="output"):
     os.makedirs(outdir, exist_ok=True)
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     base = os.path.join(outdir, f"{scenario_name}_{ts}")
-    matchings.to_csv(f"{base}_matchings.csv", index=False)
     with open(f"{base}_matching_stats.json", "w", encoding="utf-8") as f:
         json.dump(matching_stats, f, indent=2, ensure_ascii=False, default=default_converter)
     with open(f"{base}_commuting_stats.json", "w", encoding="utf-8") as f:
         json.dump(commuting_stats, f, indent=2, ensure_ascii=False, default=default_converter)
     with open(f"{base}_log.txt", "w", encoding="utf-8") as f:
         f.write('\n'.join(_log_lines))
-
 
 class EventLogger:
     def __init__(self, filepath=None):
@@ -87,7 +66,7 @@ class EventLogger:
     def log_event(self, world, event, agent_type=None, extra=None, print_line=False):
         """
         Loggar ett event oavsett agenttyp (individual, employer, system).
-        Identifierar agent utifrån agent_type och event.agent_id.
+        Identifierar agent utifrån agent_type och event["agent_id"].
         """
         # Agent lookup
         agent = None
@@ -95,24 +74,24 @@ class EventLogger:
 
         if agent_type is None:
             # Försök avgöra agenttyp automatiskt
-            if event.agent_id is None:
+            if event["agent_id"] is None:
                 agent_type = "system"
-            elif event.agent_id in getattr(world, "individuals", pd.DataFrame()).index:
+            elif event["agent_id"] in getattr(world, "individuals", pd.DataFrame()).index:
                 agent_type = "individual"
-            elif event.agent_id in getattr(world, "employers", pd.DataFrame()).index:
+            elif event["agent_id"] in getattr(world, "employers", pd.DataFrame()).index:
                 agent_type = "employer"
             else:
                 agent_type = "unknown"
 
         if agent_type == "individual":
-            agent = world.individuals.loc[event.agent_id] if event.agent_id in world.individuals.index else None
-            agent_id = agent.get("individual_id", event.agent_id) if agent is not None else event.agent_id
+            agent = world.individuals.loc[event["agent_id"]] if event["agent_id"] in world.individuals.index else None
+            agent_id = agent.get("individual_id", event["agent_id"]) if agent is not None else event["agent_id"]
         elif agent_type == "employer":
-            agent = world.employers.loc[event.agent_id] if event.agent_id in world.employers.index else None
-            agent_id = agent.get("employer_id", event.agent_id) if agent is not None else event.agent_id
+            agent = world.employers.loc[event["agent_id"]] if event["agent_id"] in world.employers.index else None
+            agent_id = agent.get("employer_id", event["agent_id"]) if agent is not None else event["agent_id"]
         else:
             agent = None
-            agent_id = event.agent_id
+            agent_id = event["agent_id"]
 
         logdict = build_standard_logdict(
             event=event,
@@ -143,8 +122,6 @@ class EventLogger:
                 print(line)
         else:
             print(line)
-
-
 
     def close(self):
         if self.file:

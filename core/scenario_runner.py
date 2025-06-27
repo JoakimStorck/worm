@@ -108,7 +108,7 @@ def run_and_log_scenario(config_path):
         world.individuals.to_csv(os.path.join(outdir, "initial_state_individuals.csv"), index=False)
         world.jobs.to_csv(os.path.join(outdir, "initial_state_jobs.csv"), index=False)
         world.employers.to_csv(os.path.join(outdir, "initial_state_employers.csv"), index=False)
-        log.save_run_output(world.matchings, match_stats, commuting_stats, scenario_name, outdir=outdir)
+        log.save_run_output(match_stats, commuting_stats, scenario_name, outdir=outdir)
 
         save_basic_stats(result, outdir, tag="before")
 
@@ -121,7 +121,7 @@ def run_and_log_scenario(config_path):
         world.individuals.to_csv(os.path.join(outdir, "final_state_individuals.csv"), index=False)
         world.jobs.to_csv(os.path.join(outdir, "final_state_jobs.csv"), index=False)
         world.employers.to_csv(os.path.join(outdir, "final_state_employers.csv"), index=False)
-        log.save_run_output(world.matchings, match_stats, commuting_stats, scenario_name, outdir=outdir)
+        log.save_run_output(match_stats, commuting_stats, scenario_name, outdir=outdir)
 
         world.close()
 

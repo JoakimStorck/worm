@@ -4,14 +4,16 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, HoverTool, CheckboxGroup, CustomJS
-from bokeh.models import Button, TabPanel
+from bokeh.models import (
+    ColumnDataSource, HoverTool, CheckboxGroup, CustomJS,
+    Button, TabPanel
+)
+from bokeh.layouts import row, column
 from bokeh.io import curdoc
 
-from bokeh.layouts import row, column
+from core.visualization.selection_sync import sync_selections
 from core.visualization.utils import gdf_to_bokeh_patches, gdf_points_to_xy
 from core.ui_state import UIState
-
 
 def make_panel(
     replay_controller,
@@ -22,6 +24,7 @@ def make_panel(
     ui_state,
     indiv_source,
     emp_source,
+    job_source
 ):
     panel = MapPanel(
         replay_controller,
@@ -31,7 +34,8 @@ def make_panel(
         gdf_layers=gdf_layers,
         ui_state=ui_state,
         indiv_source=indiv_source,
-        emp_source=emp_source
+        emp_source=emp_source,
+        job_source=job_source
     )
     return TabPanel(child=panel.layout, title="Karta")
 
@@ -43,10 +47,11 @@ class MapPanel:
         selected_codes_or_names,
         layers=None,
         gdf_layers=None,
-        tools="lasso_select,box_select,box_zoom,reset,pan,wheel_zoom,save",
+        tools="tap,lasso_select,box_select,box_zoom,reset,pan,wheel_zoom,save",
         ui_state=None,
         indiv_source=None,
         emp_source=None,
+        job_source=None,
     ):
         self.replay = replay_controller
         self.muni_gdf = muni_gdf
@@ -57,6 +62,15 @@ class MapPanel:
         self.ui_state = ui_state
         self.indiv_source = indiv_source
         self.emp_source = emp_source
+        self.job_source = job_source
+
+        # Renderers för punktlager (måste alltid finnas)
+        self.emp_renderer = None
+        self.job_renderer = None
+        self.indiv_renderer = None
+
+        # Kopplingslinjer individ-jobb
+        self.employment_lines_source = ColumnDataSource(data=dict(xs=[], ys=[]))
 
         # Checkbox för hover
         self.show_hover_checkbox = CheckboxGroup(labels=["Visa ID vid hover"], active=[])
@@ -80,6 +94,7 @@ class MapPanel:
             "leisure_house_zones": "#9467BD",
             "employers": "#1f77b4",
             "individuals": "#000000",
+            "jobs": "#00aaff",
         }
 
         # Filtrera valda kommuner för att sätta zoom-bounds
@@ -154,32 +169,60 @@ class MapPanel:
                         )
                         self.renderers[layer] = renderer
 
-        # Punktlager: Employers och Individuals
-        self.emp_renderer = None
-        self.indiv_renderer = None
-        self.update_points()
+        self.show_employment_lines = CheckboxGroup(labels=["Visa jobb-linjer"], active=[])
+        self.show_employment_lines.on_change("active", lambda attr, old, new: self.update_points())
 
-        # Hover för individer
+        # Punktlager: Employers, Jobs, Individuals
+        self.update_points()  # Skapar alla renderers och sources
+
+        # Skapa lagerlistan för CheckboxGroup
+        point_offset = len(self.renderers)
+        checkbox_labels = [layer.replace("_", " ").capitalize() for layer in self.renderers.keys()]
+        checkbox_labels += ["Jobb", "Individer", "Arbetsgivare"]
+        self.checkbox_group = CheckboxGroup(labels=checkbox_labels, active=list(range(len(checkbox_labels))))
+
+        # Synlighet med CustomJS
+        cb_code = ""
+        for idx, layer in enumerate(self.renderers.keys()):
+            cb_code += f"renderers[{idx}].visible = cb_obj.active.includes({idx});\n"
+        cb_code += f"if (renderers_job) {{ renderers_job.visible = cb_obj.active.includes({point_offset}); }}\n"
+        cb_code += f"if (renderers_indiv) {{ renderers_indiv.visible = cb_obj.active.includes({point_offset+1}); }}\n"
+        cb_code += f"if (renderers_emp) {{ renderers_emp.visible = cb_obj.active.includes({point_offset+2}); }}\n"
+
+        callback = CustomJS(args={
+            "renderers": list(self.renderers.values()),
+            "renderers_job": self.job_renderer,
+            "renderers_indiv": self.indiv_renderer,
+            "renderers_emp": self.emp_renderer
+        }, code=cb_code)
+        self.checkbox_group.js_on_change('active', callback)
+
+        # Hover för individer (kan utökas)
         if self.indiv_renderer:
             self.hover = HoverTool(tooltips=[("ID", "@individual_id")], renderers=[self.indiv_renderer])
 
         self.figure.legend.location = "top_left"
         self.figure.legend.click_policy = "hide"
 
-        # Lagerstyrning: CheckboxGroup
-        checkbox_labels = [layer.replace("_", " ").capitalize() for layer in self.renderers.keys()]
-        self.checkbox_group = CheckboxGroup(labels=checkbox_labels, active=list(range(len(checkbox_labels))))
-        cb_code = ""
-        for idx, layer in enumerate(self.renderers.keys()):
-            cb_code += f"renderers[{idx}].visible = cb_obj.active.includes({idx});\n"
-        callback = CustomJS(args={"renderers": list(self.renderers.values())}, code=cb_code)
-        self.checkbox_group.js_on_change('active', callback)
-
         self.zoom_button = Button(label="Zooma till valda kommuner", width=220)
         self.zoom_button.on_click(self.zoom_to_selected)
 
-        # I _build_panel
-        control_column = column(self.checkbox_group, self.show_hover_checkbox, self.zoom_button, width=220)
+        self.lines_renderer = self.figure.multi_line(
+            xs="xs", ys="ys",
+            source=self.employment_lines_source,
+            line_color="black", line_alpha=0.08, line_width=1
+        )
+
+
+        # Layout för kontrollpanelen
+        control_column = column(
+            self.checkbox_group, 
+            self.show_employment_lines, 
+            self.show_hover_checkbox, 
+            self.zoom_button, 
+            width=220
+        )
+        # Layout för hela panelen
         self.layout = row(
             self.figure,
             control_column,
@@ -213,8 +256,9 @@ class MapPanel:
         self.figure.y_range.bounds = (self.figure.y_range.start, self.figure.y_range.end)
 
     def update_points(self):
-        # EMPLOYERS
         state = self.replay.get_state()
+
+        # --- EMPLOYERS ---
         employers = state.get("employers")
         if employers is not None and not employers.empty:
             emp_df = gdf_points_to_xy(employers, id_col="employer_id")
@@ -224,23 +268,62 @@ class MapPanel:
                 self.emp_source.data = emp_df.to_dict("list")
             if not self.emp_renderer:
                 self.emp_renderer = self.figure.scatter(
-                    "x", "y", source=self.emp_source, size=8,
-                    color="#1f77b4", alpha=0.7, legend_label="Employers", marker="diamond"
+                    "x", "y", source=self.emp_source, size=12,
+                    color="#1f77b4", alpha=0.8, legend_label="Arbetsgivare",
+                    marker="diamond", selection_color="#ff00ff", nonselection_alpha=0.12
                 )
 
-        # INDIVIDUALS
-        if self.indiv_source is None:
-            self.indiv_source = self.replay.get_indiv_source()
+        # --- JOBS ---
+        jobs = state.get("jobs")
+        if jobs is not None and not jobs.empty:
+            job_df = gdf_points_to_xy(jobs, id_col="job_id")
+            if self.job_source is None:
+                self.job_source = ColumnDataSource(job_df)
+            else:
+                self.job_source.data = job_df.to_dict("list")
+            if not self.job_renderer:
+                self.job_renderer = self.figure.scatter(
+                    'x', 'y', source=self.job_source, size=8,
+                    color="#00aaff", alpha=0.7, legend_label="Jobb",
+                    selection_color="yellow", nonselection_alpha=0.15
+                )
+
+        # --- INDIVIDUALS ---
+        individuals = state.get("individuals")
+        if individuals is not None and not individuals.empty:
+            indiv_df = gdf_points_to_xy(individuals, id_col="individual_id")
+            if self.indiv_source is None:
+                self.indiv_source = ColumnDataSource(indiv_df)
+            else:
+                self.indiv_source.data = indiv_df.to_dict("list")
+            if not self.indiv_renderer:
+                self.indiv_renderer = self.figure.scatter(
+                    'x', 'y', source=self.indiv_source, size=5,
+                    color="#000000", alpha=0.3, legend_label="Individer",
+                    selection_color="orange", nonselection_alpha=0.08
+                )
+
+        # Hantera linjer mellan individer och jobb
+        if 0 in getattr(self.show_employment_lines, "active", []):
+            indivs = pd.DataFrame(self.indiv_source.data)
+            jobs = pd.DataFrame(self.job_source.data)
+            jobs_dict = {j["job_id"]: (j["x"], j["y"]) for j in jobs.to_dict("records")}
+            xs, ys = [], []
+            for _, row in indivs.iterrows():
+                jid = row.get("job_id")
+                if jid and jid in jobs_dict:
+                    xs.append([row["x"], jobs_dict[jid][0]])
+                    ys.append([row["y"], jobs_dict[jid][1]])
+            self.employment_lines_source.data = dict(xs=xs, ys=ys)
         else:
-            self.indiv_source.data = dict(self.replay.get_indiv_source().data)
-        if not self.indiv_renderer:
-            self.indiv_renderer = self.figure.scatter(
-                'x', 'y', source=self.indiv_source, size=3,
-                color="#000000", alpha=0.4, legend_label="Individuals",
-                selection_color="orange"
-            )
+            self.employment_lines_source.data = dict(xs=[], ys=[])
+
+        # Koppla selection sync
+        if self.emp_source and self.job_source and self.indiv_source:
+            sync_selections(self.emp_source, self.job_source, self.indiv_source)
 
     def update(self):
+        print("Updating Map Panel...")
         self.update_points()
         self.zoom_to_selected()
 

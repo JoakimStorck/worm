@@ -3,6 +3,7 @@ import sys
 import glob
 import pandas as pd
 import traceback
+import ast
 
 from bokeh.io import curdoc
 from bokeh.models import Tabs, Select, Button, Div
@@ -68,10 +69,31 @@ def build_run_selector():
 
 run_selector, run_selector_paths = build_run_selector()
 
-# --- 5. Dela centrala datakällor (för synk och interaktivitet) ---
-indiv_source = ColumnDataSource(data=dict())  # Individer
-job_source = ColumnDataSource(data=dict())    # Jobb
-emp_source = ColumnDataSource(data=dict())    # Arbetsgivare
+# --- 5. Skapa datakällor för individer, jobb och arbetsgivare ---
+
+indiv_source = ColumnDataSource(data={
+    "x_occ": [],
+    "y_occ": [],
+    "status": [],
+    "individual_id": [],
+    "job_id": [],
+    # Alla fält som används i hover/scatter här!
+})
+
+job_source = ColumnDataSource(data={
+    "x_occ": [],
+    "y_occ": [],
+    "job_id": [],
+    "employer_id": [],
+    "size_marker": [],
+})
+
+emp_source = ColumnDataSource(data={
+    "x_occ": [],
+    "y_occ": [],
+    "employer_id": [],
+})
+
 
 # --- 6. Hantera UI-state och replay ---
 ui_state = UIState()
@@ -136,7 +158,14 @@ def _cds_data(obj):
     else:
         return {}
 
-import ast  # Glöm inte!
+def set_cds_data_with_keys(cds, new_data, keys):
+    """
+    Sätter .data på en ColumnDataSource så att alla nycklar alltid finns,
+    även om new_data saknar någon av dem.
+    """
+    cds.data = {k: list(new_data.get(k, [])) for k in keys}
+
+
 
 def load_config_from_metadata(metadata_path):
     with open(metadata_path, "r", encoding="utf-8") as f:
@@ -166,13 +195,15 @@ def on_run_selected(attr, old, new):
         replay = ReplayController(result)
         if hasattr(ui_state, "reset"):
             ui_state.reset()
-        indiv_source.data = _cds_data(replay.get_indiv_source())
-        if hasattr(replay, "get_job_source"):
-            job_source.data = _cds_data(replay.get_job_source())
-        if hasattr(replay, "get_emp_source"):
-            emp_source.data = _cds_data(replay.get_emp_source())
-        else:
-            emp_source.data = {}
+
+        # -------- Skapa och fyll datakällor HÄR --------
+        indiv_keys = ["x_occ", "y_occ", "status", "individual_id", "job_id"]
+        job_keys = ["x_occ", "y_occ", "job_id", "employer_id", "size_marker"]
+        emp_keys = ["x_occ", "y_occ", "employer_id"]
+
+        set_cds_data_with_keys(indiv_source, _cds_data(replay.get_indiv_source()), indiv_keys)
+        set_cds_data_with_keys(job_source, _cds_data(replay.get_job_source()), job_keys)
+        set_cds_data_with_keys(emp_source, _cds_data(replay.get_emp_source()), emp_keys)
 
         # -------- Återställ logik för urval av kommuner från metadata --------
         metadata_path = os.path.join(run_path, "metadata.txt")
@@ -207,14 +238,28 @@ def on_run_selected(attr, old, new):
                 gdf_layers=gdf_layers,
                 ui_state=ui_state,
                 indiv_source=indiv_source,
-                emp_source=emp_source
+                emp_source=emp_source,
+                job_source=job_source
             )
             return [occ_panel, map_pnl]
 
         new_tabs = build_panels_with_selected()
         tabs.tabs = new_tabs
         tabs.sizing_mode = "stretch_both"
+        # Efter panels skapats – trigga update igen!
+        for panel in new_tabs:
+            if hasattr(panel.child, 'update'):
+                panel.child.update()
+
+        def force_redraw():
+            import time
+            time.sleep(0.5)
+            panel.child.update()
+
+        curdoc().add_next_tick_callback(force_redraw)
+
         info_div.text = "<b>Dashboard uppdaterad!</b>"
+
     except Exception as e:
         tb = traceback.format_exc()
         info_div.text = f"<b>Kunde inte ladda run:</b><br>{e}<br><pre>{tb}</pre>"
