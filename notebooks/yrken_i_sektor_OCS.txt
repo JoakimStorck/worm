@@ -1,0 +1,1048 @@
+19-4012.00 (ACS: nan) — Agricultural Technicians
+  xi_rot: 3.852, chi: 0.485
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+19-4013.00 (ACS: nan) — Food Science Technicians
+  xi_rot: 3.958, chi: 0.469
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+27-1012.00 (ACS: nan) — Craft Artists
+  xi_rot: 2.978, chi: 0.340
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+27-1013.00 (ACS: nan) — Fine Artists, Including Painters, Sculptors, and Illustrators
+  xi_rot: 2.532, chi: 0.342
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+27-3092.00 (ACS: nan) — Court Reporters and Simultaneous Captioners
+  xi_rot: 2.524, chi: 0.192
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+27-4021.00 (ACS: 2910) — Photographers
+  xi_rot: 3.338, chi: 0.463
+  label: photographers | i labels_df: JA | i P.index: JA
+
+27-4031.00 (ACS: nan) — Camera Operators, Television, Video, and Film
+  xi_rot: 3.600, chi: 0.495
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+29-1292.00 (ACS: nan) — Dental Hygienists
+  xi_rot: 3.142, chi: 0.439
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+29-2011.02 (ACS: nan) — Cytotechnologists
+  xi_rot: 3.975, chi: 0.486
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+29-2034.00 (ACS: nan) — Radiologic Technologists and Technicians
+  xi_rot: 3.716, chi: 0.456
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+29-2057.00 (ACS: nan) — Ophthalmic Medical Technicians
+  xi_rot: 2.781, chi: 0.403
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+29-2092.00 (ACS: nan) — Hearing Aid Specialists
+  xi_rot: 3.934, chi: 0.519
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+31-1132.00 (ACS: nan) — Orderlies
+  xi_rot: 2.398, chi: 0.126
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+31-9091.00 (ACS: 3640) — Dental Assistants
+  xi_rot: 2.939, chi: 0.407
+  label: dental assistants | i labels_df: JA | i P.index: JA
+
+31-9093.00 (ACS: nan) — Medical Equipment Preparers
+  xi_rot: 3.806, chi: 0.399
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+31-9096.00 (ACS: 3648) — Veterinary Assistants and Laboratory Animal Caretakers
+  xi_rot: 2.558, chi: 0.389
+  label: veterinary assistants and laboratory animal caretakers | i labels_df: JA | i P.index: JA
+
+31-9097.00 (ACS: 3649) — Phlebotomists
+  xi_rot: 2.528, chi: 0.396
+  label: phlebotomists | i labels_df: JA | i P.index: JA
+
+31-9099.02 (ACS: nan) — Endoscopy Technicians
+  xi_rot: 3.822, chi: 0.477
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+33-3041.00 (ACS: nan) — Parking Enforcement Workers
+  xi_rot: 2.818, chi: 0.322
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+33-9093.00 (ACS: 3945) — Transportation Security Screeners
+  xi_rot: 3.025, chi: 0.421
+  label: transportation security screeners | i labels_df: JA | i P.index: JA
+
+35-2012.00 (ACS: nan) — Cooks, Institution and Cafeteria
+  xi_rot: 2.946, chi: 0.398
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+35-2013.00 (ACS: nan) — Cooks, Private Household
+  xi_rot: 2.431, chi: 0.397
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+35-2014.00 (ACS: nan) — Cooks, Restaurant
+  xi_rot: 2.686, chi: 0.341
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+35-2021.00 (ACS: 4030) — Food Preparation Workers
+  xi_rot: 2.472, chi: 0.109
+  label: food preparation workers | i labels_df: JA | i P.index: JA
+
+35-3023.00 (ACS: nan) — Fast Food and Counter Workers
+  xi_rot: 2.418, chi: 0.157
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+35-3023.01 (ACS: nan) — Baristas
+  xi_rot: 2.818, chi: 0.291
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+35-3041.00 (ACS: 4120) — Food Servers, Nonrestaurant
+  xi_rot: 2.482, chi: 0.159
+  label: food servers, nonrestaurant | i labels_df: JA | i P.index: JA
+
+35-9011.00 (ACS: nan) — Dining Room and Cafeteria Attendants and Bartender Helpers
+  xi_rot: 2.455, chi: 0.123
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+35-9021.00 (ACS: 4140) — Dishwashers
+  xi_rot: 3.009, chi: 0.163
+  label: dishwashers | i labels_df: JA | i P.index: JA
+
+37-1011.00 (ACS: 4200) — First-Line Supervisors of Housekeeping and Janitorial Workers
+  xi_rot: 3.059, chi: 0.512
+  label: first-line supervisors of housekeeping and janitorial workers | i labels_df: JA | i P.index: JA
+
+37-2011.00 (ACS: nan) — Janitors and Cleaners, Except Maids and Housekeeping Cleaners
+  xi_rot: 2.796, chi: 0.162
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+37-2012.00 (ACS: 4230) — Maids and Housekeeping Cleaners
+  xi_rot: 2.428, chi: 0.122
+  label: maids and housekeeping cleaners | i labels_df: JA | i P.index: JA
+
+37-3011.00 (ACS: nan) — Landscaping and Groundskeeping Workers
+  xi_rot: 3.066, chi: 0.166
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+37-3012.00 (ACS: nan) — Pesticide Handlers, Sprayers, and Applicators, Vegetation
+  xi_rot: 3.441, chi: 0.357
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+37-3013.00 (ACS: nan) — Tree Trimmers and Pruners
+  xi_rot: 3.677, chi: 0.366
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+39-2021.00 (ACS: 4350) — Animal Caretakers
+  xi_rot: 2.490, chi: 0.211
+  label: nonfarm animal caretakers | i labels_df: JA | i P.index: JA
+
+39-3021.00 (ACS: 4410) — Motion Picture Projectionists
+  xi_rot: 3.345, chi: 0.322
+  label: motion picture projectionists | i labels_df: JA | i P.index: JA
+
+39-3091.00 (ACS: nan) — Amusement and Recreation Attendants
+  xi_rot: 2.636, chi: 0.204
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+39-4011.00 (ACS: nan) — Embalmers
+  xi_rot: 2.550, chi: 0.447
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+39-4021.00 (ACS: nan) — Funeral Attendants
+  xi_rot: 2.626, chi: 0.219
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+39-5011.00 (ACS: 4500) — Barbers
+  xi_rot: 2.708, chi: 0.201
+  label: barbers | i labels_df: JA | i P.index: JA
+
+39-6011.00 (ACS: nan) — Baggage Porters and Bellhops
+  xi_rot: 2.552, chi: 0.266
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+41-2012.00 (ACS: nan) — Gambling Change Persons and Booth Cashiers
+  xi_rot: 2.698, chi: 0.266
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+43-5021.00 (ACS: 5510) — Couriers and Messengers
+  xi_rot: 2.560, chi: 0.231
+  label: couriers and messengers | i labels_df: JA | i P.index: JA
+
+43-5041.00 (ACS: 5530) — Meter Readers, Utilities
+  xi_rot: 3.120, chi: 0.295
+  label: meter readers, utilities | i labels_df: JA | i P.index: JA
+
+43-5052.00 (ACS: 5550) — Postal Service Mail Carriers
+  xi_rot: 2.453, chi: 0.168
+  label: postal service mail carriers | i labels_df: JA | i P.index: JA
+
+43-5053.00 (ACS: 5560) — Postal Service Mail Sorters, Processors, and Processing Machine Operators
+  xi_rot: 2.782, chi: 0.218
+  label: postal service mail sorters, processors, and processing machine operators | i labels_df: JA | i P.index: JA
+
+43-5111.00 (ACS: 5630) — Weighers, Measurers, Checkers, and Samplers, Recordkeeping
+  xi_rot: 2.750, chi: 0.385
+  label: weighers, measurers, checkers, and samplers, recordkeeping | i labels_df: JA | i P.index: JA
+
+43-9022.00 (ACS: 5820) — Word Processors and Typists
+  xi_rot: 2.365, chi: 0.215
+  label: word processors and typists | i labels_df: JA | i P.index: JA
+
+43-9051.00 (ACS: 5850) — Mail Clerks and Mail Machine Operators, Except Postal Service
+  xi_rot: 2.964, chi: 0.253
+  label: mail clerks and mail machine operators, except postal service | i labels_df: JA | i P.index: JA
+
+43-9071.00 (ACS: 5900) — Office Machine Operators, Except Computer
+  xi_rot: 3.636, chi: 0.363
+  label: office machine operators, except computer | i labels_df: JA | i P.index: JA
+
+45-2021.00 (ACS: nan) — Animal Breeders
+  xi_rot: 2.856, chi: 0.351
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+45-2041.00 (ACS: 6040) — Graders and Sorters, Agricultural Products
+  xi_rot: 2.476, chi: 0.000
+  label: graders and sorters, agricultural products | i labels_df: JA | i P.index: JA
+
+45-2091.00 (ACS: nan) — Agricultural Equipment Operators
+  xi_rot: 3.523, chi: 0.305
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+45-2092.00 (ACS: nan) — Farmworkers and Laborers, Crop, Nursery, and Greenhouse
+  xi_rot: 3.446, chi: 0.329
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+45-2093.00 (ACS: nan) — Farmworkers, Farm, Ranch, and Aquacultural Animals
+  xi_rot: 3.711, chi: 0.383
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+45-4011.00 (ACS: 6120) — Forest and Conservation Workers
+  xi_rot: 3.168, chi: 0.355
+  label: forest and conservation workers | i labels_df: JA | i P.index: JA
+
+45-4021.00 (ACS: nan) — Fallers
+  xi_rot: 3.437, chi: 0.252
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+45-4022.00 (ACS: nan) — Logging Equipment Operators
+  xi_rot: 3.699, chi: 0.381
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+45-4023.00 (ACS: nan) — Log Graders and Scalers
+  xi_rot: 2.976, chi: 0.365
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2011.00 (ACS: 6210) — Boilermakers
+  xi_rot: 4.062, chi: 0.493
+  label: boilermakers | i labels_df: JA | i P.index: JA
+
+47-2021.00 (ACS: nan) — Brickmasons and Blockmasons
+  xi_rot: 3.395, chi: 0.333
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2022.00 (ACS: nan) — Stonemasons
+  xi_rot: 3.788, chi: 0.397
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2031.00 (ACS: 6230) — Carpenters
+  xi_rot: 3.961, chi: 0.485
+  label: carpenters | i labels_df: JA | i P.index: JA
+
+47-2041.00 (ACS: nan) — Carpet Installers
+  xi_rot: 3.144, chi: 0.316
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2042.00 (ACS: nan) — Floor Layers, Except Carpet, Wood, and Hard Tiles
+  xi_rot: 2.467, chi: 0.258
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2043.00 (ACS: nan) — Floor Sanders and Finishers
+  xi_rot: 3.137, chi: 0.252
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2044.00 (ACS: nan) — Tile and Stone Setters
+  xi_rot: 3.056, chi: 0.345
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2051.00 (ACS: nan) — Cement Masons and Concrete Finishers
+  xi_rot: 3.273, chi: 0.243
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2053.00 (ACS: nan) — Terrazzo Workers and Finishers
+  xi_rot: 3.217, chi: 0.224
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2061.00 (ACS: 6260) — Construction Laborers
+  xi_rot: 3.259, chi: 0.282
+  label: construction laborers | i labels_df: JA | i P.index: JA
+
+47-2071.00 (ACS: 6300) — Paving, Surfacing, and Tamping Equipment Operators
+  xi_rot: 3.514, chi: 0.330
+  label: paving, surfacing, and tamping equipment operators | i labels_df: JA | i P.index: JA
+
+47-2072.00 (ACS: nan) — Pile Driver Operators
+  xi_rot: 3.543, chi: 0.342
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2073.00 (ACS: nan) — Operating Engineers and Other Construction Equipment Operators
+  xi_rot: 3.653, chi: 0.411
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2081.00 (ACS: nan) — Drywall and Ceiling Tile Installers
+  xi_rot: 3.043, chi: 0.250
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2082.00 (ACS: nan) — Tapers
+  xi_rot: 2.759, chi: 0.179
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2121.00 (ACS: 6360) — Glaziers
+  xi_rot: 3.147, chi: 0.306
+  label: glaziers | i labels_df: JA | i P.index: JA
+
+47-2131.00 (ACS: nan) — Insulation Workers, Floor, Ceiling, and Wall
+  xi_rot: 3.219, chi: 0.281
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2132.00 (ACS: nan) — Insulation Workers, Mechanical
+  xi_rot: 2.992, chi: 0.270
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2141.00 (ACS: nan) — Painters, Construction and Maintenance
+  xi_rot: 2.770, chi: 0.226
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2142.00 (ACS: nan) — Paperhangers
+  xi_rot: 2.637, chi: 0.179
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2151.00 (ACS: nan) — Pipelayers
+  xi_rot: 3.549, chi: 0.381
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2152.00 (ACS: nan) — Plumbers, Pipefitters, and Steamfitters
+  xi_rot: 3.988, chi: 0.460
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2161.00 (ACS: 6460) — Plasterers and Stucco Masons
+  xi_rot: 3.130, chi: 0.269
+  label: plasterers and stucco masons | i labels_df: JA | i P.index: JA
+
+47-2171.00 (ACS: nan) — Reinforcing Iron and Rebar Workers
+  xi_rot: 3.070, chi: 0.240
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-2181.00 (ACS: 6515) — Roofers
+  xi_rot: 3.163, chi: 0.299
+  label: roofers | i labels_df: JA | i P.index: JA
+
+47-2211.00 (ACS: 6520) — Sheet Metal Workers
+  xi_rot: 3.823, chi: 0.421
+  label: sheet metal workers | i labels_df: JA | i P.index: JA
+
+47-2221.00 (ACS: 6530) — Structural Iron and Steel Workers
+  xi_rot: 3.648, chi: 0.415
+  label: structural iron and steel workers | i labels_df: JA | i P.index: JA
+
+47-2231.00 (ACS: nan) — Solar Photovoltaic Installers
+  xi_rot: 4.032, chi: 0.493
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-3011.00 (ACS: nan) — Helpers--Brickmasons, Blockmasons, Stonemasons, and Tile and Marble Setters
+  xi_rot: 3.319, chi: 0.253
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-3012.00 (ACS: nan) — Helpers--Carpenters
+  xi_rot: 3.349, chi: 0.273
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-3013.00 (ACS: nan) — Helpers--Electricians
+  xi_rot: 3.610, chi: 0.318
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-3014.00 (ACS: nan) — Helpers--Painters, Paperhangers, Plasterers, and Stucco Masons
+  xi_rot: 3.037, chi: 0.204
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-3015.00 (ACS: nan) — Helpers--Pipelayers, Plumbers, Pipefitters, and Steamfitters
+  xi_rot: 3.114, chi: 0.189
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-3016.00 (ACS: nan) — Helpers--Roofers
+  xi_rot: 3.224, chi: 0.286
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-4031.00 (ACS: 6710) — Fence Erectors
+  xi_rot: 3.197, chi: 0.308
+  label: fence erectors | i labels_df: JA | i P.index: JA
+
+47-4041.00 (ACS: 6720) — Hazardous Materials Removal Workers
+  xi_rot: 3.999, chi: 0.460
+  label: hazardous materials removal workers | i labels_df: JA | i P.index: JA
+
+47-4051.00 (ACS: 6730) — Highway Maintenance Workers
+  xi_rot: 3.410, chi: 0.350
+  label: highway maintenance workers | i labels_df: JA | i P.index: JA
+
+47-4061.00 (ACS: 6740) — Rail-Track Laying and Maintenance Equipment Operators
+  xi_rot: 3.746, chi: 0.375
+  label: rail-track laying and maintenance equipment operators | i labels_df: JA | i P.index: JA
+
+47-4071.00 (ACS: nan) — Septic Tank Servicers and Sewer Pipe Cleaners
+  xi_rot: 3.764, chi: 0.420
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-4091.00 (ACS: nan) — Segmental Pavers
+  xi_rot: 3.378, chi: 0.418
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-5011.00 (ACS: nan) — Derrick Operators, Oil and Gas
+  xi_rot: 3.982, chi: 0.511
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-5012.00 (ACS: nan) — Rotary Drill Operators, Oil and Gas
+  xi_rot: 3.963, chi: 0.527
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-5022.00 (ACS: nan) — Excavating and Loading Machine and Dragline Operators, Surface Mining
+  xi_rot: 3.837, chi: 0.460
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-5023.00 (ACS: nan) — Earth Drillers, Except Oil and Gas
+  xi_rot: 3.854, chi: 0.436
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-5041.00 (ACS: nan) — Continuous Mining Machine Operators
+  xi_rot: 3.747, chi: 0.427
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-5043.00 (ACS: nan) — Roof Bolters, Mining
+  xi_rot: 3.745, chi: 0.407
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-5044.00 (ACS: nan) — Loading and Moving Machine Operators, Underground Mining
+  xi_rot: 3.360, chi: 0.340
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-5051.00 (ACS: nan) — Rock Splitters, Quarry
+  xi_rot: 3.106, chi: 0.256
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-5071.00 (ACS: nan) — Roustabouts, Oil and Gas
+  xi_rot: 3.400, chi: 0.281
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+47-5081.00 (ACS: nan) — Helpers--Extraction Workers
+  xi_rot: 3.796, chi: 0.396
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+49-2093.00 (ACS: nan) — Electrical and Electronics Installers and Repairers, Transportation Equipment
+  xi_rot: 3.970, chi: 0.475
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+49-2096.00 (ACS: 7110) — Electronic Equipment Installers and Repairers, Motor Vehicles
+  xi_rot: 4.094, chi: 0.496
+  label: electronic equipment installers and repairers, motor vehicles | i labels_df: JA | i P.index: JA
+
+49-2098.00 (ACS: 7130) — Security and Fire Alarm Systems Installers
+  xi_rot: 3.956, chi: 0.474
+  label: security and fire alarm systems installers | i labels_df: JA | i P.index: JA
+
+49-3021.00 (ACS: 7150) — Automotive Body and Related Repairers
+  xi_rot: 3.692, chi: 0.431
+  label: automotive body and related repairers | i labels_df: JA | i P.index: JA
+
+49-3022.00 (ACS: 7160) — Automotive Glass Installers and Repairers
+  xi_rot: 3.396, chi: 0.333
+  label: automotive glass installers and repairers | i labels_df: JA | i P.index: JA
+
+49-3023.00 (ACS: 7200) — Automotive Service Technicians and Mechanics
+  xi_rot: 4.078, chi: 0.505
+  label: automotive service technicians and mechanics | i labels_df: JA | i P.index: JA
+
+49-3031.00 (ACS: 7210) — Bus and Truck Mechanics and Diesel Engine Specialists
+  xi_rot: 4.014, chi: 0.499
+  label: bus and truck mechanics and diesel engine specialists | i labels_df: JA | i P.index: JA
+
+49-3043.00 (ACS: nan) — Rail Car Repairers
+  xi_rot: 3.976, chi: 0.459
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+49-3051.00 (ACS: nan) — Motorboat Mechanics and Service Technicians
+  xi_rot: 3.882, chi: 0.438
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+49-3052.00 (ACS: nan) — Motorcycle Mechanics
+  xi_rot: 4.007, chi: 0.492
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+49-3053.00 (ACS: nan) — Outdoor Power Equipment and Other Small Engine Mechanics
+  xi_rot: 3.874, chi: 0.425
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+49-3091.00 (ACS: nan) — Bicycle Repairers
+  xi_rot: 4.024, chi: 0.442
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+49-3092.00 (ACS: nan) — Recreational Vehicle Service Technicians
+  xi_rot: 4.043, chi: 0.484
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+49-3093.00 (ACS: nan) — Tire Repairers and Changers
+  xi_rot: 3.330, chi: 0.291
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+49-9011.00 (ACS: nan) — Mechanical Door Repairers
+  xi_rot: 3.891, chi: 0.454
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+49-9012.00 (ACS: nan) — Control and Valve Installers and Repairers, Except Mechanical Door
+  xi_rot: 3.857, chi: 0.440
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+49-9031.00 (ACS: 7320) — Home Appliance Repairers
+  xi_rot: 4.083, chi: 0.494
+  label: home appliance repairers | i labels_df: JA | i P.index: JA
+
+49-9043.00 (ACS: 7350) — Maintenance Workers, Machinery
+  xi_rot: 3.884, chi: 0.440
+  label: maintenance workers, machinery | i labels_df: JA | i P.index: JA
+
+49-9045.00 (ACS: nan) — Refractory Materials Repairers, Except Brickmasons
+  xi_rot: 3.472, chi: 0.341
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+49-9051.00 (ACS: 7410) — Electrical Power-Line Installers and Repairers
+  xi_rot: 4.048, chi: 0.504
+  label: electrical power-line installers and repairers | i labels_df: JA | i P.index: JA
+
+49-9052.00 (ACS: 7420) — Telecommunications Line Installers and Repairers
+  xi_rot: 3.737, chi: 0.423
+  label: telecommunications line installers and repairers | i labels_df: JA | i P.index: JA
+
+49-9061.00 (ACS: nan) — Camera and Photographic Equipment Repairers
+  xi_rot: 3.951, chi: 0.502
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+49-9064.00 (ACS: nan) — Watch and Clock Repairers
+  xi_rot: 3.650, chi: 0.370
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+49-9071.00 (ACS: 7340) — Maintenance and Repair Workers, General
+  xi_rot: 4.072, chi: 0.532
+  label: maintenance and repair workers, general | i labels_df: JA | i P.index: JA
+
+49-9091.00 (ACS: 7510) — Coin, Vending, and Amusement Machine Servicers and Repairers
+  xi_rot: 3.715, chi: 0.385
+  label: coin, vending, and amusement machine servicers and repairers | i labels_df: JA | i P.index: JA
+
+49-9094.00 (ACS: 7540) — Locksmiths and Safe Repairers
+  xi_rot: 3.743, chi: 0.418
+  label: locksmiths and safe repairers | i labels_df: JA | i P.index: JA
+
+49-9096.00 (ACS: 7560) — Riggers
+  xi_rot: 3.584, chi: 0.411
+  label: riggers | i labels_df: JA | i P.index: JA
+
+49-9097.00 (ACS: nan) — Signal and Track Switch Repairers
+  xi_rot: 4.060, chi: 0.524
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+49-9098.00 (ACS: 7610) — Helpers--Installation, Maintenance, and Repair Workers
+  xi_rot: 3.587, chi: 0.352
+  label: helpers--installation, maintenance, and repair workers  | i labels_df: JA | i P.index: JA
+
+51-2011.00 (ACS: 7710) — Aircraft Structure, Surfaces, Rigging, and Systems Assemblers
+  xi_rot: 4.037, chi: 0.517
+  label: aircraft structure, surfaces, rigging, and systems assemblers | i labels_df: JA | i P.index: JA
+
+51-2021.00 (ACS: nan) — Coil Winders, Tapers, and Finishers
+  xi_rot: 2.912, chi: 0.220
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-2022.00 (ACS: nan) — Electrical and Electronic Equipment Assemblers
+  xi_rot: 3.541, chi: 0.335
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-2023.00 (ACS: nan) — Electromechanical Equipment Assemblers
+  xi_rot: 3.559, chi: 0.313
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-2031.00 (ACS: 7730) — Engine and Other Machine Assemblers
+  xi_rot: 3.678, chi: 0.371
+  label: engine and other machine assemblers | i labels_df: JA | i P.index: JA
+
+51-2041.00 (ACS: 7740) — Structural Metal Fabricators and Fitters
+  xi_rot: 3.002, chi: 0.213
+  label: structural metal fabricators and fitters | i labels_df: JA | i P.index: JA
+
+51-2051.00 (ACS: nan) — Fiberglass Laminators and Fabricators
+  xi_rot: 3.340, chi: 0.363
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-2061.00 (ACS: nan) — Timing Device Assemblers and Adjusters
+  xi_rot: 3.578, chi: 0.340
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-2092.00 (ACS: nan) — Team Assemblers
+  xi_rot: 3.268, chi: 0.383
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-3011.00 (ACS: 7800) — Bakers
+  xi_rot: 2.867, chi: 0.292
+  label: bakers | i labels_df: JA | i P.index: JA
+
+51-3021.00 (ACS: nan) — Butchers and Meat Cutters
+  xi_rot: 2.765, chi: 0.354
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-3022.00 (ACS: nan) — Meat, Poultry, and Fish Cutters and Trimmers
+  xi_rot: 2.813, chi: 0.236
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-3023.00 (ACS: nan) — Slaughterers and Meat Packers
+  xi_rot: 2.729, chi: 0.038
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-3091.00 (ACS: 7830) — Food and Tobacco Roasting, Baking, and Drying Machine Operators and Tenders
+  xi_rot: 3.491, chi: 0.368
+  label: food and tobacco roasting, baking, and drying machine operators and tenders | i labels_df: JA | i P.index: JA
+
+51-3092.00 (ACS: 7840) — Food Batchmakers
+  xi_rot: 3.152, chi: 0.331
+  label: food batchmakers | i labels_df: JA | i P.index: JA
+
+51-3093.00 (ACS: 7850) — Food Cooking Machine Operators and Tenders
+  xi_rot: 3.104, chi: 0.269
+  label: food cooking machine operators and tenders | i labels_df: JA | i P.index: JA
+
+51-4021.00 (ACS: 7920) — Extruding and Drawing Machine Setters, Operators, and Tenders, Metal and Plastic
+  xi_rot: 3.821, chi: 0.398
+  label: extruding and drawing machine setters, operators, and tenders, metal and plastic | i labels_df: JA | i P.index: JA
+
+51-4022.00 (ACS: 7930) — Forging Machine Setters, Operators, and Tenders, Metal and Plastic
+  xi_rot: 3.508, chi: 0.362
+  label: forging machine setters, operators, and tenders, metal and plastic | i labels_df: JA | i P.index: JA
+
+51-4023.00 (ACS: 7940) — Rolling Machine Setters, Operators, and Tenders, Metal and Plastic
+  xi_rot: 4.045, chi: 0.487
+  label: rolling machine setters, operators, and tenders, metal and plastic | i labels_df: JA | i P.index: JA
+
+51-4031.00 (ACS: nan) — Cutting, Punching, and Press Machine Setters, Operators, and Tenders, Metal and Plastic
+  xi_rot: 3.581, chi: 0.367
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4032.00 (ACS: nan) — Drilling and Boring Machine Tool Setters, Operators, and Tenders, Metal and Plastic
+  xi_rot: 3.659, chi: 0.391
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4033.00 (ACS: nan) — Grinding, Lapping, Polishing, and Buffing Machine Tool Setters, Operators, and Tenders, Metal and Plastic
+  xi_rot: 3.815, chi: 0.379
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4034.00 (ACS: nan) — Lathe and Turning Machine Tool Setters, Operators, and Tenders, Metal and Plastic
+  xi_rot: 3.570, chi: 0.319
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4035.00 (ACS: nan) — Milling and Planing Machine Setters, Operators, and Tenders, Metal and Plastic
+  xi_rot: 3.548, chi: 0.357
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4041.00 (ACS: 8030) — Machinists
+  xi_rot: 3.829, chi: 0.463
+  label: machinists | i labels_df: JA | i P.index: JA
+
+51-4051.00 (ACS: nan) — Metal-Refining Furnace Operators and Tenders
+  xi_rot: 3.881, chi: 0.425
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4052.00 (ACS: nan) — Pourers and Casters, Metal
+  xi_rot: 3.378, chi: 0.313
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4061.00 (ACS: nan) — Model Makers, Metal and Plastic
+  xi_rot: 3.853, chi: 0.426
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4062.00 (ACS: nan) — Patternmakers, Metal and Plastic
+  xi_rot: 3.530, chi: 0.360
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4071.00 (ACS: nan) — Foundry Mold and Coremakers
+  xi_rot: 3.068, chi: 0.177
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4072.00 (ACS: nan) — Molding, Coremaking, and Casting Machine Setters, Operators, and Tenders, Metal and Plastic
+  xi_rot: 3.552, chi: 0.360
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4081.00 (ACS: nan) — Multiple Machine Tool Setters, Operators, and Tenders, Metal and Plastic
+  xi_rot: 3.900, chi: 0.475
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4111.00 (ACS: 8130) — Tool and Die Makers
+  xi_rot: 3.919, chi: 0.459
+  label: tool and die makers | i labels_df: JA | i P.index: JA
+
+51-4121.00 (ACS: nan) — Welders, Cutters, Solderers, and Brazers
+  xi_rot: 3.191, chi: 0.227
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4122.00 (ACS: nan) — Welding, Soldering, and Brazing Machine Setters, Operators, and Tenders
+  xi_rot: 3.376, chi: 0.335
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4191.00 (ACS: nan) — Heat Treating Equipment Setters, Operators, and Tenders, Metal and Plastic
+  xi_rot: 3.837, chi: 0.456
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4192.00 (ACS: nan) — Layout Workers, Metal and Plastic
+  xi_rot: 3.411, chi: 0.370
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4193.00 (ACS: nan) — Plating Machine Setters, Operators, and Tenders, Metal and Plastic
+  xi_rot: 3.434, chi: 0.346
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-4194.00 (ACS: nan) — Tool Grinders, Filers, and Sharpeners
+  xi_rot: 3.876, chi: 0.430
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-5111.00 (ACS: 8250) — Prepress Technicians and Workers
+  xi_rot: 3.460, chi: 0.385
+  label: prepress technicians and workers | i labels_df: JA | i P.index: JA
+
+51-5112.00 (ACS: 8255) — Printing Press Operators
+  xi_rot: 3.762, chi: 0.474
+  label: printing press operators | i labels_df: JA | i P.index: JA
+
+51-5113.00 (ACS: 8256) — Print Binding and Finishing Workers
+  xi_rot: 3.677, chi: 0.422
+  label: print binding and finishing workers | i labels_df: JA | i P.index: JA
+
+51-6011.00 (ACS: 8300) — Laundry and Dry-Cleaning Workers
+  xi_rot: 2.897, chi: 0.220
+  label: laundry and dry-cleaning workers | i labels_df: JA | i P.index: JA
+
+51-6021.00 (ACS: 8310) — Pressers, Textile, Garment, and Related Materials
+  xi_rot: 3.007, chi: 0.056
+  label: pressers, textile, garment, and related materials | i labels_df: JA | i P.index: JA
+
+51-6031.00 (ACS: 8320) — Sewing Machine Operators
+  xi_rot: 3.008, chi: 0.152
+  label: sewing machine operators | i labels_df: JA | i P.index: JA
+
+51-6041.00 (ACS: nan) — Shoe and Leather Workers and Repairers
+  xi_rot: 2.811, chi: 0.202
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-6042.00 (ACS: nan) — Shoe Machine Operators and Tenders
+  xi_rot: 3.411, chi: 0.297
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-6051.00 (ACS: nan) — Sewers, Hand
+  xi_rot: 2.668, chi: 0.155
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-6052.00 (ACS: nan) — Tailors, Dressmakers, and Custom Sewers
+  xi_rot: 2.919, chi: 0.295
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-6061.00 (ACS: nan) — Textile Bleaching and Dyeing Machine Operators and Tenders
+  xi_rot: 3.558, chi: 0.332
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-6062.00 (ACS: nan) — Textile Cutting Machine Setters, Operators, and Tenders
+  xi_rot: 3.675, chi: 0.389
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-6063.00 (ACS: 8410) — Textile Knitting and Weaving Machine Setters, Operators, and Tenders
+  xi_rot: 3.311, chi: 0.230
+  label: textile knitting and weaving machine setters, operators, and tenders | i labels_df: JA | i P.index: JA
+
+51-6064.00 (ACS: 8420) — Textile Winding, Twisting, and Drawing Out Machine Setters, Operators, and Tenders
+  xi_rot: 3.506, chi: 0.349
+  label: textile winding, twisting, and drawing out machine setters, operators, and tenders | i labels_df: JA | i P.index: JA
+
+51-6091.00 (ACS: nan) — Extruding and Forming Machine Setters, Operators, and Tenders, Synthetic and Glass Fibers
+  xi_rot: 3.684, chi: 0.417
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-6092.00 (ACS: nan) — Fabric and Apparel Patternmakers
+  xi_rot: 3.808, chi: 0.474
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-6093.00 (ACS: 8450) — Upholsterers
+  xi_rot: 3.586, chi: 0.413
+  label: upholsterers | i labels_df: JA | i P.index: JA
+
+51-7011.00 (ACS: 8500) — Cabinetmakers and Bench Carpenters
+  xi_rot: 3.852, chi: 0.431
+  label: cabinetmakers and bench carpenters | i labels_df: JA | i P.index: JA
+
+51-7021.00 (ACS: 8510) — Furniture Finishers
+  xi_rot: 3.424, chi: 0.386
+  label: furniture finishers | i labels_df: JA | i P.index: JA
+
+51-7031.00 (ACS: nan) — Model Makers, Wood
+  xi_rot: 3.302, chi: 0.351
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-7032.00 (ACS: nan) — Patternmakers, Wood
+  xi_rot: 3.772, chi: 0.408
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-7041.00 (ACS: 8530) — Sawing Machine Setters, Operators, and Tenders, Wood
+  xi_rot: 3.393, chi: 0.283
+  label: sawing machine setters, operators, and tenders, wood | i labels_df: JA | i P.index: JA
+
+51-7042.00 (ACS: 8540) — Woodworking Machine Setters, Operators, and Tenders, Except Sawing
+  xi_rot: 3.651, chi: 0.343
+  label: woodworking machine setters, operators, and tenders, except sawing | i labels_df: JA | i P.index: JA
+
+51-8013.00 (ACS: nan) — Power Plant Operators
+  xi_rot: 4.030, chi: 0.502
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-8021.00 (ACS: 8610) — Stationary Engineers and Boiler Operators
+  xi_rot: 4.059, chi: 0.516
+  label: stationary engineers and boiler operators | i labels_df: JA | i P.index: JA
+
+51-8093.00 (ACS: nan) — Petroleum Pump System Operators, Refinery Operators, and Gaugers
+  xi_rot: 4.085, chi: 0.540
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-9012.00 (ACS: nan) — Separating, Filtering, Clarifying, Precipitating, and Still Machine Setters, Operators, and Tenders
+  xi_rot: 4.034, chi: 0.449
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-9021.00 (ACS: nan) — Crushing, Grinding, and Polishing Machine Setters, Operators, and Tenders
+  xi_rot: 3.860, chi: 0.482
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-9022.00 (ACS: nan) — Grinding and Polishing Workers, Hand
+  xi_rot: 3.573, chi: 0.347
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-9023.00 (ACS: nan) — Mixing and Blending Machine Setters, Operators, and Tenders
+  xi_rot: 3.740, chi: 0.410
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-9031.00 (ACS: nan) — Cutters and Trimmers, Hand
+  xi_rot: 2.576, chi: 0.185
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-9032.00 (ACS: nan) — Cutting and Slicing Machine Setters, Operators, and Tenders
+  xi_rot: 3.791, chi: 0.389
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-9041.00 (ACS: 8720) — Extruding, Forming, Pressing, and Compacting Machine Setters, Operators, and Tenders
+  xi_rot: 3.730, chi: 0.358
+  label: extruding, forming, pressing, and compacting machine setters, operators, and tenders | i labels_df: JA | i P.index: JA
+
+51-9051.00 (ACS: 8730) — Furnace, Kiln, Oven, Drier, and Kettle Operators and Tenders
+  xi_rot: 3.245, chi: 0.302
+  label: furnace, kiln, oven, drier, and kettle operators and tenders | i labels_df: JA | i P.index: JA
+
+51-9061.00 (ACS: 8740) — Inspectors, Testers, Sorters, Samplers, and Weighers
+  xi_rot: 3.387, chi: 0.387
+  label: inspectors, testers, sorters, samplers, and weighers | i labels_df: JA | i P.index: JA
+
+51-9071.06 (ACS: 8750) — Gem and Diamond Workers
+  xi_rot: 3.295, chi: 0.398
+  label: jewelers and precious stone and metal workers | i labels_df: JA | i P.index: JA
+
+51-9081.00 (ACS: nan) — Dental Laboratory Technicians
+  xi_rot: 3.655, chi: 0.430
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-9083.00 (ACS: nan) — Ophthalmic Laboratory Technicians
+  xi_rot: 3.592, chi: 0.366
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-9111.00 (ACS: 8800) — Packaging and Filling Machine Operators and Tenders
+  xi_rot: 3.333, chi: 0.329
+  label: packaging and filling machine operators and tenders | i labels_df: JA | i P.index: JA
+
+51-9123.00 (ACS: nan) — Painting, Coating, and Decorating Workers
+  xi_rot: 2.601, chi: 0.186
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-9124.00 (ACS: nan) — Coating, Painting, and Spraying Machine Setters, Operators, and Tenders
+  xi_rot: 3.568, chi: 0.353
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-9141.00 (ACS: nan) — Semiconductor Processing Technicians
+  xi_rot: 3.716, chi: 0.398
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-9151.00 (ACS: 8830) — Photographic Process Workers and Processing Machine Operators
+  xi_rot: 4.023, chi: 0.486
+  label: photographic process workers and processing machine operators | i labels_df: JA | i P.index: JA
+
+51-9191.00 (ACS: 8850) — Adhesive Bonding Machine Operators and Tenders
+  xi_rot: 3.726, chi: 0.414
+  label: adhesive bonding machine operators and tenders | i labels_df: JA | i P.index: JA
+
+51-9192.00 (ACS: nan) — Cleaning, Washing, and Metal Pickling Equipment Operators and Tenders
+  xi_rot: 3.125, chi: 0.237
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-9193.00 (ACS: nan) — Cooling and Freezing Equipment Operators and Tenders
+  xi_rot: 4.076, chi: 0.489
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+51-9194.00 (ACS: 8910) — Etchers and Engravers
+  xi_rot: 3.407, chi: 0.320
+  label: etchers and engravers | i labels_df: JA | i P.index: JA
+
+51-9195.03 (ACS: 8920) — Stone Cutters and Carvers, Manufacturing
+  xi_rot: 3.078, chi: 0.244
+  label: molders, shapers, and casters, except metal and plastic | i labels_df: JA | i P.index: JA
+
+51-9195.04 (ACS: 8920) — Glass Blowers, Molders, Benders, and Finishers
+  xi_rot: 3.715, chi: 0.385
+  label: molders, shapers, and casters, except metal and plastic | i labels_df: JA | i P.index: JA
+
+51-9195.05 (ACS: 8920) — Potters, Manufacturing
+  xi_rot: 3.066, chi: 0.293
+  label: molders, shapers, and casters, except metal and plastic | i labels_df: JA | i P.index: JA
+
+51-9196.00 (ACS: 8930) — Paper Goods Machine Setters, Operators, and Tenders
+  xi_rot: 3.550, chi: 0.358
+  label: paper goods machine setters, operators, and tenders | i labels_df: JA | i P.index: JA
+
+51-9197.00 (ACS: 8940) — Tire Builders
+  xi_rot: 3.074, chi: 0.185
+  label: tire builders | i labels_df: JA | i P.index: JA
+
+51-9198.00 (ACS: 8950) — Helpers--Production Workers
+  xi_rot: 3.051, chi: 0.157
+  label: helpers--production workers | i labels_df: JA | i P.index: JA
+
+53-3011.00 (ACS: 9110) — Ambulance Drivers and Attendants, Except Emergency Medical Technicians
+  xi_rot: 3.173, chi: 0.373
+  label: ambulance drivers and attendants, except emergency medical technicians | i labels_df: JA | i P.index: JA
+
+53-3031.00 (ACS: nan) — Driver/Sales Workers
+  xi_rot: 2.471, chi: 0.338
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-3032.00 (ACS: nan) — Heavy and Tractor-Trailer Truck Drivers
+  xi_rot: 3.536, chi: 0.380
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-3033.00 (ACS: nan) — Light Truck Drivers
+  xi_rot: 3.019, chi: 0.266
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-3052.00 (ACS: nan) — Bus Drivers, Transit and Intercity
+  xi_rot: 3.032, chi: 0.232
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-4011.00 (ACS: nan) — Locomotive Engineers
+  xi_rot: 3.769, chi: 0.469
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-4013.00 (ACS: nan) — Rail Yard Engineers, Dinkey Operators, and Hostlers
+  xi_rot: 4.036, chi: 0.442
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-4041.00 (ACS: nan) — Subway and Streetcar Operators
+  xi_rot: 3.517, chi: 0.419
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-5011.00 (ACS: nan) — Sailors and Marine Oilers
+  xi_rot: 3.900, chi: 0.505
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-5022.00 (ACS: nan) — Motorboat Operators
+  xi_rot: 3.960, chi: 0.502
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-6011.00 (ACS: nan) — Bridge and Lock Tenders
+  xi_rot: 2.915, chi: 0.324
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-6021.00 (ACS: 9350) — Parking Attendants
+  xi_rot: 2.457, chi: 0.190
+  label: parking lot attendants | i labels_df: JA | i P.index: JA
+
+53-6031.00 (ACS: 9360) — Automotive and Watercraft Service Attendants
+  xi_rot: 3.530, chi: 0.313
+  label: automotive and watercraft service attendants    | i labels_df: JA | i P.index: JA
+
+53-6051.07 (ACS: 9410) — Transportation Vehicle, Equipment and Systems Inspectors, Except Aviation
+  xi_rot: 3.545, chi: 0.383
+  label: transportation inspectors | i labels_df: JA | i P.index: JA
+
+53-7011.00 (ACS: nan) — Conveyor Operators and Tenders
+  xi_rot: 3.830, chi: 0.448
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-7021.00 (ACS: 9510) — Crane and Tower Operators
+  xi_rot: 3.622, chi: 0.391
+  label: crane and tower operators | i labels_df: JA | i P.index: JA
+
+53-7031.00 (ACS: nan) — Dredge Operators
+  xi_rot: 3.539, chi: 0.367
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-7041.00 (ACS: nan) — Hoist and Winch Operators
+  xi_rot: 3.845, chi: 0.354
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-7051.00 (ACS: 9600) — Industrial Truck and Tractor Operators
+  xi_rot: 3.377, chi: 0.254
+  label: industrial truck and tractor operators | i labels_df: JA | i P.index: JA
+
+53-7061.00 (ACS: 9610) — Cleaners of Vehicles and Equipment
+  xi_rot: 3.158, chi: 0.132
+  label: cleaners of vehicles and equipment | i labels_df: JA | i P.index: JA
+
+53-7062.00 (ACS: 9620) — Laborers and Freight, Stock, and Material Movers, Hand
+  xi_rot: 2.877, chi: 0.183
+  label: laborers and freight, stock, and material movers, hand | i labels_df: JA | i P.index: JA
+
+53-7062.04 (ACS: 9620) — Recycling and Reclamation Workers
+  xi_rot: 3.238, chi: 0.293
+  label: laborers and freight, stock, and material movers, hand | i labels_df: JA | i P.index: JA
+
+53-7063.00 (ACS: 9630) — Machine Feeders and Offbearers
+  xi_rot: 3.067, chi: 0.229
+  label: machine feeders and offbearers | i labels_df: JA | i P.index: JA
+
+53-7064.00 (ACS: 9640) — Packers and Packagers, Hand
+  xi_rot: 2.684, chi: 0.028
+  label: packers and packagers, hand | i labels_df: JA | i P.index: JA
+
+53-7065.00 (ACS: nan) — Stockers and Order Fillers
+  xi_rot: 2.523, chi: 0.250
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-7071.00 (ACS: nan) — Gas Compressor and Gas Pumping Station Operators
+  xi_rot: 3.870, chi: 0.457
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-7072.00 (ACS: nan) — Pump Operators, Except Wellhead Pumpers
+  xi_rot: 3.956, chi: 0.445
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-7073.00 (ACS: nan) — Wellhead Pumpers
+  xi_rot: 3.586, chi: 0.378
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
+53-7081.00 (ACS: 9720) — Refuse and Recyclable Material Collectors
+  xi_rot: 3.049, chi: 0.178
+  label: refuse and recyclable material collectors | i labels_df: JA | i P.index: JA
+
+53-7121.00 (ACS: nan) — Tank Car, Truck, and Ship Loaders
+  xi_rot: 3.738, chi: 0.423
+  label:  | i labels_df: NEJ | i P.index: NEJ
+
