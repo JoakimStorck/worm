@@ -149,8 +149,6 @@ def handle_start_job_search(event, world):
     matches = world.match_individuals_to_jobs(
         individuals=df,
         mode="exhaustive_multilevel",
-        alpha_chi=world.cfg_reader.config['simulation']['alpha_chi'],
-        alpha_xi=world.cfg_reader.config['simulation']['alpha_xi'],
         alpha_geo=world.cfg_reader.config['simulation']['alpha_geo'],
         sigma_gamma=world.cfg_reader.config['simulation'].get('sigma_gamma', 1.0),
         utility_min=world.cfg_reader.config['simulation'].get('utility_min', 0.05),

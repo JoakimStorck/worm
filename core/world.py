@@ -224,6 +224,8 @@ class World:
                 alpha_chi=kwargs.get("alpha_chi", 5.0),
                 alpha_xi=kwargs.get("alpha_xi", 5.0),
                 alpha_geo=kwargs.get("alpha_geo", 1.0),
+                sigma_gamma=kwargs.get("sigma_gamma", 1.0),
+                utility_min=kwargs.get("utility_min", 0.05),
                 batch_frac_deso=kwargs.get("batch_frac_deso", 0.2),
                 batch_frac_muni=kwargs.get("batch_frac_muni", 0.1),
                 batch_frac_global=kwargs.get("batch_frac_global", 0.05),
@@ -238,6 +240,8 @@ class World:
                 alpha_chi=kwargs.get("alpha_chi", 5.0),
                 alpha_xi=kwargs.get("alpha_xi", 5.0),
                 alpha_geo=kwargs.get("alpha_geo", 1.0),
+                sigma_gamma=kwargs.get("sigma_gamma", 1.0),
+                utility_min=kwargs.get("utility_min", 0.05),
                 verbose=kwargs.get("verbose", False)
             )
         else:

@@ -368,7 +368,7 @@ class ConfigReader:
                     warn.append(f"Parameter '{key}' finns både i defaults och i override för {mcode}.")
 
         # === Kända sektioner individuals/employer (felstavar eller dubbletter) ===
-        known_indiv = {"propensities", "initial_H"}
+        known_indiv = {"propensities", "initial_r", "initial_H"}
         indv = defaults.get("individuals", {})
         for k in indv.keys():
             if k not in known_indiv:

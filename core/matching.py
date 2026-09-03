@@ -11,6 +11,7 @@ from core.log import log
 def multilevel_exhaustive_matching(
     individuals, jobs,
     alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0,
+    sigma_gamma=1.0, utility_min=0.05,
     verbose=True
 ):
     inds = individuals.copy()
@@ -42,7 +43,8 @@ def multilevel_exhaustive_matching(
                 continue
             matches = global_greedy_matching(
                 inds_batch, jobs_batch,
-                alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo
+                alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo,
+                sigma_gamma=sigma_gamma, utility_min=utility_min
             )
             if len(matches) > 0:
                 changed = True
@@ -68,7 +70,8 @@ def multilevel_exhaustive_matching(
                 continue
             matches = global_greedy_matching(
                 inds_batch, jobs_batch,
-                alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo
+                alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo,
+                sigma_gamma=sigma_gamma, utility_min=utility_min
             )
             if len(matches) > 0:
                 changed = True
@@ -90,7 +93,8 @@ def multilevel_exhaustive_matching(
             break
         matches = global_greedy_matching(
             inds_batch, jobs_batch,
-            alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo
+            alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo,
+            sigma_gamma=sigma_gamma, utility_min=utility_min
         )
         if len(matches) > 0:
             changed = True
@@ -208,6 +212,7 @@ def interleaved_multilevel_batch_matching(
     individuals, jobs,
     batch_frac_deso=0.20, batch_frac_muni=0.10, batch_frac_global=0.05,
     alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0,
+    sigma_gamma=1.0, utility_min=0.05,
     min_batch=10, verbose=True
 ):
     inds = individuals.copy()
@@ -243,7 +248,8 @@ def interleaved_multilevel_batch_matching(
             jobs_sel = jobs_batch.sample(min(n_job_batch, len(jobs_batch)), random_state=round_num)
             matches = global_greedy_matching(
                 inds_sel, jobs_sel,
-                alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo
+                alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo,
+                sigma_gamma=sigma_gamma, utility_min=utility_min
             )
             if len(matches) > 0:
                 matched_this_round += len(matches)
@@ -270,7 +276,8 @@ def interleaved_multilevel_batch_matching(
             jobs_sel = jobs_batch.sample(min(n_job_batch, len(jobs_batch)), random_state=round_num+1)
             matches = global_greedy_matching(
                 inds_sel, jobs_sel,
-                alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo
+                alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo,
+                sigma_gamma=sigma_gamma, utility_min=utility_min
             )
             if len(matches) > 0:
                 matched_this_round += len(matches)
@@ -291,7 +298,8 @@ def interleaved_multilevel_batch_matching(
         jobs_sel = jobs_df.sample(min(n_job_batch, len(jobs_df)), random_state=round_num+2)
         matches = global_greedy_matching(
             inds_sel, jobs_sel,
-            alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo
+            alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo,
+            sigma_gamma=sigma_gamma, utility_min=utility_min
         )
         if len(matches) > 0:
             matched_this_round += len(matches)
