@@ -48,7 +48,7 @@ jx, jy = sample_disc(M)
 individuals = pd.DataFrame({
     "individual_id": np.arange(N),
     "x_occ": ix, "y_occ": iy,
-    "H": rng.uniform(0.08, 0.25, N),
+    "r_i": np.zeros(N),          # färsk arbetare = punkt i planet
     "x": rng.uniform(0, 30_000, N), "y": rng.uniform(0, 30_000, N),
 })
 jobs = pd.DataFrame({
@@ -59,7 +59,8 @@ jobs = pd.DataFrame({
 })
 
 # 1. Euklidisk matchning
-res = global_greedy_matching(individuals, jobs, alpha_geo=1.0)
+res = global_greedy_matching(individuals, jobs, alpha_geo=1.0,
+                             sigma_gamma=0.6, utility_min=0.05)
 assert len(res) > 0, "Ingen matchning – kontrollera x_occ/y_occ/r_o"
 print(f"[1] Matchning OK: {len(res)} par, medel-utility {res['utility'].mean():.4f}")
 
@@ -70,11 +71,12 @@ assert rmax <= 1.0 + 1e-9, f"Sampler utanför skivan: r={rmax}"
 print(f"[2] Sampler OK: max radie {rmax:.3f} (<= 1.0)")
 
 # 3. Bytarkostnad: ren fördjupning gratis, omorientering kostar djup
-chi_a, *_ = apply_capability_update(0.5, 0.0, 0.1, delta_chi=0.1, switch_cost_kappa=0.05)
-chi_b, xi_b, _, xb, yb = apply_capability_update(0.5, 0.0, 0.1, delta_xi=1.5, switch_cost_kappa=0.05)
+chi_a, *_ = apply_capability_update(0.5, 0.0, 0.0, delta_chi=0.1, switch_cost_kappa=0.05)
+chi_b, xi_b, ri_b, xb, yb = apply_capability_update(0.5, 0.0, 0.0, delta_xi=1.5, switch_cost_kappa=0.05)
 assert abs(chi_a - 0.6) < 1e-9, "Radiell fördjupning ska inte kosta"
 assert chi_b < 0.5, "Omorientering ska kosta djup"
 assert abs(xb - chi_b * np.cos(xi_b)) < 1e-9, "x_occ ur synk med chi/xi"
-print(f"[3] Dynamik OK: fördjupning 0.5->{chi_a:.3f}, omorientering 0.5->{chi_b:.3f} (synkad)")
+assert ri_b > 0, "Erfarenhetsradien ska växa vid förflyttning"
+print(f"[3] Dynamik OK: fördjupning 0.5->{chi_a:.3f}, omorientering 0.5->{chi_b:.3f}, r_i 0->{ri_b:.3f}")
 
 print("\nAlla smoke-tester passerade.")

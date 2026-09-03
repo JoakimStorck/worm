@@ -55,7 +55,7 @@ def replay_to_time(individuals, jobs, eventlog, T, selected_inds=None):
                 indiv.at[iid, 'job_id'] = jid
                 if 'chi' in row: indiv.at[iid, 'chi'] = row['chi']
                 if 'xi' in row: indiv.at[iid, 'xi'] = row['xi']
-                if 'H' in row: indiv.at[iid, 'H'] = row['H']
+                if 'r_i' in row: indiv.at[iid, 'r_i'] = row['r_i']
                 indiv_paths[iid].append((row['time'], row.get('chi', np.nan), row.get('xi', np.nan)))
                 # NYTT: Spara jobbpositionen
                 if 'chi' in row and 'xi' in row and not (pd.isnull(row['chi']) or pd.isnull(row['xi'])):
@@ -70,7 +70,7 @@ def replay_to_time(individuals, jobs, eventlog, T, selected_inds=None):
                 indiv.at[iid, 'job_id'] = ''
                 if 'chi' in row: indiv.at[iid, 'chi'] = row['chi']
                 if 'xi' in row: indiv.at[iid, 'xi'] = row['xi']
-                if 'H' in row: indiv.at[iid, 'H'] = row['H']
+                if 'r_i' in row: indiv.at[iid, 'r_i'] = row['r_i']
                 indiv_paths[iid].append((row['time'], row.get('chi', np.nan), row.get('xi', np.nan)))
         elif event == 'start_education':
             iid = row.get('individual_id')
@@ -78,7 +78,7 @@ def replay_to_time(individuals, jobs, eventlog, T, selected_inds=None):
                 indiv.at[iid, 'status'] = 'in_education'
                 if 'chi' in row: indiv.at[iid, 'chi'] = row['chi']
                 if 'xi' in row: indiv.at[iid, 'xi'] = row['xi']
-                if 'H' in row: indiv.at[iid, 'H'] = row['H']
+                if 'r_i' in row: indiv.at[iid, 'r_i'] = row['r_i']
                 indiv_paths[iid].append((row['time'], row.get('chi', np.nan), row.get('xi', np.nan)))
     indiv.reset_index(inplace=True)
     jobs_df.reset_index(inplace=True)
@@ -116,7 +116,7 @@ def plot_occupation_space(
     # Plotta H-cirkel kring varje individ
     if plot_H_circle and plot_indivs:
         for _, row in indfilt.iterrows():
-            draw_H_circle(ax, row['chi'], row['xi'], row['H'])
+            draw_H_circle(ax, row['chi'], row['xi'], row.get('r_i', 0.0))
 
             # Plotta linjer mellan jobb och individ vid anställning
             if plot_lines and jobs is not None:

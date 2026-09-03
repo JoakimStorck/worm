@@ -2,20 +2,25 @@
 
 import numpy as np
 import pandas as pd
-from core.occupations.utils import xi_add, chi_add, H_add, apply_capability_update
+from core.occupations.utils import xi_add, chi_add, r_add, apply_capability_update
 
-def _update_individual(world, idx, delta_chi=0.0, delta_xi=0.0, delta_H=0.0):
-    """Uppdaterar chi/xi/H, haller x_occ/y_occ synkade och tar ut bytarkostnad."""
+def _update_individual(world, idx, delta_chi=0.0, delta_xi=0.0, delta_r=0.0):
+    """Uppdaterar chi/xi/r_i, haller x_occ/y_occ synkade och tar ut bytarkostnad."""
     ind = world.individuals
-    kappa = world.cfg_reader.config.get('simulation', {}).get('switch_cost_kappa', 0.05)
-    chi, xi, H, x, y = apply_capability_update(
-        ind.at[idx, 'chi'], ind.at[idx, 'xi'], ind.at[idx, 'H'],
-        delta_chi=delta_chi, delta_xi=delta_xi, delta_H=delta_H, switch_cost_kappa=kappa)
+    sim = world.cfg_reader.config.get('simulation', {})
+    kappa = sim.get('switch_cost_kappa', 0.05)
+    bfm = sim.get('breadth_from_move', 0.25)
+    r_now = ind.at[idx, 'r_i'] if 'r_i' in ind.columns else 0.0
+    chi, xi, r_i, x, y = apply_capability_update(
+        ind.at[idx, 'chi'], ind.at[idx, 'xi'], r_now,
+        delta_chi=delta_chi, delta_xi=delta_xi, delta_r=delta_r,
+        switch_cost_kappa=kappa, breadth_from_move=bfm)
     ind.at[idx, 'chi'] = chi
     ind.at[idx, 'xi'] = xi
-    ind.at[idx, 'H'] = H
+    ind.at[idx, 'r_i'] = r_i
     ind.at[idx, 'x_occ'] = x
     ind.at[idx, 'y_occ'] = y
+
 
 def handle_quit_job(event, world):
     idx = event['agent_id']
@@ -42,7 +47,7 @@ def handle_quit_job(event, world):
             "params": {
                 'education_type': 'broad',
                 'delta_chi': eff['delta_chi'],
-                'delta_H': eff['delta_H'],
+                'delta_r': eff.get('delta_r', eff.get('delta_H', 0.0)),
                 'duration': eff['duration'],
                 'delta_xi': eff.get('delta_xi', 10),
             }
@@ -87,13 +92,13 @@ def handle_start_job(event, world):
         else:
             interval = 28
         t_training = event['time'] + interval
-        delta_H = np.random.uniform(0.05, 0.15)
+        delta_r = np.random.uniform(0.0, 0.02)
         delta_chi = np.random.uniform(0.01, 0.04)
         training_event = {
             "time": t_training,
             "agent_id": idx,
             "event_type": "start_internal_training",
-            "params": {'delta_H': delta_H, 'delta_chi': delta_chi}
+            "params": {'delta_r': delta_r, 'delta_chi': delta_chi}
         }
         world._push_event(training_event)
 
@@ -110,12 +115,12 @@ def handle_start_job(event, world):
         effects = world.cfg_reader.config['simulation']['event_effects']['internal_job_change']
         delta_xi = effects.get('delta_xi', 0.0)
         delta_chi = effects.get('delta_chi', 0.0)
-        delta_H = effects.get('delta_H', 0.0)
+        delta_r = effects.get('delta_r', effects.get('delta_H', 0.0))
         change_event = {
             "time": t_change,
             "agent_id": idx,
             "event_type": "internal_job_change",
-            "params": {'delta_xi': delta_xi, 'delta_chi': delta_chi, 'delta_H': delta_H}
+            "params": {'delta_xi': delta_xi, 'delta_chi': delta_chi, 'delta_r': delta_r}
         }
         world._push_event(change_event)
 
@@ -147,6 +152,8 @@ def handle_start_job_search(event, world):
         alpha_chi=world.cfg_reader.config['simulation']['alpha_chi'],
         alpha_xi=world.cfg_reader.config['simulation']['alpha_xi'],
         alpha_geo=world.cfg_reader.config['simulation']['alpha_geo'],
+        sigma_gamma=world.cfg_reader.config['simulation'].get('sigma_gamma', 1.0),
+        utility_min=world.cfg_reader.config['simulation'].get('utility_min', 0.05),
     )
     if not matches.empty:
         job_id = matches.iloc[0]['job_id']
@@ -189,13 +196,13 @@ def handle_start_education(event, world):
     idx = event['agent_id']
     education_type = event['params'].get('education_type', 'specialist')
     delta_chi = event['params'].get('delta_chi', 0.2)
-    delta_H = event['params'].get('delta_H', 0.1)
+    delta_r = event['params'].get('delta_r', event['params'].get('delta_H', 0.0))
     delta_xi = event['params'].get('delta_xi', 0.5)
 
     if education_type == 'specialist':
-        _update_individual(world, idx, delta_chi=delta_chi, delta_H=delta_H)
+        _update_individual(world, idx, delta_chi=delta_chi, delta_r=delta_r)
     elif education_type == 'broad':
-        _update_individual(world, idx, delta_xi=delta_xi, delta_H=delta_H)
+        _update_individual(world, idx, delta_xi=delta_xi, delta_r=delta_r)
 
     world.individuals.at[idx, 'status'] = 'in_education'
     world.event_logger.log_event(world, event, extra={'education_type': education_type})
@@ -232,9 +239,9 @@ def handle_end_education(event, world):
 
 def handle_start_internal_training(event, world):
     idx = event['agent_id']
-    delta_H = event['params'].get('delta_H', 0.2)
+    delta_r = event['params'].get('delta_r', event['params'].get('delta_H', 0.0))
     delta_chi = event['params'].get('delta_chi', 0.05)
-    _update_individual(world, idx, delta_chi=delta_chi, delta_H=delta_H)
+    _update_individual(world, idx, delta_chi=delta_chi, delta_r=delta_r)
     world.event_logger.log_event(world, event, extra={'event_detail': 'start_internal_training'})
 
     if world.individuals.at[idx, 'status'] == 'employed' and np.random.rand() < 0.15:
@@ -244,22 +251,22 @@ def handle_start_internal_training(event, world):
         else:
             interval = 28
         t_training = event['time'] + interval
-        rec_delta_H = np.random.uniform(0.03, 0.10)
+        rec_delta_r = np.random.uniform(0.0, 0.01)
         rec_delta_chi = np.random.uniform(0.01, 0.02)
         more_training = {
             "time": t_training,
             "agent_id": idx,
             "event_type": "start_internal_training",
-            "params": {'delta_H': rec_delta_H, 'delta_chi': rec_delta_chi}
+            "params": {'delta_r': rec_delta_r, 'delta_chi': rec_delta_chi}
         }
         world._push_event(more_training)
 
 def handle_internal_job_change(event, world):
     idx = event['agent_id']
     delta_xi = event['params'].get('delta_xi', 3)
-    delta_H = event['params'].get('delta_H', 0.3)
+    delta_r = event['params'].get('delta_r', event['params'].get('delta_H', 0.0))
     delta_chi = event['params'].get('delta_chi', 0.03)
-    _update_individual(world, idx, delta_xi=delta_xi, delta_chi=delta_chi, delta_H=delta_H)
+    _update_individual(world, idx, delta_xi=delta_xi, delta_chi=delta_chi, delta_r=delta_r)
     world.event_logger.log_event(world, event, extra={'event_detail': 'internal_job_change'})
 
 def handle_career_break(event, world):
@@ -274,8 +281,8 @@ def handle_career_break(event, world):
 
     individuals.at[idx, 'status'] = 'career_break'
     delta_chi = -1 * event['params'].get('delta_chi', 0.05)
-    delta_H = -1 * event['params'].get('delta_H', 0.02)
-    _update_individual(world, idx, delta_chi=delta_chi, delta_H=delta_H)
+    delta_r = -1 * event['params'].get('delta_r', event['params'].get('delta_H', 0.0))
+    _update_individual(world, idx, delta_chi=delta_chi, delta_r=delta_r)
     world.event_logger.log_event(world, event, extra={'event_detail': 'career_break'})
     break_duration = event['params'].get('duration', 0.5 * 365.25)
     end_event = {

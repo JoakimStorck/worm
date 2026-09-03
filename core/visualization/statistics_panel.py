@@ -58,8 +58,8 @@ class StatisticsPanel:
         chi_a = after.get("OCS_individuals", {}).get("chi", {})
         chi_mean_b = f"{chi_b.get('mean', '-'):0.3f}" if 'mean' in chi_b else "-"
         chi_mean_a = f"{chi_a.get('mean', '-'):0.3f}" if 'mean' in chi_a else "-"
-        H_b = before.get("OCS_individuals", {}).get("H", {})
-        H_a = after.get("OCS_individuals", {}).get("H", {})
+        H_b = before.get("OCS_individuals", {}).get("r_i", {})
+        H_a = after.get("OCS_individuals", {}).get("r_i", {})
         H_mean_b = f"{H_b.get('mean', '-'):0.3f}" if 'mean' in H_b else "-"
         H_mean_a = f"{H_a.get('mean', '-'):0.3f}" if 'mean' in H_a else "-"
 

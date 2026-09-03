@@ -12,7 +12,7 @@ from core.matching import interleaved_multilevel_batch_matching, multilevel_exha
 from core.log import log
 from core.events import EventQueue
 from core.log import EventLogger
-from core.occupations.utils import xi_add, chi_add, H_add
+from core.occupations.utils import xi_add, chi_add, r_add
 
 DAYS_PER_YEAR = 365.25
 MONTH_LENGTHS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]

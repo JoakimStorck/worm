@@ -495,11 +495,12 @@ class ScenarioBuilder:
         df["chi"] = np.hypot(x_occ, y_occ)                # för visualisering/kompatibilitet
         df["xi"]  = np.arctan2(y_occ, x_occ) % (2 * np.pi)
 
-        # 8. H (kompetensbredd) – som tidigare, eller gör beroende av chi om du vill
-        H_cfg = indiv_defaults.get('initial_H', {})
-        H_min = H_cfg.get('min', 0.08)
-        H_max = H_cfg.get('max', 0.25)
-        df['H'] = rng.uniform(H_min, H_max, size=len(df))
+        # 8. r_i – erfarenhetsradie (geometrisk bredd, ersätter entropin H).
+        #    Färsk arbetare = punkt (0). Växer med faktiska yrkesbyten.
+        r_cfg = indiv_defaults.get('initial_r', indiv_defaults.get('initial_H', {}))
+        r_min = r_cfg.get('min', 0.0)
+        r_max_i = r_cfg.get('max', 0.0)
+        df['r_i'] = rng.uniform(r_min, r_max_i, size=len(df))
 
         # 9. Z (kompetensbredd/specialisering) – valfritt, kan läggas in här
         # df['Z'] = ... (exempelvis beroende av chi)

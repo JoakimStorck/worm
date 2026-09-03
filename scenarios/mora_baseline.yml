@@ -75,9 +75,9 @@ defaults:
       internal_job_change:
         mean: 0.10
         std: 0.04
-    initial_H:                # Initial kompetensbredd
-      min: 0.025
-      max: 0.1
+    initial_r:                # Initial erfarenhetsradie (geometrisk bredd)
+      min: 0.0                #   0 = färsk arbetare är en punkt i planet
+      max: 0.05               #   växer sedan med faktiska yrkesbyten
     # Här kan du fylla på med fler default-attribut för individer!
 
   # === AGENT-PARAMETRAR: EMPLOYER ===
@@ -107,10 +107,12 @@ simulation:
   log_to_console: true
   log_to_file: true
   logfile_path: "output/mora_baseline.log"
-  alpha_chi: 1.0
-  alpha_xi: 1.0
+  # alpha_chi/alpha_xi: OBSOLETA – ersatta av euklidiskt avstånd i planet
   alpha_geo: 0.1
-  switch_cost_kappa: 0.05
+  sigma_gamma: 0.6          # kärnbredd = sigma_gamma * sqrt(r_o^2 + r_i^2); <1 skärper matchningen
+  utility_min: 0.05         # reservationsnytta – under denna accepteras inget jobb
+  switch_cost_kappa: 0.05   # djupkostnad per radian vid riktningsbyte
+  breadth_from_move: 0.25   # hur mycket förflyttning breddar erfarenhetsradien
 
   # Samla ALLA event-tider på samma ställe – alla tider med enhet!
   event_timings:
@@ -142,27 +144,27 @@ simulation:
     start_education:
       broad:
         delta_chi: 0.8
-        delta_H: 0.3
+        delta_r: 0.3
         delta_xi: 10
         duration: 0.7y   # 0.7 år
       specialist:
         delta_chi: 1.5
-        delta_H: 0.1
+        delta_r: 0.1
         delta_xi: 3
         duration: 1.2y   # 1.2 år
     internal_training:
       delta_chi: 0.05
-      delta_H: 0.2
+      delta_r: 0.2
       delta_xi: 0
       duration: 0.15y    # 0.15 år
     career_break:
       delta_chi: -0.05
-      delta_H: -0.02
+      delta_r: -0.02
       delta_xi: 0
       duration: 0.5y     # 0.5 år
     internal_job_change:
       delta_chi: 0.01
-      delta_H: 0.1
+      delta_r: 0.1
       delta_xi: 0
       
 

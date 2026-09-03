@@ -62,12 +62,12 @@ def save_basic_stats(result, outdir, tag="basic_stats"):
                 "max": float(ind['xi'].max()),
                 "hist": hist_as_dict(ind['xi'], bins=20)
             },
-            "H": {
-                "mean": float(ind['H'].mean()),
-                "std": float(ind['H'].std()),
-                "min": float(ind['H'].min()),
-                "max": float(ind['H'].max()),
-                "hist": hist_as_dict(ind['H'], bins=20)
+            "r_i": {
+                "mean": float(ind['r_i'].mean()),
+                "std": float(ind['r_i'].std()),
+                "min": float(ind['r_i'].min()),
+                "max": float(ind['r_i'].max()),
+                "hist": hist_as_dict(ind['r_i'], bins=20)
             }
         },
         # Skriv motsvarande för jobs och ev. annat.

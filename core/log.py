@@ -29,7 +29,7 @@ def build_standard_logdict(event, agent_type, agent=None, agent_id=None, extra=N
         "agent_id": agent_id,
         "chi": agent.get("chi") if agent is not None else None,
         "xi": agent.get("xi") if agent is not None else None,
-        "H": agent.get("H") if agent is not None else None,
+        "r_i": agent.get("r_i") if agent is not None else None,
         "free_text": free_text,
         **(extra if extra else {})
     }
