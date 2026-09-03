@@ -1,172 +1,199 @@
-Här är en **analys och förslag på uppdatering** av din README.md, så den bättre speglar projektets **faktiska nuläge, nya struktur och dashboard-/replay-orientering**.
-Jag utgår från den senaste TODO\:n och vad som verkligen är byggt eller pågår, samtidigt som dokumentationen fortfarande är inbjudande för nya användare och tydlig för kollegor.
-
----
-
-## **1. Huvudförändringar att införa**
-
-* Lyft fram att WORM nu bygger på **eventdriven simulering och replay** där all analys/visualisering kan återskapas från eventlogg.
-* Tydliggör att ett centralt “dashboard”-gränssnitt nu är den huvudsakliga plattformen för analys och visuell interaktion (och vad som ingår där).
-* Skilj tydligare mellan det gamla batchscript-/demo-flödet och det nya replay- och GUI-flödet.
-* Lägg till ett avsnitt “Hur reproducera en simulering/run och utforska resultat” – med fokus på eventlogg och scenariohantering.
-* Fokusera på vad användaren kan göra “end-to-end” i dag, och vilka stora block som kommer/saknas (t.ex. interaktiv replay och resultatexport).
-
----
-
-## **2. Förslag till ny/uppdaterad README.md (med utgångspunkt från originalet)**
-
----
-
 # WORM – Worker-Occupation-Region Model
 
-WORM är en öppen, modulär Python-plattform för **agentbaserad simulering och analys av arbetsmarknader, pendling och regionala system**. Plattformen integrerar statistik, geografi och händelsedriven simulering för att stödja forskning och beslutsfattande på kommunal, regional och nationell nivå.
+WORM är en händelsedriven simulering av svensk arbetsmarknad på kommun- och
+DeSO-nivå. Individer, jobb och arbetsgivare placeras i två rum samtidigt: ett
+**geografiskt** (SWEREF-koordinater, DeSO-zoner, pendlingsavstånd) och ett
+**yrkesgeometriskt** – enhetsskivan från *The Polar Geometry of Work*, där varje
+yrke är en punkt (χ, ξ) med en task-radie r_o.
+
+Matchning mellan arbetare och jobb är därmed en fråga om **avstånd**: hur långt
+är det till jobbet i planet, och hur långt är det geografiskt.
 
 ---
 
-## 🌟 Vision
+## Yrkesgeometrin
 
-Att tillhandahålla en transparent, skalbar och återspelningsbar simuleringsmiljö för att studera svensk arbetsmarknad, kompetensdynamik och pendlingsmönster – med stöd för både forskningsmässig reproducerbarhet och interaktiv utforskning.
+Geometrin beräknas inte här. Den kommer färdig från systerprojektet
+`occupation-space` (publikt som
+[`geometry-of-work`](https://github.com/JoakimStorck/geometry-of-work)), där
+O\*NET:s 17 606 task-statements bäddas in med `text-embedding-3-large` och
+projiceras med PCA till ett tvådimensionellt plan.
 
----
+Planet har en tolkning som ligger fast mellan körningar:
 
-## 🚦 Huvudflöde och “dashboard-first”-design
+```
+                 Analytiskt (norr)
+                        |
+  Fysiskt-manuellt  ----+----  Människocentrerat
+      (väster)          |            (öster)
+                  Service (söder)
+```
 
-WORM är nu organiserat för att **allt ska kunna simuleras, återspelas och analyseras i en central dashboard**:
+* **ξ** (vinkel) = *vad slags arbete* – domänen.
+* **χ** (radie) = *hur specifikt* – 0 i mitten är generellt, 1 är högspecialiserat.
+* **r_o** = yrkets task-radie, spridningen av dess egna uppgifter kring centroiden.
 
-* **Kör nya scenarier** (t.ex. Falun-baseline, egna YAML-filer) – simulera hela arbetsmarknaden och generera eventlogg/resultatfiler.
-* **Välj och ladda tidigare simuleringar** (“runs”) – replay eventloggen för att återskapa och utforska valfritt tillstånd.
-* **Utforska och analysera resultatet interaktivt**:
-
-  * Occupation space, karta, statistik, fördelningsdiagram, eventtidslinje och filtrering – allt kopplat till aktuell replayad state.
-* **Exportera statistik, bilder och urvalsdata** från valfritt steg i simuleringen.
-* All kod, filstruktur och gränssnitt är byggt för att hantera även stora simuleringskörningar (>100 000 agenter).
-
----
-
-## ⚡ Skalbarhet & prestandamål
-
-Projektet är utformat för att hantera **100 000–1 000 000 agenter och >1 miljon events** på vanlig workstation/server.
-Se [TODO.md](TODO.md) för detaljer kring minnesoptimering, batchning, replay-prestanda och framtida multiprocess-stöd.
-
----
-
-## 📐 Scope & funktioner
-
-* **Händelsedriven simulering med replay:**
-  Allt från individers arbetsmarknadsstatus till pendlingsflöden återges och analyseras från eventlogg.
-* **Dashboardgränssnitt:**
-  Integrerar occupation space, karta, filterpanel, statistik, diagram och replay-tidslinje i ett interaktivt användarflöde.
-* **Scenariohantering:**
-  YAML-baserad modellering av kommuner, regioner, arbetsgivare och befolkning. Multi-kommun- och segmentstöd.
-* **Dataimport och syntetisering:**
-  SCB-mikrodata och O\*NET kopplas till syntetiska befolknings- och arbetsmarknadsmodeller.
-* **Reproducerbarhet:**
-  Varje simulering sparas med komplett eventlogg, metadata och snapshot, så resultat kan återskapas och valideras i efterhand.
-* **Visualisering & export:**
-  All analys, visualisering och statistik bygger på replayad state; exportmöjligheter finns för alla väsentliga data och bilder.
-* **Öppen kod, dokumentation och test:**
-  Tydlig API-dokumentation, demo-scripts och testsvit för kvalitet och vidareutveckling.
+WORM lagrar kartesiska koordinater `(x_occ, y_occ) = (χ·cos ξ, χ·sin ξ)` och
+mäter **euklidiskt avstånd**, så att avstånd, χ och r_o alla lever i samma enhet.
 
 ---
 
-## 📦 Project Structure
+## Matchningsmodellen
 
-*(Behåll gärna originalstrukturen – men komplettera gärna:)*
+En arbetares matchproduktivitet mot ett jobb är en gaussisk kärna i planet,
+multiplicerad med ett geografiskt avståndsstraff:
 
-* `core/` – modulär kod (databas, geografi, simulering, visualisering)
-* `data/` – SCB- och O\*NET-data, YAML, SQLite
-* `results/` – alla simuleringar (“runs”) med full eventlogg och metadata
-* `scripts/` – demo- och hjälpskript för snabb test/körning
-* `dashboard/` – kod och resurser för GUI/dashboard (om du har en separat modul)
-* `tests/` – unittester
-* `docs/` – dokumentation, exempelfiler
-* `TODO.md` – aktuell arbetslista, roadmap och arbetsflöde
+```
+d      = |(x_occ, y_occ)_individ − (x_occ, y_occ)_jobb|
+sigma  = sigma_gamma · sqrt(r_o² + r_i²)
+nytta  = exp(−½ d²/sigma²) · exp(−alpha_geo · km)
+```
 
-`├───core
-│   ├───analysis
-│   │   └───__pycache__
-│   ├───database
-│   │   └───__pycache__
-│   ├───geography
-│   │   └───__pycache__
-│   ├───occupations
-│   │   └───__pycache__
-│   ├───pipeline
-│   │   └───__pycache__
-│   ├───plotting
-│   │   └───__pycache__
-│   ├───statistics
-│   │   └───__pycache__
-│   ├───visualization
-│   │   └───__pycache__
-│   └───__pycache__
-├───data
-├───html
-├───onet_data
-├───output
-├───pipeline
-├───scenarios
-├───scripts
-├───todos-history
-└───worm
-    └───plotting
-`
+Kärnbredden är geometrisk: yrkets task-radie r_o faltad med arbetarens
+**erfarenhetsradie** r_i. En ny arbetare är en punkt (r_i = 0), och r_i växer med
+faktisk förflyttning i planet – den som bytt riktning täcker ett bredare område,
+den som fördjupat sig förblir smal. (Tidigare fanns här en entropi H; den
+föregick geometrimodellen och är borttagen.)
 
-## 🚀 Kom igång
+Jobb tilldelas giriga i fallande nytta, med `utility_min` som reservationsnytta:
+under den accepteras inget jobb. Det är den parametern som ger marknaden
+bestående vakanser i stället för full sysselsättning.
+
+Riktningsbyten kostar. Ett vinkelsteg drar av djup (χ) proportionellt mot
+vinkelavståndet, styrt av `switch_cost_kappa` – riktningsspecifikt humankapital
+urholkas när man byter domän.
+
+---
+
+## Kom igång
 
 ```bash
 git clone https://github.com/JoakimStorck/worm.git
 cd worm
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
----
+### 1. Data
 
-### **Exempel: Starta dashboarden**
+Stora dataartefakter ligger utanför git (se `.gitignore`) och synkas manuellt.
+Du behöver:
+
+* `data/worm.sqlite3` – databasen. Byggs av `scripts/create_database.py` ur
+  SCB-filer (DeSO, befolkning, sysselsättning per SNI, pendling, utbildning) och
+  GPKG-lager i `data/`, plus O\*NET-textfiler i `onet_data/`.
+  `scripts/fetch_data.py` hämtar O\*NET automatiskt; SCB-uttagen behöver egna
+  tabellurval.
+* `data/geometry/` – fyra filer från `occupation-space`, ur körningen
+  `embeddings__openai__text-embedding-3-large__d3072__year-2025__v30_1/exports`:
+  `occupation_embeddings_polar_scaled.csv`, `task_embeddings_polar_scaled.csv`,
+  `job_family_centers_polar_scaled.csv`, `occ_meta.csv` samt (rekommenderat)
+  `radial_scale.json`.
+
+### 2. Läs in geometrin
 
 ```bash
-python scripts/run_scenario_pipeline.py  # eller motsvarande dashboard-start
+cp data/worm.sqlite3 data/worm.sqlite3.bak     # tabellen skrivs över
+python scripts/load_task_geometry.py           # torrkörning, skriver bara ut
+# avkommentera write_to_db() och kör igen
 ```
 
-*(Lägg gärna till instruktion för att köra dashboard/GUI om du har separat script eller notebook!)*
+Skriptet skriver `onet_occupation_space` (och `onet_job_family_geometry`) med
+kolumnerna `onet_code, xi, chi, x_occ, y_occ, r_o, geom_source`. Alla 1016
+O\*NET-koder får en position: de flesta egen geometri, resten via familjecentrum
+eller globalt medelvärde – `geom_source` visar vilket.
+
+### 3. Kör
+
+```bash
+python scripts/worm_smoke_match.py    # databaslöst självtest av geometrin
+python scripts/run_min.py             # bygg världen + batch-matchning vid t=0
+```
+
+Full körning som registreras under `output/` och kan öppnas i dashboarden:
+
+```bash
+python -c "import core.scenario_runner as r; r.run_and_log_scenario('scenarios/mora_baseline.yml')"
+```
+
+### 4. Dashboard
+
+Bokeh-serverapp – startas med `bokeh serve`, inte `python`:
+
+```bash
+bokeh serve pipeline/gui_dashboard_pipeline.py --port 5006
+```
+
+Kör den på samma maskin som databasen. Åtkomst från annan dator via SSH-tunnel:
+
+```bash
+ssh -L 5006:localhost:5006 användare@värd
+# öppna http://localhost:5006/gui_dashboard_pipeline
+```
+
+Nya körningar syns i väljaren först efter omstart av servern.
+
+### 5. Analys
+
+```bash
+python scripts/diagnose_mismatch.py    # varför är de arbetslösa arbetslösa?
+python scripts/beveridge.py            # arbetslöshet mot vakansgrad
+```
+
+`diagnose_mismatch` skiljer **geometriskt blockerade** (ingen vakans ligger nära
+nog) från **konkurrens/tajming** – uppdelningen avgör om kalibreringen eller
+modellen behöver justeras.
 
 ---
 
-### **Exempel: Kör ny simulering eller ladda tidigare resultat**
+## Kalibrering
 
-* **Ny simulering:**
-  Starta med scenario-YAML, välj parametrar och kör – resultat och eventlogg sparas automatiskt.
-* **Ladda tidigare run:**
-  Starta dashboard, välj “Ladda simulering/resultat”, bläddra bland runs (indexeras automatiskt).
+Parametrar under `simulation:` i scenariot styr friktionen:
 
----
+| Parameter | Betydelse |
+|---|---|
+| `sigma_gamma` | Kärnbredd som andel av r_o. Lägre = skarpare matchning. |
+| `utility_min` | Reservationsnytta. Sätter vakansgraden. |
+| `alpha_geo` | Geografiskt avståndsstraff per km. |
+| `switch_cost_kappa` | Djupkostnad per radian vid riktningsbyte. |
+| `breadth_from_move` | Hur mycket förflyttning breddar r_i. |
 
-## 📊 Analys och export
-
-* Alla grafer, tabeller och statistiksammanställningar bygger på replayat tillstånd.
-* Exportera bilder (PNG/SVG), urvalsdata (CSV/Excel) eller aggregerad statistik direkt från GUI eller scripts.
-
----
-
-## 📄 License
-
-MIT License. Se [LICENSE](LICENSE) för detaljer.
+Nuvarande värden är härledda ur avståndsfördelningen, inte kalibrerade mot data.
+`alpha_geo` är särskilt känslig: 0,1 per km innebär att en mil kostar en faktor
+e, vilket är hårt för en glesbygdskommun där 25 km pendling är normalt.
 
 ---
 
-## 🤝 Contributing
+## Struktur
 
-Contributions are welcome! Please open an issue or submit a pull request.
+```
+core/
+  world.py              simuleringsmotor, händelsekö, tillstånd som DataFrames
+  event_handlers.py     jobbyte, utbildning, träning, uppsägning, karriärbreak
+  matching.py           flernivåmatchning DeSO → kommun → global
+  occupations/utils.py  matchningskärnan och kapabilitetsdynamiken
+  scenariobuilder.py    genererar individer, jobb och arbetsgivare ur scenario + DB
+  configreader.py       läser och validerar scenario-YAML
+  geography/            DeSO-zoner, koordinater, avstånd
+  database/             schema och inläsning av SCB- och O*NET-data
+  statistics/           sammanfattande statistik
+  visualization/        Bokeh-paneler (yrkesrum, karta, statistik)
+scenarios/              scenariodefinitioner (YAML) + SCENARIO_SCHEMA.md
+scripts/                körning, geometriinläsning, diagnostik, datahämtning
+pipeline/               dashboard-app
+```
+
+Tillstånd lagras kolumnärt som pandas-DataFrames (`individuals`, `jobs`,
+`employers`) – inte som objekt per agent. Valet är gjort för att kunna hantera
+stora populationer: varje agents tillstånd är några få tal, och de tunga
+operationerna vektoriseras över kolumnerna.
 
 ---
 
-## 📬 Contact
+## Licens
 
-For questions or suggestions, contact [Joakim Storck](https://github.com/JoakimStorck).
+MIT. Se [LICENSE](LICENSE).
 
----
+## Kontakt
 
-*Senast uppdaterad: 2025-06-14. Se TODO.md för aktuell arbetslista, roadmap och detaljstatus.*
-
+[Joakim Storck](https://github.com/JoakimStorck)

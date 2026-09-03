@@ -1,133 +1,102 @@
-Jag har nu gått igenom de tre dokumenten och gör här en **uppdaterad huvud-TODO** som speglar nuläget, binder ihop de viktigaste styrkorna från tidigare listor och tar bort sådant som är överspelat. Den är avsedd att **ersätta den gamla övergripande TODO\:n**.
+# TODO
+
+Aktuell arbetslista. Avklarat står under "Gjort" längst ned för överblick över
+var projektet står.
 
 ---
 
-# TODO – Arbetsmarknadsmodell: Simulering, Visualisering & Plattform
+## Nu: kalibrering
+
+Geometrin är integrerad och kör, men parametrarna är gissade utifrån
+avståndsfördelningar, inte kalibrerade mot data.
+
+- [ ] **`alpha_geo` är sannolikt för hård.** Diagnostiken visar att medianen till
+      bästa vakans är ~26 km, vilket vid 0,1/km ger faktorn 0,07. I en
+      glesbygdskommun är 25 km pendling normalt. Testa 0,02–0,03.
+- [ ] Svep `sigma_gamma` × `alpha_geo` över flera körningar och jämför
+      jämviktspunkterna (`scripts/beveridge.py` tar flera körningar).
+- [ ] Kalibrera mot faktiska tal för kommunen: arbetslöshet ~6–7 %, vakansgrad
+      ~2–3 %. Nuvarande körning landar på 12,7 % / 7,0 %.
+- [ ] Kör över längre horisont än ett år – serien planar inte helt ut på 12
+      månader (vakanser 760 → 749 i sista steget).
+- [ ] Låt `diagnose_mismatch.py` läsa parametrarna ur scenariot i stället för
+      hårdkodade defaultvärden.
 
 ---
 
-## **Att alltid gå igenom inför sprint/utvecklingscykel**
+## Modell
 
-* [ ] Läs igenom Idébanken (se nedan) – lyft in viktiga punkter i TODO eller planering.
-* [ ] Kontrollera att inget från tidigare diskussioner/designbeslut fallit bort i plan eller kod.
-* [ ] Uppdatera sektionerna nedan utifrån faktisk kodbas och senaste arbetsflöde.
-
----
-
-## **1. Kärnmål och struktur**
-
-* [x] Skapa och upprätthåll **ScenarioResult-API** som nav för all dataåtkomst (individer, jobb, arbetsgivare, eventlogg).
-* [x] Modernisera **simuleringspipeline** (scenario-YAML → world → simulering → snapshot/eventlog).
-* [ ] Samla hela arbetsflödet i en **modulär dashboard-ram** (occupation space, karta, filter, statistik, diagram, replay).
-* [ ] Allt i pipelinen och gränssnittet måste kunna hantera och exponera >100 000 agenter effektivt.
-
----
-
-## **2. Data, struktur och simulering**
-
-* [x] Standardisera och dokumentera databasstruktur och kopplingar mellan tabeller (kommuner, DeSO, yrke, SNI/O\*NET, arbetsgivare, eventlogg).
-* [x] Implementera scenariohantering med YAML och central konfiguration (stöd för multi-kommun, workforce ratio, m.m.).
-* [x] Automatisera och robustgör generering av individer, jobb och arbetsgivare för valfritt scenario/region.
-* [ ] Kontrollera att statistik (matchning, arbetslöshet, pendlingsavstånd m.m.) kan tas fram ur både startdata och replayade eventloggar.
-* [ ] Fullborda stöd för eventdriven simulering där hela flödet kan spåras/loggas och reproduceras från eventlogg.
+- [ ] **Beveridgekurvan är degenererad.** Med fast arbetskraft och fast antal
+      jobb är v en linjär funktion av u per bokföringsidentitet – alla körningar
+      hamnar på samma linje. En äkta kurva kräver variation i efterfrågan
+      (antal jobb) mellan körningar.
+- [ ] Utbildningsdynamiken verkar trög: `propensity_start_education` ökar 0,1 per
+      misslyckad sökning, men mismatchen löses upp mycket långsamt. Undersök om
+      utbildning flyttar individer tillräckligt långt i planet.
+- [ ] `delta_xi`-värdena i scenarierna är ojämna (0,5 / 3 / default 10 som
+      wrappar förbi 2π). Uttryck dem som avsedda omorienteringar i radianer.
+- [ ] Överväg automationsfält φ_K analogt med `gts_core.py` i `occupation-space`,
+      för att kunna simulera teknologichocker som skiftar mismatchen.
+- [ ] Procrustes-orientering vid inläsning – behövs bara om en annan
+      encoder-körning används än den procrustes-justerade referenskörningen.
+      `load_task_geometry.py` varnar redan om `SECTOR_ROTATION ≠ 0`.
 
 ---
 
-## **3. Resultat- och run-hantering**
+## Prestanda
 
-* [ ] Varje simulering/run sparas i egen katalog (`results/{scenario}/{timestamp}/`) med:
+Detta är det som begränsar hur stora populationer som går att köra, och därmed
+det största kvarvarande arbetspaketet.
 
-  * `individuals.csv`, `jobs.csv`, `employers.csv`, `eventlog.csv`, `meta.yaml`
-* [ ] Varje run har meta-data (scenario, parametrar, tidsstämpel, beskrivning).
-* [ ] Håll en **central registerfil/index** (ex. `results/index.csv`):
-
-  * Gör det lätt för gränssnitt och analys att lista, söka och ladda runs/resultat.
-* [ ] Vid ny simulering, uppdatera index automatiskt.
-
----
-
-## **4. Replay och statehantering**
-
-* [ ] **Replay-mekanik:**
-
-  * Simuleringsutfall kan återskapas fullt ut via eventlogg (start → valfritt steg → slut).
-  * UI för att stega, scrubb’a och hoppa mellan events/steg (slider, knappar, status).
-  * Snapshots/checkpoints för snabba hopp i stora loggar.
-  * Paneler måste lyssna på replayat state – all visualisering sker alltid på det tillståndet.
-  * All statistik, filtrering och export utgår från replay.
+- [ ] **Python-loopen i `global_greedy_matching`.** Alla kandidatpar sorteras och
+      itereras i tolken. Ersätt med vektoriserad top-k eller
+      `scipy.optimize.linear_sum_assignment` (redan importerad, aldrig använd).
+- [ ] **Tät nyttomatris** är O(N·M) i minne; den geografiska nivåindelningen är i
+      praktiken en kringgång. Ett spatialt index (rutnät eller KD-träd) över
+      vakanser i planet skulle göra sökningen lokal.
+- [ ] **Event kontra batch.** `start_job_search` anropar batch-maskineriet för en
+      individ i taget. Välj hållning: lätt per-agent-sökning mot index, eller
+      äkta batchning per månad.
+- [ ] Profilera vid 100 000+ agenter innan optimering – flaskhalsen kan lika
+      gärna ligga i händelsekön eller i DataFrame-kopieringen.
 
 ---
 
-## **5. Dashboard/GUI och visualisering**
+## Infrastruktur
 
-* [ ] **Dashboarden** samlar:
-
-  * Occupation space-panel (interaktiv, synkad med state/filter)
-  * Kommun/kartpanel (interaktiv, färgkodning, hover)
-  * Filterpanel (dropdowns, sliders, search – alltid på replayat data)
-  * Statistikpanel (tabeller, fördelningar, summary för urval)
-  * Diagram-/fördelningspanel (histogram, pendlingsavstånd, matchningar etc – kopplade till state/urval)
-  * Eventloggpanel (event-tidslinje, flöden per individ/system)
-* [ ] All visualisering är **interaktiv och synkad** via central state, oavsett om data kommer från ny simulering eller uppladdad run.
-
----
-
-## **6. Interaktiv analys och export**
-
-* [ ] All filtrering och urval gäller för aktuell replay/visningsläge (inte bara initialtillstånd).
-* [ ] Exportmöjlighet för bilder, data och urval – på valfritt steg i replay.
-* [ ] Möjlighet att visa och exportera individers eventhistorik och flöden över tid.
-* [ ] Paneler och kontroller har hjälprutor, onboarding och dokumentation.
+- [ ] **`eventlog.csv` är inte CSV.** Loggern skriver `nyckel värde`-par. Gör om
+      till riktig CSV eller Parquet; filen blir mindre och all efteranalys
+      enklare.
+- [ ] `scripts/fetch_data.py`: SCB-delarna är stubbar. Fyll i tabellvägar och
+      JSON-frågor nästa gång ett uttag ändå görs. Migrera till PxWebApi v2
+      (v1 fungerar t.o.m. årsskiftet 2026/2027).
+- [ ] Dashboardens *Kör simulering* blockerar gränssnittet – kör asynkront eller
+      ta bort knappen till förmån för headless-körning.
+- [ ] Dashboarden måste startas om för att se körningar skapade av en separat
+      process. Ladda om registret vid behov.
+- [ ] Överväg datashader eller DeSO-choropleth för att kunna visa stora
+      populationer utan att rita en punkt per agent.
+- [ ] Inga tester finns. Börja med matchningskärnan och geometriinläsningen –
+      `scripts/worm_smoke_match.py` är en grund att bygga vidare på.
 
 ---
 
-## **7. Modellutveckling & API-framsteg**
+## Gjort
 
-* [x] Koppla O\*NET/SNI/SSYK och occupation space-data till arbetsgivare och individer.
-* [x] Få multi-kommun-scenarier och workforce ratio att fungera sömlöst.
-* [ ] Utveckla vidare:
-
-  * Arbetsmarknadsstatus och matchningsalgoritmer (occupation space, geografiskt, preferensbaserat, pendlingsregel…)
-  * Spatiala queries (pendlingsmatriser, närhetsregler, flöden)
-  * Eventdriven logik och analys (chocker, policyinterventioner, arbetslivsbanor etc.)
-
----
-
-## **8. Plattform, prestanda och automatisering**
-
-* [x] Optimera för prestanda och minne (profilering, lazy loading, checkpoints, batchning).
-* [ ] Testa och demonstrera pipeline + GUI på >100 000 agenter och lång eventlogg.
-* [ ] Automatisera test, demo och validering – så varje nytt steg kan visas för kollega/”kund”.
-
----
-
-## **Idébank / Exploratory / Kom-ihåg**
-
-* Replay är nödvändigt för korrekt återgivning av simulering – ingen panel får visa "slutläge" baserat på endast individuals.csv.
-* All central state byggs kring ScenarioResult (eller framtida överklass för run/state).
-* Snapshots/checkpoints i eventlogg för snabb replay och hopp.
-* UI för replay: slider + knappar, med aktuell eventinfo (display).
-* Eventloggpanel kan visa tidslinje/flöde för individ/urval/system – kopplad till aktuell replay.
-* Register/index över runs för smidig laddning/byte/analys.
-* Plattformen ska kunna återanvändas för både demo, analys, och forskningsrapporter.
-* Review/Sync-punkt: Vid varje sprint – läs igenom Idébanken och TODO, synka det som ska realiseras.
-
----
-
-## **Detta kan utgå/flyttas till bakgrund/roadmap:**
-
-* Tidigare, mer detaljrika roadmappar om alla AP/arbetsblock – håll kvar dessa för referens, men låt huvud-TODO fokusera på aktiva, pågående och högsta-prio-flöden.
-* Moduler och kod kring gammal icke-eventdriven simulering (ersatt av replay/ny pipeline).
-* Temporära visualiseringar som ej bygger på central state eller replay (används bara för snabbtest, ej som officiell del).
-
----
-
-## **Hur detta hänger ihop med nuläget**
-
-* **Kärnan i kodbasen** (pipeline, ScenarioResult, eventlogg, GUI-paneler) är implementerad och fungerar för end-to-end-flöde i Falun-baseline och liknande scenarier.
-* **Replay, dashboard-integration och run-hantering** är nästa stora utvecklingssteg, tillsammans med bredare analysmöjligheter och full interaktivitet.
-* Allt nytt byggs modulärt och API-drivet, så att framtida arbetsflöden och forskningsbehov lätt kan integreras.
-
----
-
-*Senast uppdaterad: 2025-06-14.*
+- [x] Task-baserad geometri från `occupation-space` ersätter skill-PCA-rummet.
+      Full täckning av alla 1016 O\*NET-koder via fallback yrke → familj → global.
+- [x] Euklidiskt avstånd på `(x_occ, y_occ)` ersätter pseudometriken
+      `√(Δχ² + Δξ²)`, som förvrängde vinkelavstånd nära origo.
+- [x] Kärnbredd från yrkets task-radie r_o i stället för individens entropi.
+- [x] Entropin H borttagen och ersatt av geometrisk erfarenhetsradie r_i som
+      växer med faktisk förflyttning i planet.
+- [x] Arbetsgivarens position som centroid av jobbens koordinater (tidigare
+      cos/sin av medianer, vilket ger en annan punkt).
+- [x] Bytarkostnad: vinkelförflyttning drar av djup via `switch_cost_kappa`.
+- [x] Reservationsnytta `utility_min` ersätter tröskeln 1e-4 – ger marknaden
+      bestående vakanser i stället för full sysselsättning.
+- [x] Kompasspanel med geometrins väderstreck och `geom_source`-färgning.
+- [x] Död kod borttagen: `core/agents.py`-beroenden, osynkad
+      `run_scenario_pipeline.py`, skill-PCA-skript, `worm/plotting/`-dubbletten.
+- [x] `scripts/run_min.py`, `worm_smoke_match.py`, `diagnose_mismatch.py`,
+      `beveridge.py`, `load_task_geometry.py`, `fetch_data.py`.
