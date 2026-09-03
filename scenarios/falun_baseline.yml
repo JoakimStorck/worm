@@ -110,4 +110,5 @@ simulation:
   alpha_chi: 5.0
   alpha_xi: 5.0
   alpha_geo: 1.0
+  switch_cost_kappa: 0.05
 

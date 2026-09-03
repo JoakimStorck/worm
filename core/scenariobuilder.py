@@ -9,7 +9,7 @@ import sqlite3
 
 from core.geography.geoutils import assign_deso_code, random_points_in_polygon
 from core.log import log
-from core.occupations.utils import sample_from_centers_jitter
+from core.occupations.utils import sample_from_centers_jitter, sample_centers_xy_jitter
 
 class ScenarioBuilder:
     DEFAULT_WEIGHT_FIELDS = {
@@ -242,11 +242,20 @@ class ScenarioBuilder:
         else:
             return None, None  # Hantera ej funnen kod
 
+    def get_geom_for_onet_code(self, onet_code):
+        """(x_occ, y_occ, r_o, chi, xi) ur cachen (familje/global-fallback finns i tabellen)."""
+        try:
+            r = self.onet_space_df.loc[onet_code]
+            return (float(r["x_occ"]), float(r["y_occ"]), float(r["r_o"]),
+                    float(r["chi"]), float(r["xi"]), str(r["geom_source"]))
+        except KeyError:
+            return None, None, None, None, None, None
+
     def load_onet_occupation_space_table(self, db_path="data/worm.sqlite3"):
         import sqlite3
         import pandas as pd
         conn = sqlite3.connect(db_path)
-        df = pd.read_sql("SELECT onet_code, chi, xi FROM onet_occupation_space", conn)
+        df = pd.read_sql("SELECT onet_code, chi, xi, x_occ, y_occ, r_o, geom_source FROM onet_occupation_space", conn)
         conn.close()
         return df.set_index("onet_code")
 
@@ -313,7 +322,7 @@ class ScenarioBuilder:
                 # Välj ett onet_code slumpmässigt enligt frekvens
                 onet_code = np.random.choice(onet_codes, p=np.array(freqs)/np.sum(freqs))
 
-                chi, xi = self.get_chi_xi_for_onet_code(onet_code)
+                x_occ, y_occ, r_o, chi, xi, geom_source = self.get_geom_for_onet_code(onet_code)
 
                 jobs.append({
                     "job_id": f"J{job_id:05d}",
@@ -330,6 +339,10 @@ class ScenarioBuilder:
                     "y": y,
                     "chi": chi,
                     "xi": xi,
+                    "x_occ": x_occ,
+                    "y_occ": y_occ,
+                    "r_o": r_o,
+                    "geom_source": geom_source,
                 })
                 job_id += 1
 
@@ -337,15 +350,13 @@ class ScenarioBuilder:
         df["deso_code"] = assign_deso_code(df, self.geoworld.deso_zones, x_col="x", y_col="y")
 
         # --- Median av occ-space för arbetsgivare ---
-        occ_stats = df.groupby('employer_id').agg({
-            'chi': 'median',
-            'xi':  'median'
-        }).rename(columns={'chi': 'chi_median', 'xi': 'xi_median'})
-
-        # Lägg till medianvärden till employers_df
+        occ_stats = df.groupby('employer_id').agg(
+            x_occ=('x_occ', 'mean'),
+            y_occ=('y_occ', 'mean'),
+        )
         employers_df = employers_df.set_index('employer_id').join(occ_stats, how='left').reset_index()
-        employers_df['x_occ'] = employers_df['chi_median'] * np.cos(employers_df['xi_median'])
-        employers_df['y_occ'] = employers_df['chi_median'] * np.sin(employers_df['xi_median'])
+        employers_df['chi'] = np.hypot(employers_df['x_occ'], employers_df['y_occ'])
+        employers_df['xi']  = np.arctan2(employers_df['y_occ'], employers_df['x_occ']) % (2 * np.pi)
 
         return df, employers_df
 
@@ -375,7 +386,7 @@ class ScenarioBuilder:
     # 1. Ladda occupation space EN gång, spara som self.onet_space_df
     def load_onet_occupation_space_table(self, db_path="data/worm.sqlite3"):
         conn = sqlite3.connect(db_path)
-        df = pd.read_sql("SELECT onet_code, chi, xi FROM onet_occupation_space", conn)
+        df = pd.read_sql("SELECT onet_code, chi, xi, x_occ, y_occ, r_o, geom_source FROM onet_occupation_space", conn)
         conn.close()
         return df.set_index("onet_code")
 
@@ -384,6 +395,10 @@ class ScenarioBuilder:
         # Hämtar en DataFrame (kan ha NaN om kod saknas!)
         result = self.onet_space_df.reindex(onet_codes)
         return result["chi"].values, result["xi"].values
+
+    def get_geom_for_onet_codes(self, onet_codes):
+        """x_occ, y_occ, r_o (+ chi, xi) för en lista koder; NaN om kod saknas."""
+        return self.onet_space_df.reindex(onet_codes)[["x_occ", "y_occ", "r_o", "chi", "xi", "geom_source"]]
 
     def generate_individuals(self, municipal_code, population, workforce_ratio, unemployment_rate, year=2024):
         """
@@ -463,30 +478,22 @@ class ScenarioBuilder:
                 rng.normal(mean, std, size=len(df)), 0, 1
             )
 
-        # ---- Sampla (xi, chi) för ALLA individer ur occupation-space-KDE ----
-
-        # Bygg KDE över occupation space
+        # ---- Sampla (x_occ, y_occ) för ALLA individer ur yrkesgeometrin ----
         profile = self.municipality_occupational_profile(municipal_code, year)
-        chi_vals, xi_vals = self.get_chi_xi_for_onet_codes(profile["onet_code"].values)
+        geom = self.get_geom_for_onet_codes(profile["onet_code"].values)
+        x_vals = geom["x_occ"].values
+        y_vals = geom["y_occ"].values
         weights = profile["prob"].values
 
-        # Hantera ev. saknade koder
-        valid = ~np.isnan(xi_vals) & ~np.isnan(chi_vals)
-        xi_vals = xi_vals[valid]
-        chi_vals = chi_vals[valid]
-        weights = weights[valid]
+        valid = ~np.isnan(x_vals) & ~np.isnan(y_vals)
+        x_vals, y_vals, weights = x_vals[valid], y_vals[valid], weights[valid]
 
-        # Sätt jitter (smidiga defaultvärden)
-        rel_bw = 0.1
-        sigma_chi = rel_bw * 1.0         # chi i [0,1]
-        sigma_xi  = rel_bw * 2 * np.pi   # xi i [0,2pi]
-
-        n_inds = len(df)
-        xi_sample, chi_sample = sample_from_centers_jitter(
-            xi_vals, chi_vals, weights, n_inds, sigma_xi, sigma_chi
-        )
-        df["xi"] = xi_sample
-        df["chi"] = chi_sample
+        sigma_xy = 0.05   # kartesisk jitter i enhetsskivan
+        x_occ, y_occ = sample_centers_xy_jitter(x_vals, y_vals, weights, len(df), sigma_xy)
+        df["x_occ"] = x_occ
+        df["y_occ"] = y_occ
+        df["chi"] = np.hypot(x_occ, y_occ)                # för visualisering/kompatibilitet
+        df["xi"]  = np.arctan2(y_occ, x_occ) % (2 * np.pi)
 
         # 8. H (kompetensbredd) – som tidigare, eller gör beroende av chi om du vill
         H_cfg = indiv_defaults.get('initial_H', {})

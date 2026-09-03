@@ -1,7 +1,10 @@
 bokeh
 pandas
 numpy
+scipy
 geopandas
 shapely
 pyyaml
 scikit-learn
+matplotlib
+

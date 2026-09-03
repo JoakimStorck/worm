@@ -110,6 +110,7 @@ simulation:
   alpha_chi: 1.0
   alpha_xi: 1.0
   alpha_geo: 0.1
+  switch_cost_kappa: 0.05
 
   # Samla ALLA event-tider på samma ställe – alla tider med enhet!
   event_timings:

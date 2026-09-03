@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 from bokeh.plotting import figure
 from bokeh.models import (
-    ColumnDataSource, HoverTool, CheckboxGroup, MultiSelect, TabPanel, Button, RadioButtonGroup
+    ColumnDataSource, HoverTool, CheckboxGroup, MultiSelect, TabPanel, Button, RadioButtonGroup,
+    Label, Range1d
 )
 from core.ui_state import UIState
 from core.visualization.utils import add_occ_coordinates
@@ -60,6 +61,9 @@ class OccupationSpacePanel:
             tools=self.tools,
         )
 
+        # --- Papprets visuella grammatik: enhetsskiva, väderstreck, poler ---
+        self._add_compass()
+
         from bokeh.transform import factor_cmap
         palette = ["green", "red", "purple", "black", "gray"]
         statuses = ["employed", "unemployed", "in_education", "career_break", "not_in_labor_force"]
@@ -85,10 +89,12 @@ class OccupationSpacePanel:
             self.plot.scatter(
                 'x_occ', 'y_occ',
                 source=self.job_source,
-                color="blue",
+                color=factor_cmap('geom_source',
+                                  palette=["#1f77b4", "#ff7f0e", "#d62728"],
+                                  factors=["occupation", "family", "global"]),
                 alpha='render_alpha',
                 size='size_marker',
-                legend_label="Jobb",
+                legend_field="geom_source",
                 selection_color="orange"
             )
 
@@ -196,6 +202,30 @@ class OccupationSpacePanel:
         curdoc().add_next_tick_callback(self.update)
 
 
+    def _add_compass(self):
+        """Ritar enhetsskivan, radiella stödcirklar, kardinalspokes och poletiketter
+        enligt pappret: norr=analytiskt, söder=service, öster=människocentrerat,
+        väster=fysiskt-manuellt. Etiketterna gäller då geometrin laddats i
+        referensorienteringen (vilket den primära körningen är)."""
+        import numpy as _np
+        self.plot.x_range = Range1d(-1.18, 1.18)
+        self.plot.y_range = Range1d(-1.18, 1.18)
+        th = _np.linspace(0, 2 * _np.pi, 240)
+        for r in (0.25, 0.5, 0.75, 1.0):
+            self.plot.line((r * _np.cos(th)).tolist(), (r * _np.sin(th)).tolist(),
+                           line_color="#dddddd", line_width=1,
+                           line_dash="solid" if r == 1.0 else "dotted")
+        for (x1, y1) in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            self.plot.line([0, x1], [0, y1], line_color="#e3e3e3", line_width=1)
+        poles = [(1.04, 0, "Människocentrerat", "left"),
+                 (-1.04, 0, "Fysiskt-manuellt", "right"),
+                 (0, 1.05, "Analytiskt", "center"),
+                 (0, -1.05, "Service", "center")]
+        for x, y, txt, align in poles:
+            self.plot.add_layout(Label(x=x, y=y, text=txt, text_font_size="10pt",
+                                       text_color="#888888", text_align=align,
+                                       text_baseline="middle"))
+
     def _get_indiv_data(self):
         state = self.replay.get_state()
         df = state["individuals"].copy()
@@ -245,6 +275,8 @@ class OccupationSpacePanel:
             jobs["size_marker"] = 2 + 1 * np.log1p(jobs["employer_size"])
         else:
             jobs["size_marker"] = 6
+        if "geom_source" not in jobs.columns:
+            jobs["geom_source"] = "occupation"
         jobs = jobs.copy()  # Säkerställ äkta kopia
 
         # Arbetsgivare

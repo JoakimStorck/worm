@@ -1,8 +1,25 @@
+# Python
 __pycache__/
 *.pyc
-*.csv
-*.log
-onet_data/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# Stora dataartefakter (hålls utanför git, synkas manuellt mellan maskiner)
 data/
+onet_data/
 output/
 html/
+*.csv
+*.sqlite3
+*.sqlite3.bak
+*.gpkg
+*.npy
+
+# Windows mark-of-the-web från scp
+*:Zone.Identifier
+
+# Loggar och temp
+*.log
+.DS_Store
