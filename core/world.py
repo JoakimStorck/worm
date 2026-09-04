@@ -111,7 +111,148 @@ class World:
     def close(self):
         self.event_logger.close()
 
+    # ------------------------------------------------------------------
+    # Jobbflöden: jobb föds och dör. Utan detta är antalet jobb konstant och
+    # Beveridgekurvan en bokföringsidentitet (v linjär i u).
+    # ------------------------------------------------------------------
+    def _job_flow_cfg(self):
+        sim = self.cfg_reader.config.get('simulation', {})
+        return {
+            'enabled': bool(sim.get('job_flows', False)),
+            'delta': float(sim.get('job_destruction_rate', 0.10)),   # per år
+            'fill_rate': float(sim.get('vacancy_fill_rate', 0.25)),  # andel av underskott per månad
+            'growth': float(sim.get('employer_growth_rate', 0.0)),   # per år, mål-tillväxt
+        }
+
+    def _init_job_flows(self):
+        """Ger jobben active/created_time och arbetsgivarna ett måltal."""
+        if 'active' not in self.jobs.columns:
+            self.jobs['active'] = True
+            self.jobs['created_time'] = float(self.current_time)
+            self.jobs['destroyed_time'] = np.nan
+        if 'target_size' not in self.employers.columns:
+            counts = self.jobs[self.jobs['active']].groupby('employer_id').size()
+            self.employers['target_size'] = (
+                self.employers['employer_id'].map(counts).fillna(0).astype(float))
+        self._next_job_seq = len(self.jobs)
+
+    def _schedule_destruction(self, job_ids, t_now):
+        """Exponentiell livslängd med hasard delta (per år)."""
+        cfg = self._job_flow_cfg()
+        if not cfg['enabled'] or cfg['delta'] <= 0 or len(job_ids) == 0:
+            return
+        scale = 365.25 / cfg['delta']
+        lifetimes = np.random.exponential(scale, size=len(job_ids))
+        for job_id, life in zip(job_ids, lifetimes):
+            self._push_event({
+                "time": float(t_now + life),
+                "agent_id": None,
+                "event_type": "destroy_job",
+                "params": {"job_id": job_id},
+            })
+
+    def post_vacancies_batch(self, t_now):
+        """Skapar nya jobb mot arbetsgivarnas måltal. Körs en gång per månad.
+
+        Underskott = mål - aktiva jobb. En andel fill_rate av underskottet
+        postas varje månad, vilket ger en stock av vakanser i omlopp i stället
+        för omedelbar återfyllnad. Måltalet växer med growth (0 = stationärt);
+        en teknologichock sänker måltalet, vilket är hur chocken förstör jobb.
+        """
+        cfg = self._job_flow_cfg()
+        if not cfg['enabled']:
+            return 0
+        jobs = self.jobs
+        active = jobs[jobs['active']]
+        n_active = active.groupby('employer_id').size()
+        emp = self.employers
+        if cfg['growth']:
+            emp['target_size'] = emp['target_size'] * (1.0 + cfg['growth'] / 12.0)
+        target = emp.set_index('employer_id')['target_size']
+        deficit = (target - n_active.reindex(target.index).fillna(0)).clip(lower=0)
+        # Stokastisk avrundning: floor() skulle nolla alla underskott under
+        # 1/fill_rate, vilket systematiskt kväver jobbskapandet hos små
+        # arbetsgivare (i Mora är 681 av 792 mikroföretag).
+        expected = deficit * cfg['fill_rate']
+        base = np.floor(expected)
+        n_new = (base + (np.random.random(len(expected)) < (expected - base))).astype(int)
+        n_new = n_new[n_new > 0]
+        if n_new.empty:
+            return 0
+
+        # Mall per arbetsgivare ur ALLA jobb, inte bara aktiva: en arbetsgivare
+        # som tillfälligt förlorat alla sina positioner måste kunna posta igen
+        # (annars dör mikroföretag permanent vid första förstörelsen).
+        proto = jobs.drop_duplicates('employer_id', keep='last').set_index('employer_id')
+        rows, new_ids = [], []
+        for employer_id, k in n_new.items():
+            if employer_id not in proto.index:
+                continue
+            base = proto.loc[employer_id]
+            for _ in range(int(k)):
+                onet_code = self._draw_occupation_for_employer(base)
+                geom = self._geom_lookup(onet_code)
+                jid = f"J{self._next_job_seq:05d}"
+                self._next_job_seq += 1
+                row = base.to_dict()
+                row.update({
+                    "job_id": jid, "employer_id": employer_id, "individual_id": None,
+                    "onet_code": onet_code, "active": True,
+                    "created_time": float(t_now), "destroyed_time": np.nan,
+                })
+                if geom is not None:
+                    row.update(geom)
+                rows.append(row); new_ids.append(jid)
+        if not rows:
+            return 0
+        self.jobs = pd.concat([jobs, pd.DataFrame(rows)], ignore_index=True)
+        self._schedule_destruction(new_ids, t_now)
+        return len(rows)
+
+    def _draw_occupation_for_employer(self, base_row):
+        """Yrkeskod för ett nytt jobb: samma fördelning som scenariobyggaren använde."""
+        if not hasattr(self, "_occ_draw_cache"):
+            self._occ_draw_cache = {}
+        key = base_row.get("municipal_code")
+        if key not in self._occ_draw_cache:
+            try:
+                df = pd.read_sql(
+                    "SELECT onet_code, weight FROM occupation_weights_by_municipality "
+                    "WHERE municipal_code = ?", self.conn, params=(str(key),))
+            except Exception:
+                df = pd.DataFrame()
+            if df.empty:
+                self._occ_draw_cache[key] = None
+            else:
+                p = df["weight"].to_numpy(dtype=float); p = p / p.sum()
+                self._occ_draw_cache[key] = (df["onet_code"].to_numpy(), p)
+        drawn = self._occ_draw_cache[key]
+        if drawn is None:
+            return base_row.get("onet_code")      # behåll arbetsgivarens yrkesmix
+        codes, p = drawn
+        return str(np.random.choice(codes, p=p))
+
+    def _geom_lookup(self, onet_code):
+        if not hasattr(self, "_geom_df"):
+            try:
+                self._geom_df = pd.read_sql(
+                    "SELECT onet_code, chi, xi, x_occ, y_occ, r_o, w_rel, geom_source "
+                    "FROM onet_occupation_space", self.conn).set_index("onet_code")
+            except Exception:
+                self._geom_df = None
+        if self._geom_df is None or onet_code not in self._geom_df.index:
+            return None
+        r = self._geom_df.loc[onet_code]
+        return {"chi": float(r["chi"]), "xi": float(r["xi"]),
+                "x_occ": float(r["x_occ"]), "y_occ": float(r["y_occ"]),
+                "r_o": float(r["r_o"]), "geom_source": str(r["geom_source"]),
+                "wage": float(r["w_rel"]) if pd.notna(r["w_rel"]) else 1.0}
+
     def _init_events(self):
+        self._init_job_flows()
+        if self._job_flow_cfg()['enabled']:
+            self._schedule_destruction(self.jobs.loc[self.jobs['active'], 'job_id'].tolist(),
+                                       self.current_time)
         # Schemalägg quit_job för alla som är employed från början
         employed_mask = self.individuals['status'] == 'employed'
         n_emp = employed_mask.sum()
@@ -215,6 +356,8 @@ class World:
             workforce = individuals  # Utgå från redan vald DataFrame
         
         vacant_jobs = self.jobs[self.jobs['individual_id'].isna()]
+        if 'active' in self.jobs.columns:
+            vacant_jobs = vacant_jobs[vacant_jobs['active']]
 
         if mode == "interleaved_multilevel":
             # Import your matching function!

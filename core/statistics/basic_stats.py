@@ -14,11 +14,13 @@ def analyze_world(world):
 
     stats = {
         "total_individuals": len(world.individuals),
-        "total_jobs": len(world.jobs),
+        "total_jobs": int(world.jobs['active'].sum()) if 'active' in world.jobs.columns else len(world.jobs),
         "total_employers": len(world.employers),
         "employed_individuals": len(world.individuals[(world.individuals['status'] == 'employed')]),
         "unemployed_individuals": len(world.individuals[(world.individuals['status'] == 'unemployed')]),
-        "unmatched_jobs": world.jobs['individual_id'].isna().sum(),
+        "unmatched_jobs": int((world.jobs['individual_id'].isna() & world.jobs['active']).sum())
+                          if 'active' in world.jobs.columns
+                          else int(world.jobs['individual_id'].isna().sum()),
         "individuals_not_in_labour_force": len(world.individuals[(world.individuals['status'] == 'not_in_labor_force')]),   
     }
     return stats

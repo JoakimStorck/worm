@@ -302,10 +302,46 @@ def handle_career_break(event, world):
     }
     world._push_event(end_event)
 
+def handle_destroy_job(event, world):
+    """Positionen upphör att existera (till skillnad från quit_job, där
+    arbetaren lämnar men jobbet blir vakant). Sitter någon på jobbet blir hen
+    arbetslös och börjar söka."""
+    job_id = event['params']['job_id']
+    jobs = world.jobs
+    m = jobs['job_id'] == job_id
+    if not m.any() or not bool(jobs.loc[m, 'active'].iloc[0]):
+        return
+    holder = jobs.loc[m, 'individual_id'].iloc[0]
+    jobs.loc[m, 'active'] = False
+    jobs.loc[m, 'destroyed_time'] = float(event['time'])
+    jobs.loc[m, 'individual_id'] = np.nan
+
+    if pd.notna(holder):
+        ind = world.individuals
+        idx = holder
+        ind.at[idx, 'status'] = 'unemployed'
+        ind.at[idx, 'job_id'] = np.nan
+        if 'w_res' in ind.columns:
+            rho = world.cfg_reader.config['simulation'].get('rho_reservation', 0.7)
+            ind.at[idx, 'w_res'] = rho * float(ind.at[idx, 'w_res'])
+        timing = world.cfg_reader.get_event_timing('start_job_search')
+        interval = (np.random.exponential(timing['mean'])
+                    if timing.get('dist') == 'exponential' else 0.0)
+        world._push_event({"time": float(event['time'] + interval), "agent_id": idx,
+                           "event_type": "start_job_search", "params": {}})
+        world.event_logger.log_event(world, event,
+                                     extra={"event_detail": "job_destroyed_holder_displaced",
+                                            "job_id": job_id})
+    else:
+        world.event_logger.log_event(world, event,
+                                     extra={"event_detail": "vacancy_destroyed", "job_id": job_id})
+
+
 def handle_new_month(event, world):
     from core.statistics.basic_stats import analyze_world
     year = event['params'].get('year')
     month = event['params'].get('month')
+    n_posted = world.post_vacancies_batch(event['time'])
     stats = analyze_world(world)
 
     n_individuals = stats['total_individuals']
@@ -320,7 +356,9 @@ def handle_new_month(event, world):
         "employed": employed,
         "unemployed": unemployed,
         "unmatched_jobs": unmatched_jobs,
-        "not_in_labour_force": not_in_labour_force
+        "not_in_labour_force": not_in_labour_force,
+        "active_jobs": n_jobs,
+        "posted": n_posted
     }, print_line=True)
     # Reset match-counter
     world.n_matched_in_month = 0
@@ -338,7 +376,9 @@ def handle_new_year(event, world):
         "employed": employed,
         "unemployed": unemployed,
         "unmatched_jobs": unmatched_jobs,
-        "not_in_labour_force": not_in_labour_force
+        "not_in_labour_force": not_in_labour_force,
+        "active_jobs": n_jobs,
+        "posted": n_posted
     }, print_line=True)        
 
 RULE_SWITCH = {
@@ -350,6 +390,7 @@ RULE_SWITCH = {
     "start_internal_training": handle_start_internal_training,
     "internal_job_change": handle_internal_job_change,
     "career_break": handle_career_break,
+    "destroy_job": handle_destroy_job,
     "new_month": handle_new_month,
     "new_year": handle_new_year,
 }

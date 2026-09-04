@@ -117,6 +117,12 @@ simulation:
   rho_reservation: 0.7      # reservationslön = rho * Π(egen position); faller till rho*lön vid arbetslöshet
   commute_cost_per_km: 0.005  # pendlingskostnad per km i löneandelar (26 km ≈ 13 % av medellönen)
   min_surplus: 0.0          # acceptera om S > min_surplus
+  # --- Jobbflöden: positioner föds och dör. Utan detta är antalet jobb konstant
+  #     och Beveridgekurvan en bokföringsidentitet (v linjär i u).
+  job_flows: true
+  job_destruction_rate: 0.10   # andel av positionerna som upphör per år
+  vacancy_fill_rate: 0.25      # andel av arbetsgivarens underskott som postas per månad
+  employer_growth_rate: 0.0    # måltalets tillväxt per år (0 = stationärt)
   switch_cost_kappa: 0.05   # djupkostnad per radian vid riktningsbyte
   breadth_from_move: 0.25   # hur mycket förflyttning breddar erfarenhetsradien
 
