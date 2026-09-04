@@ -246,16 +246,18 @@ class ScenarioBuilder:
         """(x_occ, y_occ, r_o, chi, xi) ur cachen (familje/global-fallback finns i tabellen)."""
         try:
             r = self.onet_space_df.loc[onet_code]
+            w = r["w_rel"] if "w_rel" in r.index else np.nan
             return (float(r["x_occ"]), float(r["y_occ"]), float(r["r_o"]),
-                    float(r["chi"]), float(r["xi"]), str(r["geom_source"]))
+                    float(r["chi"]), float(r["xi"]), str(r["geom_source"]),
+                    float(w) if pd.notna(w) else 1.0)
         except KeyError:
-            return None, None, None, None, None, None
+            return None, None, None, None, None, None, None
 
     def load_onet_occupation_space_table(self, db_path="data/worm.sqlite3"):
         import sqlite3
         import pandas as pd
         conn = sqlite3.connect(db_path)
-        df = pd.read_sql("SELECT onet_code, chi, xi, x_occ, y_occ, r_o, geom_source FROM onet_occupation_space", conn)
+        df = pd.read_sql("SELECT onet_code, chi, xi, x_occ, y_occ, r_o, w_rel, pi_rel, geom_source FROM onet_occupation_space", conn)
         conn.close()
         return df.set_index("onet_code")
 
@@ -322,7 +324,7 @@ class ScenarioBuilder:
                 # Välj ett onet_code slumpmässigt enligt frekvens
                 onet_code = np.random.choice(onet_codes, p=np.array(freqs)/np.sum(freqs))
 
-                x_occ, y_occ, r_o, chi, xi, geom_source = self.get_geom_for_onet_code(onet_code)
+                x_occ, y_occ, r_o, chi, xi, geom_source, wage = self.get_geom_for_onet_code(onet_code)
 
                 jobs.append({
                     "job_id": f"J{job_id:05d}",
@@ -343,6 +345,7 @@ class ScenarioBuilder:
                     "y_occ": y_occ,
                     "r_o": r_o,
                     "geom_source": geom_source,
+                    "wage": wage,
                 })
                 job_id += 1
 
@@ -386,7 +389,7 @@ class ScenarioBuilder:
     # 1. Ladda occupation space EN gång, spara som self.onet_space_df
     def load_onet_occupation_space_table(self, db_path="data/worm.sqlite3"):
         conn = sqlite3.connect(db_path)
-        df = pd.read_sql("SELECT onet_code, chi, xi, x_occ, y_occ, r_o, geom_source FROM onet_occupation_space", conn)
+        df = pd.read_sql("SELECT onet_code, chi, xi, x_occ, y_occ, r_o, w_rel, pi_rel, geom_source FROM onet_occupation_space", conn)
         conn.close()
         return df.set_index("onet_code")
 
@@ -396,9 +399,19 @@ class ScenarioBuilder:
         result = self.onet_space_df.reindex(onet_codes)
         return result["chi"].values, result["xi"].values
 
+    def _price_field(self):
+        """Prisfältet Π ur tabellen wage_field_coefficients, eller None."""
+        if not hasattr(self, "_pf_cache"):
+            try:
+                from core.occupations.price_field import PriceField
+                self._pf_cache = PriceField.from_db(self.conn)
+            except Exception:
+                self._pf_cache = None
+        return self._pf_cache
+
     def get_geom_for_onet_codes(self, onet_codes):
         """x_occ, y_occ, r_o (+ chi, xi) för en lista koder; NaN om kod saknas."""
-        return self.onet_space_df.reindex(onet_codes)[["x_occ", "y_occ", "r_o", "chi", "xi", "geom_source"]]
+        return self.onet_space_df.reindex(onet_codes)[["x_occ", "y_occ", "r_o", "chi", "xi", "geom_source", "w_rel", "pi_rel"]]
 
     def generate_individuals(self, municipal_code, population, workforce_ratio, unemployment_rate, year=2024):
         """
@@ -494,6 +507,15 @@ class ScenarioBuilder:
         df["y_occ"] = y_occ
         df["chi"] = np.hypot(x_occ, y_occ)                # för visualisering/kompatibilitet
         df["xi"]  = np.arctan2(y_occ, x_occ) % (2 * np.pi)
+
+        # ---- Reservationslön: rho * Π(egen position), i löneandelar ----
+        # Π saknas (ingen koefficienttabell) -> w_res = 0, dvs. S = p*w - c*km.
+        rho = self.cfg_reader.config.get("simulation", {}).get("rho_reservation", 0.7)
+        pf = self._price_field()
+        if pf is not None:
+            df["w_res"] = rho * pf.pi_rel_cart(x_occ, y_occ)
+        else:
+            df["w_res"] = 0.0
 
         # 8. r_i – erfarenhetsradie (geometrisk bredd, ersätter entropin H).
         #    Färsk arbetare = punkt (0). Växer med faktiska yrkesbyten.

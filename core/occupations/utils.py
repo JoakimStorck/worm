@@ -74,39 +74,86 @@ def _geo_km(inds_df, jobs_df):
     return np.sqrt(dx ** 2 + dy ** 2) / 1000.0
 
 
+def compute_surplus_matrix(individuals_df, jobs_df,
+                           sigma_gamma=1.0, commute_cost_per_km=0.005):
+    """Matchöverskott S_ij i löneandelar (medellön = 1):
+
+        S_ij = p_ij * w_j  -  c * km_ij  -  w_res_i
+
+    p_ij   produktivitetskärnan (arbetarens produktivitet i jobbet relativt full)
+    w_j    jobbets relativlön ur prisfältet Π (bundle-lön, Technology fields)
+    c      pendlingskostnad per km i löneandelar
+    w_res  arbetarens reservationslön
+
+    Arbetaren accepterar om S > 0. Det ersätter den tidigare godtyckliga
+    nyttotröskeln (utility_min) med noll överskott.
+
+    Saknas 'wage' på jobb eller 'w_res' på individer används 1.0 resp. 0.0, så
+    att S = p - c*km -- den gamla formen utan priser.
+    """
+    occ_dist = _occ_distance(individuals_df, jobs_df)
+    p = _occ_prob(individuals_df, jobs_df, occ_dist, sigma_gamma)
+    km = _geo_km(individuals_df, jobs_df)
+    w = (jobs_df["wage"].to_numpy(dtype=float)[None, :]
+         if "wage" in jobs_df.columns else 1.0)
+    w_res = (np.nan_to_num(individuals_df["w_res"].to_numpy(dtype=float))[:, None]
+             if "w_res" in individuals_df.columns else 0.0)
+    return p * w - commute_cost_per_km * km - w_res
+
+
 def compute_utility_matrix(individuals_df, jobs_df,
                            alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0,
-                           sigma_gamma=1.0):
-    occ_dist = _occ_distance(individuals_df, jobs_df)
-    occ_prob = _occ_prob(individuals_df, jobs_df, occ_dist, sigma_gamma)
-    geo_km   = _geo_km(individuals_df, jobs_df)
-    return occ_prob * np.exp(-alpha_geo * geo_km)
+                           sigma_gamma=1.0, commute_cost_per_km=0.005):
+    """Bakåtkompatibelt namn. Returnerar överskottsmatrisen.
+    alpha_chi/alpha_xi/alpha_geo är obsoleta och ignoreras."""
+    return compute_surplus_matrix(individuals_df, jobs_df,
+                                  sigma_gamma=sigma_gamma,
+                                  commute_cost_per_km=commute_cost_per_km)
 
 
 def global_greedy_matching(individuals_df, jobs_df,
                            alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0,
-                           sigma_gamma=1.0, utility_min=0.05):
+                           sigma_gamma=1.0, utility_min=None,
+                           commute_cost_per_km=0.005, min_surplus=0.0):
+    """Girig tilldelning i fallande överskott. Par med S <= min_surplus förkastas.
+
+    utility_min behålls som alias för min_surplus (bakåtkompatibilitet).
+    Resultatkolumnen heter 'utility' av kompatibilitetsskäl men innehåller S;
+    'surplus' är samma värde under sitt rätta namn.
+    """
+    if utility_min is not None and min_surplus == 0.0:
+        min_surplus = utility_min
     N, M = len(individuals_df), len(jobs_df)
     inds_id = individuals_df["individual_id"].values
     jobs_id = jobs_df["job_id"].values
 
-    utility = compute_utility_matrix(individuals_df, jobs_df, alpha_geo=alpha_geo,
-                                     sigma_gamma=sigma_gamma)
+    S = compute_surplus_matrix(individuals_df, jobs_df,
+                               sigma_gamma=sigma_gamma,
+                               commute_cost_per_km=commute_cost_per_km)
 
-    # Reservationsnytta: under denna accepteras inget jobb. Styr vakansgraden.
-    inds_i, jobs_j = np.where(utility > utility_min)
-    matches = list(zip(utility[inds_i, jobs_j], inds_i, jobs_j))
+    inds_i, jobs_j = np.where(S > min_surplus)
+    matches = list(zip(S[inds_i, jobs_j], inds_i, jobs_j))
     matches.sort(reverse=True, key=lambda t: t[0])
 
     used_inds, used_jobs, results = set(), set(), []
-    for util, i, j in matches:
+    for surplus, i, j in matches:
         if i in used_inds or j in used_jobs:
             continue
-        results.append({"individual_id": inds_id[i], "job_id": jobs_id[j], "utility": util})
+        results.append({"individual_id": inds_id[i], "job_id": jobs_id[j],
+                        "utility": surplus, "surplus": surplus})
         used_inds.add(i); used_jobs.add(j)
         if len(used_inds) == N or len(used_jobs) == M:
             break
-    return pd.DataFrame(results)
+    return pd.DataFrame(results, columns=["individual_id", "job_id", "utility", "surplus"])
+
+
+def effective_wage(ind_row, job_row, sigma_gamma=1.0):
+    """p_ij * w_j för ett enskilt par -- vad arbetaren faktiskt tjänar i jobbet."""
+    d = float(np.hypot(ind_row["x_occ"] - job_row["x_occ"], ind_row["y_occ"] - job_row["y_occ"]))
+    ri = float(ind_row.get("r_i", 0.0) or 0.0)
+    sigma2 = max((sigma_gamma ** 2) * (float(job_row["r_o"]) ** 2 + ri ** 2), 1e-9)
+    p = float(np.exp(-0.5 * d ** 2 / sigma2))
+    return p * float(job_row.get("wage", 1.0))
 
 
 # ---------------------------------------------------------------------------

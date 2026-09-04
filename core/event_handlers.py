@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from core.occupations.utils import xi_add, chi_add, r_add, apply_capability_update
+from core.occupations.utils import xi_add, chi_add, r_add, apply_capability_update, effective_wage
 
 def _update_individual(world, idx, delta_chi=0.0, delta_xi=0.0, delta_r=0.0):
     """Uppdaterar chi/xi/r_i, haller x_occ/y_occ synkade och tar ut bytarkostnad."""
@@ -31,6 +31,10 @@ def handle_quit_job(event, world):
     if pd.notna(job_id):
         jobs.loc[jobs['job_id'] == job_id, 'individual_id'] = np.nan
         individuals.at[idx, 'job_id'] = np.nan
+    # Arbetslös: reservationslönen faller till rho * senaste lön
+    if 'w_res' in individuals.columns:
+        rho = world.cfg_reader.config['simulation'].get('rho_reservation', 0.7)
+        individuals.at[idx, 'w_res'] = rho * float(individuals.at[idx, 'w_res'])
 
     prop_edu = individuals.at[idx, 'propensity_start_education']
     if np.random.rand() < prop_edu:
@@ -78,9 +82,16 @@ def handle_start_job(event, world):
     individuals.at[idx, 'job_id'] = job_id
     job_idx = jobs['job_id'] == job_id
     jobs.loc[job_idx, 'individual_id'] = idx
-    world.event_logger.log_event(world, event, extra={'job_id': job_id})
 
     job_row = jobs[jobs['job_id'] == job_id].iloc[0]
+    # Reservationslön = faktisk lön i det nya jobbet: ett byte måste förbättra.
+    if 'w_res' in individuals.columns and 'wage' in jobs.columns:
+        sg = world.cfg_reader.config['simulation'].get('sigma_gamma', 1.0)
+        w_eff = effective_wage(individuals.loc[idx], job_row, sigma_gamma=sg)
+        individuals.at[idx, 'w_res'] = w_eff
+        world.event_logger.log_event(world, event, extra={'job_id': job_id, 'wage_eff': round(w_eff, 4)})
+    else:
+        world.event_logger.log_event(world, event, extra={'job_id': job_id})
     n_employees = job_row['employer_size']
     prop_training = individuals.at[idx, 'propensity_internal_training']
     P_training = prop_training * world.employer_training_prob(n_employees)
@@ -149,9 +160,9 @@ def handle_start_job_search(event, world):
     matches = world.match_individuals_to_jobs(
         individuals=df,
         mode="exhaustive_multilevel",
-        alpha_geo=world.cfg_reader.config['simulation']['alpha_geo'],
         sigma_gamma=world.cfg_reader.config['simulation'].get('sigma_gamma', 1.0),
-        utility_min=world.cfg_reader.config['simulation'].get('utility_min', 0.05),
+        commute_cost_per_km=world.cfg_reader.config['simulation'].get('commute_cost_per_km', 0.005),
+        min_surplus=world.cfg_reader.config['simulation'].get('min_surplus', 0.0),
     )
     if not matches.empty:
         job_id = matches.iloc[0]['job_id']

@@ -108,9 +108,12 @@ simulation:
   log_to_file: true
   logfile_path: "output/mora_baseline.log"
   # alpha_chi/alpha_xi: OBSOLETA – ersatta av euklidiskt avstånd i planet
-  alpha_geo: 0.1
+  # alpha_geo, utility_min: OBSOLETA – ersatta av överskottsmatchning nedan
   sigma_gamma: 0.6          # kärnbredd = sigma_gamma * sqrt(r_o^2 + r_i^2); <1 skärper matchningen
-  utility_min: 0.05         # reservationsnytta – under denna accepteras inget jobb
+  # --- Överskottsmatchning: S = p*w - c*km - w_res, allt i löneandelar (medellön = 1)
+  rho_reservation: 0.7      # reservationslön = rho * Π(egen position); faller till rho*lön vid arbetslöshet
+  commute_cost_per_km: 0.005  # pendlingskostnad per km i löneandelar (26 km ≈ 13 % av medellönen)
+  min_surplus: 0.0          # acceptera om S > min_surplus
   switch_cost_kappa: 0.05   # djupkostnad per radian vid riktningsbyte
   breadth_from_move: 0.25   # hur mycket förflyttning breddar erfarenhetsradien
 

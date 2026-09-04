@@ -49,20 +49,23 @@ individuals = pd.DataFrame({
     "individual_id": np.arange(N),
     "x_occ": ix, "y_occ": iy,
     "r_i": np.zeros(N),          # färsk arbetare = punkt i planet
+    "w_res": rng.uniform(0.3, 0.7, N),         # reservationslön i löneandelar
     "x": rng.uniform(0, 30_000, N), "y": rng.uniform(0, 30_000, N),
 })
 jobs = pd.DataFrame({
     "job_id": np.arange(1000, 1000 + M),
     "x_occ": jx, "y_occ": jy,
     "r_o": rng.uniform(0.10, 0.40, M),
+    "wage": rng.uniform(0.5, 1.8, M),          # relativlön ur prisfältet
     "x": rng.uniform(0, 30_000, M), "y": rng.uniform(0, 30_000, M),
 })
 
 # 1. Euklidisk matchning
-res = global_greedy_matching(individuals, jobs, alpha_geo=1.0,
-                             sigma_gamma=0.6, utility_min=0.05)
+res = global_greedy_matching(individuals, jobs, sigma_gamma=0.6,
+                             commute_cost_per_km=0.005, min_surplus=0.0)
 assert len(res) > 0, "Ingen matchning – kontrollera x_occ/y_occ/r_o"
-print(f"[1] Matchning OK: {len(res)} par, medel-utility {res['utility'].mean():.4f}")
+assert (res["surplus"] > 0).all(), "Alla matchningar ska ha positivt överskott"
+print(f"[1] Matchning OK: {len(res)} par, medel-överskott {res['surplus'].mean():.4f} (alla > 0)")
 
 # 2. Kartesisk sampler håller sig i enhetsskivan
 xs, ys = sample_centers_xy_jitter(jx, jy, np.ones(M), 500, sigma_xy=0.1)

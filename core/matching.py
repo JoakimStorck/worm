@@ -12,6 +12,7 @@ def multilevel_exhaustive_matching(
     individuals, jobs,
     alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0,
     sigma_gamma=1.0, utility_min=0.05,
+    commute_cost_per_km=0.005, min_surplus=0.0,
     verbose=True
 ):
     inds = individuals.copy()
@@ -44,7 +45,8 @@ def multilevel_exhaustive_matching(
             matches = global_greedy_matching(
                 inds_batch, jobs_batch,
                 alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo,
-                sigma_gamma=sigma_gamma, utility_min=utility_min
+                sigma_gamma=sigma_gamma, utility_min=utility_min,
+                commute_cost_per_km=commute_cost_per_km, min_surplus=min_surplus
             )
             if len(matches) > 0:
                 changed = True
@@ -71,7 +73,8 @@ def multilevel_exhaustive_matching(
             matches = global_greedy_matching(
                 inds_batch, jobs_batch,
                 alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo,
-                sigma_gamma=sigma_gamma, utility_min=utility_min
+                sigma_gamma=sigma_gamma, utility_min=utility_min,
+                commute_cost_per_km=commute_cost_per_km, min_surplus=min_surplus
             )
             if len(matches) > 0:
                 changed = True
@@ -94,7 +97,8 @@ def multilevel_exhaustive_matching(
         matches = global_greedy_matching(
             inds_batch, jobs_batch,
             alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo,
-            sigma_gamma=sigma_gamma, utility_min=utility_min
+            sigma_gamma=sigma_gamma, utility_min=utility_min,
+            commute_cost_per_km=commute_cost_per_km, min_surplus=min_surplus
         )
         if len(matches) > 0:
             changed = True
@@ -213,6 +217,7 @@ def interleaved_multilevel_batch_matching(
     batch_frac_deso=0.20, batch_frac_muni=0.10, batch_frac_global=0.05,
     alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0,
     sigma_gamma=1.0, utility_min=0.05,
+    commute_cost_per_km=0.005, min_surplus=0.0,
     min_batch=10, verbose=True
 ):
     inds = individuals.copy()
@@ -249,7 +254,8 @@ def interleaved_multilevel_batch_matching(
             matches = global_greedy_matching(
                 inds_sel, jobs_sel,
                 alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo,
-                sigma_gamma=sigma_gamma, utility_min=utility_min
+                sigma_gamma=sigma_gamma, utility_min=utility_min,
+                commute_cost_per_km=commute_cost_per_km, min_surplus=min_surplus
             )
             if len(matches) > 0:
                 matched_this_round += len(matches)
@@ -277,7 +283,8 @@ def interleaved_multilevel_batch_matching(
             matches = global_greedy_matching(
                 inds_sel, jobs_sel,
                 alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo,
-                sigma_gamma=sigma_gamma, utility_min=utility_min
+                sigma_gamma=sigma_gamma, utility_min=utility_min,
+                commute_cost_per_km=commute_cost_per_km, min_surplus=min_surplus
             )
             if len(matches) > 0:
                 matched_this_round += len(matches)
@@ -299,7 +306,8 @@ def interleaved_multilevel_batch_matching(
         matches = global_greedy_matching(
             inds_sel, jobs_sel,
             alpha_chi=alpha_chi, alpha_xi=alpha_xi, alpha_geo=alpha_geo,
-            sigma_gamma=sigma_gamma, utility_min=utility_min
+            sigma_gamma=sigma_gamma, utility_min=utility_min,
+            commute_cost_per_km=commute_cost_per_km, min_surplus=min_surplus
         )
         if len(matches) > 0:
             matched_this_round += len(matches)

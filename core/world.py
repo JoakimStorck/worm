@@ -226,6 +226,8 @@ class World:
                 alpha_geo=kwargs.get("alpha_geo", 1.0),
                 sigma_gamma=kwargs.get("sigma_gamma", 1.0),
                 utility_min=kwargs.get("utility_min", 0.05),
+                commute_cost_per_km=kwargs.get("commute_cost_per_km", 0.005),
+                min_surplus=kwargs.get("min_surplus", 0.0),
                 batch_frac_deso=kwargs.get("batch_frac_deso", 0.2),
                 batch_frac_muni=kwargs.get("batch_frac_muni", 0.1),
                 batch_frac_global=kwargs.get("batch_frac_global", 0.05),
@@ -242,6 +244,8 @@ class World:
                 alpha_geo=kwargs.get("alpha_geo", 1.0),
                 sigma_gamma=kwargs.get("sigma_gamma", 1.0),
                 utility_min=kwargs.get("utility_min", 0.05),
+                commute_cost_per_km=kwargs.get("commute_cost_per_km", 0.005),
+                min_surplus=kwargs.get("min_surplus", 0.0),
                 verbose=kwargs.get("verbose", False)
             )
         else:
