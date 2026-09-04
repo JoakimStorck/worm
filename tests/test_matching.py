@@ -39,16 +39,54 @@ def test_commute_cost_reduces_matches(individuals, jobs):
 
 
 def test_surplus_formula(individuals, jobs):
-    """S = p*w - c*km - w_res, komponent för komponent."""
+    """S = w_j - c*km - w_res. Lönen är jobbets, oberoende av passform."""
     i = individuals.iloc[[0]]
     j = jobs.iloc[[0]]
-    S = compute_surplus_matrix(i, j, sigma_gamma=1.0, commute_cost_per_km=0.01)[0, 0]
-    d = np.hypot(i["x_occ"].iloc[0] - j["x_occ"].iloc[0],
-                 i["y_occ"].iloc[0] - j["y_occ"].iloc[0])
-    sigma2 = j["r_o"].iloc[0] ** 2 + i["r_i"].iloc[0] ** 2
-    p = np.exp(-0.5 * d ** 2 / sigma2)
+    S = compute_surplus_matrix(i, j, commute_cost_per_km=0.01)[0, 0]
     km = np.hypot(i["x"].iloc[0] - j["x"].iloc[0], i["y"].iloc[0] - j["y"].iloc[0]) / 1000.0
-    assert S == pytest.approx(p * j["wage"].iloc[0] - 0.01 * km - i["w_res"].iloc[0])
+    assert S == pytest.approx(j["wage"].iloc[0] - 0.01 * km - i["w_res"].iloc[0])
+
+
+def test_surplus_independent_of_task_distance(individuals, jobs):
+    """Passformen får inte påverka LÖNEN, bara sannolikheten att bli anställd."""
+    from core.occupations.utils import hire_probability
+    near = individuals.iloc[[0]].assign(x_occ=jobs["x_occ"].iloc[0],
+                                        y_occ=jobs["y_occ"].iloc[0])
+    far = individuals.iloc[[0]].assign(x_occ=jobs["x_occ"].iloc[0] + 0.6,
+                                       y_occ=jobs["y_occ"].iloc[0])
+    j = jobs.iloc[[0]]
+    assert compute_surplus_matrix(near, j)[0, 0] == pytest.approx(
+        compute_surplus_matrix(far, j)[0, 0])
+    assert hire_probability(near, j)[0, 0] > hire_probability(far, j)[0, 0]
+
+
+def test_transition_distances_match_empirical_distribution():
+    """Modellens mobilitetsfördelning ska motsvara den observerade:
+    median 1.03 task-radier, ~50 % inom en radie, svans bortom två.
+    Referens: Two scales of occupational mobility, CPS 2020-2024."""
+    rng = np.random.default_rng(7)
+
+    def disc(n):
+        r = np.sqrt(rng.uniform(0, 1, n)); t = rng.uniform(0, 2 * np.pi, n)
+        return r * np.cos(t), r * np.sin(t)
+
+    N, M = 3000, 9000
+    ix, iy = disc(N); jx, jy = disc(M)
+    inds = pd.DataFrame({"individual_id": np.arange(N), "x_occ": ix, "y_occ": iy,
+                         "r_i": 0.0, "w_res": 0.30, "x": 0.0, "y": 0.0})
+    jbs = pd.DataFrame({"job_id": np.arange(M), "x_occ": jx, "y_occ": jy,
+                        "r_o": 0.272, "wage": rng.uniform(0.45, 0.85, M),
+                        "x": 0.0, "y": 0.0})
+    res = global_greedy_matching(inds, jbs, sigma_gamma=0.875,
+                                 commute_cost_per_km=0.005, rng=rng)
+    im = inds.set_index("individual_id").loc[res["individual_id"]]
+    jm = jbs.set_index("job_id").loc[res["job_id"]]
+    uR = np.hypot(im["x_occ"].values - jm["x_occ"].values,
+                  im["y_occ"].values - jm["y_occ"].values) / jm["r_o"].values
+
+    assert np.median(uR) == pytest.approx(1.03, abs=0.20)
+    assert 0.40 < (uR <= 1.0).mean() < 0.62
+    assert (uR > 2.0).mean() > 0.02, "svansen saknas: långa övergångar uteslutna"
 
 
 def test_works_without_prices(individuals, jobs):

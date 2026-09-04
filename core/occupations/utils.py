@@ -78,34 +78,43 @@ def compute_surplus_matrix(individuals_df, jobs_df,
                            sigma_gamma=1.0, commute_cost_per_km=0.005):
     """Matchöverskott S_ij i löneandelar (medellön = 1):
 
-        S_ij = p_ij * w_j  -  c * km_ij  -  w_res_i
+        S_ij = w_j  -  c * km_ij  -  w_res_i
 
-    p_ij   produktivitetskärnan (arbetarens produktivitet i jobbet relativt full)
-    w_j    jobbets relativlön ur prisfältet Π (bundle-lön, Technology fields)
-    c      pendlingskostnad per km i löneandelar
-    w_res  arbetarens reservationslön
+    Jobbet betalar sin lön w_j oberoende av hur väl arbetaren passar. Passformen
+    styr i stället OM anställningen blir av, genom sannolikheten p_ij (se
+    hire_probability): arbetsgivaren anställer den som klarar uppgifterna.
 
-    Arbetaren accepterar om S > 0. Det ersätter den tidigare godtyckliga
-    nyttotröskeln (utility_min) med noll överskott.
-
-    Saknas 'wage' på jobb eller 'w_res' på individer används 1.0 resp. 0.0, så
-    att S = p - c*km -- den gamla formen utan priser.
+    Den tidigare formuleringen lät lönen vara p*w, alltså att en arbetare som
+    passar till hälften tjänade halva lönen. Kombinerat med en reservationslön
+    satt utifrån tidigare FULL lön uteslöt det långa yrkesbyten aritmetiskt:
+    modellens övergångar fick median 0.40 task-radier mot empirins 1.03, med en
+    hård avskärning vid u_R ~ 1 och nästan ingen massa bortom två radier.
     """
-    occ_dist = _occ_distance(individuals_df, jobs_df)
-    p = _occ_prob(individuals_df, jobs_df, occ_dist, sigma_gamma)
     km = _geo_km(individuals_df, jobs_df)
     w = (jobs_df["wage"].to_numpy(dtype=float)[None, :]
          if "wage" in jobs_df.columns else 1.0)
     w_res = (np.nan_to_num(individuals_df["w_res"].to_numpy(dtype=float))[:, None]
              if "w_res" in individuals_df.columns else 0.0)
-    return p * w - commute_cost_per_km * km - w_res
+    return w - commute_cost_per_km * km - w_res
+
+
+def hire_probability(individuals_df, jobs_df, sigma_gamma=1.0):
+    """Sannolikheten att anställningen blir av, given passform i planet.
+
+    p = exp(-d^2 / 2 sigma^2),  sigma = sigma_gamma * sqrt(r_o^2 + r_i^2)
+
+    Med lokalt likformig jobbtäthet blir accepterat avstånd Rayleigh-fördelat
+    med median 1.1774*sigma. sigma_gamma = 0.875 ger därmed median 1.03
+    task-radier, vilket är den observerade mobilitetsfördelningen.
+    """
+    return _occ_prob(individuals_df, jobs_df, _occ_distance(individuals_df, jobs_df),
+                     sigma_gamma)
 
 
 def compute_utility_matrix(individuals_df, jobs_df,
                            alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0,
                            sigma_gamma=1.0, commute_cost_per_km=0.005):
-    """Bakåtkompatibelt namn. Returnerar överskottsmatrisen.
-    alpha_chi/alpha_xi/alpha_geo är obsoleta och ignoreras."""
+    """Bakåtkompatibelt namn. Returnerar överskottsmatrisen."""
     return compute_surplus_matrix(individuals_df, jobs_df,
                                   sigma_gamma=sigma_gamma,
                                   commute_cost_per_km=commute_cost_per_km)
@@ -114,15 +123,19 @@ def compute_utility_matrix(individuals_df, jobs_df,
 def global_greedy_matching(individuals_df, jobs_df,
                            alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0,
                            sigma_gamma=1.0, utility_min=None,
-                           commute_cost_per_km=0.005, min_surplus=0.0):
-    """Girig tilldelning i fallande överskott. Par med S <= min_surplus förkastas.
+                           commute_cost_per_km=0.005, min_surplus=0.0,
+                           rng=None):
+    """Girig tilldelning. Ett par är möjligt om överskottet S > min_surplus,
+    och realiseras med sannolikheten p (passform). Par sorteras på förväntat
+    överskott p*S, så att bra passform och högt överskott båda premieras, men
+    utfallet dras: det är därför långa övergångar förekommer utan att vara
+    aritmetiskt uteslutna.
 
-    utility_min behålls som alias för min_surplus (bakåtkompatibilitet).
-    Resultatkolumnen heter 'utility' av kompatibilitetsskäl men innehåller S;
-    'surplus' är samma värde under sitt rätta namn.
+    Resultatkolumnen 'utility' innehåller S och finns kvar för kompatibilitet.
     """
     if utility_min is not None and min_surplus == 0.0:
         min_surplus = utility_min
+    rng = rng or np.random
     N, M = len(individuals_df), len(jobs_df)
     inds_id = individuals_df["individual_id"].values
     jobs_id = jobs_df["job_id"].values
@@ -130,30 +143,41 @@ def global_greedy_matching(individuals_df, jobs_df,
     S = compute_surplus_matrix(individuals_df, jobs_df,
                                sigma_gamma=sigma_gamma,
                                commute_cost_per_km=commute_cost_per_km)
+    P = hire_probability(individuals_df, jobs_df, sigma_gamma=sigma_gamma)
 
-    inds_i, jobs_j = np.where(S > min_surplus)
-    matches = list(zip(S[inds_i, jobs_j], inds_i, jobs_j))
-    matches.sort(reverse=True, key=lambda t: t[0])
+    feasible = S > min_surplus
+    hired = feasible & (rng.random(P.shape) < P)      # dra utfallet
+    inds_i, jobs_j = np.where(hired)
+    if len(inds_i) == 0:
+        return pd.DataFrame(columns=["individual_id", "job_id", "utility",
+                                     "surplus", "p_hire"])
 
+    # Sortera på ÖVERSKOTTET, inte på p*S. Passformen har redan verkat genom
+    # dragningen ovan; att också sortera på den vore dubbelräkning och skulle
+    # alltid välja det geometriskt närmaste jobbet, vilket kollapsar
+    # övergångsavstånden mot noll. S beror på lön och pendling, inte på
+    # task-avstånd, så den realiserade avståndsfördelningen blir Rayleigh --
+    # vilket är den observerade.
+    order = np.argsort(-S[inds_i, jobs_j])
     used_inds, used_jobs, results = set(), set(), []
-    for surplus, i, j in matches:
+    for k in order:
+        i, j = inds_i[k], jobs_j[k]
         if i in used_inds or j in used_jobs:
             continue
         results.append({"individual_id": inds_id[i], "job_id": jobs_id[j],
-                        "utility": surplus, "surplus": surplus})
+                        "utility": S[i, j], "surplus": S[i, j],
+                        "p_hire": P[i, j]})
         used_inds.add(i); used_jobs.add(j)
         if len(used_inds) == N or len(used_jobs) == M:
             break
-    return pd.DataFrame(results, columns=["individual_id", "job_id", "utility", "surplus"])
+    return pd.DataFrame(results, columns=["individual_id", "job_id", "utility",
+                                          "surplus", "p_hire"])
 
 
 def effective_wage(ind_row, job_row, sigma_gamma=1.0):
-    """p_ij * w_j för ett enskilt par -- vad arbetaren faktiskt tjänar i jobbet."""
-    d = float(np.hypot(ind_row["x_occ"] - job_row["x_occ"], ind_row["y_occ"] - job_row["y_occ"]))
-    ri = float(ind_row.get("r_i", 0.0) or 0.0)
-    sigma2 = max((sigma_gamma ** 2) * (float(job_row["r_o"]) ** 2 + ri ** 2), 1e-9)
-    p = float(np.exp(-0.5 * d ** 2 / sigma2))
-    return p * float(job_row.get("wage", 1.0))
+    """Vad arbetaren tjänar i jobbet: jobbets lön. Passformen avgör om
+    anställningen blir av, inte hur mycket den betalar."""
+    return float(job_row.get("wage", 1.0))
 
 
 # ---------------------------------------------------------------------------

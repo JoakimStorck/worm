@@ -100,14 +100,14 @@ def analyse(run_dir, sigma_gamma=0.6, commute_cost_per_km=0.005, min_surplus=0.0
     has_res = "w_res" in unemp.columns and unemp["w_res"].notna().any()
     if not has_wage or not has_res:
         print("\nVARNING: jobben saknar lön eller individerna reservationslön. "
-              "Diagnosen körs utan priser (S = p - c*km).")
+              "Diagnosen körs utan priser (S = w - c*km).")
 
     jx = vac["x_occ"].to_numpy(); jy = vac["y_occ"].to_numpy()
     jro = vac["r_o"].to_numpy()
     jw = vac["wage"].to_numpy() if has_wage else np.ones(len(vac))
     jgx = vac["x"].to_numpy(); jgy = vac["y"].to_numpy()
 
-    best_s, best_d, best_geo = [], [], []
+    best_s, best_d, best_geo, best_p = [], [], [], []
     ri_col = "r_i" if "r_i" in unemp.columns else None
     chunk = 2000
     for st in range(0, len(unemp), chunk):
@@ -121,15 +121,24 @@ def analyse(run_dir, sigma_gamma=0.6, commute_cost_per_km=0.005, min_surplus=0.0
         p = np.exp(-0.5 * d ** 2 / sigma2)
         gkm = np.sqrt((b["x"].to_numpy()[:, None] - jgx[None, :]) ** 2 +
                       (b["y"].to_numpy()[:, None] - jgy[None, :]) ** 2) / 1000.0
-        S = p * jw[None, :] - commute_cost_per_km * gkm - wres
+        # S = w - c*km - w_res. Passformen p avgör anställningssannolikheten,
+        # inte lönen.
+        S = jw[None, :] - commute_cost_per_km * gkm - wres
 
-        k = S.argmax(axis=1)
+        # Bästa möjliga: högsta överskott bland jobb med rimlig passform.
+        viable = p > 0.05
+        S_eff = np.where(viable, S, -np.inf)
+        k = S_eff.argmax(axis=1)
         r = np.arange(len(b))
-        best_s.append(S[r, k]); best_d.append(d[r, k]); best_geo.append(gkm[r, k])
+        no_viable = ~np.isfinite(S_eff[r, k])
+        best_s.append(np.where(no_viable, -np.inf, S[r, k]))
+        best_d.append(d[r, k]); best_geo.append(gkm[r, k])
+        best_p.append(p[r, k])
 
     best_s = np.concatenate(best_s)
     best_d = np.concatenate(best_d)
     best_geo = np.concatenate(best_geo)
+    best_p = np.concatenate(best_p)
 
     blocked = best_s <= min_surplus
     n_b, n_c = int(blocked.sum()), int((~blocked).sum())
@@ -144,6 +153,7 @@ def analyse(run_dir, sigma_gamma=0.6, commute_cost_per_km=0.005, min_surplus=0.0
     for q in (10, 25, 50, 75, 90):
         print(f"  p{q:<3d} {np.percentile(best_s, q):+.4f}")
 
+    print(f"\nAnställningssannolikhet vid bästa vakans: median {np.median(best_p):.3f}")
     print("\nAvstånd i planet till bästa vakans:")
     print(f"  median {np.median(best_d):.3f}   p90 {np.percentile(best_d, 90):.3f}")
     print("Geografiskt avstånd till bästa vakans (km):")
@@ -162,6 +172,17 @@ def analyse(run_dir, sigma_gamma=0.6, commute_cost_per_km=0.005, min_surplus=0.0
         print(f"  c={c:<6} -> {100*(adj <= min_surplus).mean():.1f} %")
 
 
+def _params_from_scenario(path):
+    """Läser simulation-blocket, så att diagnosen mäter samma modell som kördes."""
+    try:
+        import yaml
+        cfg = yaml.safe_load(open(path, encoding="utf-8")).get("simulation", {})
+    except Exception:
+        return {}
+    return {k: float(cfg[k]) for k in
+            ("sigma_gamma", "commute_cost_per_km", "min_surplus") if k in cfg}
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         outdir = os.path.join(ROOT, "output")
@@ -177,4 +198,9 @@ if __name__ == "__main__":
         print(f"(ingen katalog angiven – använder senaste: {os.path.basename(run_dir)})\n")
     else:
         run_dir = sys.argv[1]
-    analyse(run_dir)
+    scen = os.path.join(ROOT, "scenarios", "mora_baseline.yml")
+    kw = _params_from_scenario(scen)
+    if kw:
+        print(f"(parametrar ur {os.path.basename(scen)}: "
+              + ", ".join(f"{k}={v}" for k, v in kw.items()) + ")\n")
+    analyse(run_dir, **kw)
