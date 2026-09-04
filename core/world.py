@@ -355,6 +355,14 @@ class World:
         else:
             workforce = individuals  # Utgå från redan vald DataFrame
         
+        if not getattr(self, "_wage_checked", False):
+            self._wage_checked = True
+            if 'wage' not in self.jobs.columns or self.jobs['wage'].isna().all():
+                print("VARNING: jobben saknar lön (kolumnen 'wage'). Matchningen körs "
+                      "utan priser: S = p - c*km.")
+            elif float(self.jobs['wage'].std(skipna=True) or 0.0) == 0.0:
+                print("VARNING: alla jobb har samma lön. Prisfältet är sannolikt inte "
+                      "inläst (w_rel tomt i onet_occupation_space).")
         vacant_jobs = self.jobs[self.jobs['individual_id'].isna()]
         if 'active' in self.jobs.columns:
             vacant_jobs = vacant_jobs[vacant_jobs['active']]

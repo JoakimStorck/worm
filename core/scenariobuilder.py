@@ -465,6 +465,13 @@ class ScenarioBuilder:
                 self._pf_cache = PriceField.from_db(self.conn)
             except Exception:
                 self._pf_cache = None
+            if self._pf_cache is None:
+                print("\n" + "!" * 72)
+                print("VARNING: tabellen wage_field_coefficients saknas i databasen.")
+                print("  Reservationslönen sätts till 0 och överskottet blir S = p*w - c*km.")
+                print("  Kör: python scripts/load_task_geometry.py --write")
+                print("  med wage_field_coefficients.csv i data/geometry/.")
+                print("!" * 72 + "\n")
         return self._pf_cache
 
     def get_geom_for_onet_codes(self, onet_codes):

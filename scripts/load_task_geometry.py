@@ -120,7 +120,12 @@ def build_tables(export_dir=EXPORT_DIR):
               f"w_rel spann {occ['w_rel'].min():.3f}–{occ['w_rel'].max():.3f}")
     else:
         occ["w_rel"] = np.nan; occ["pi_rel"] = np.nan
-        print("prisfält: wage_field_coefficients.csv SAKNAS — w_rel/pi_rel blir NaN.")
+        print("\n" + "!" * 72)
+        print("VARNING: wage_field_coefficients.csv saknas i " + export_dir)
+        print("  Utan prisfält får alla jobb lön 1.0 och ingen reservationslön.")
+        print("  Matchningen reduceras till S = p - c*km, dvs. utan priser.")
+        print("  Kopiera filen från technology-fields/results/ och kör om.")
+        print("!" * 72 + "\n")
 
     # --- Familjegeometri (centrum + familje-r_o ur tasks) ---
     fam = fam.rename(columns={"Job Family": "job_family"})
@@ -182,10 +187,37 @@ def write_to_db(occ_geom, fam_geom, db_path=DB_PATH, pf=None):
     conn.commit(); conn.close()
 
 
-if __name__ == "__main__":
-    occ_geom, fam_geom, r_max, pf = build_tables()
+def main():
+    import argparse
+    ap = argparse.ArgumentParser(description="Läser in task-geometrin till WORM:s databas.")
+    ap.add_argument("--write", action="store_true",
+                    help="skriv till databasen (utan flaggan görs bara en torrkörning)")
+    ap.add_argument("--export-dir", default=EXPORT_DIR)
+    ap.add_argument("--db", default=DB_PATH)
+    ap.add_argument("--allow-missing-prices", action="store_true",
+                    help="skriv även om prisfältet saknas")
+    a = ap.parse_args()
+
+    occ_geom, fam_geom, r_max, pf = build_tables(a.export_dir)
     print(f"r_max = {r_max:.5f}")
     print(f"yrken totalt: {len(occ_geom)}")
     print(occ_geom["geom_source"].value_counts().to_string())
     print(occ_geom.head(5).to_string(index=False))
-    write_to_db(occ_geom, fam_geom)   # avkommentera för att skriva till worm.sqlite3
+
+    if not a.write:
+        print(f"\n(torrkörning – inget skrivet. Lägg till --write för att skriva till {a.db}.)")
+        return
+    if pf is None and not a.allow_missing_prices:
+        raise SystemExit(
+            "\nAVBRYTER: prisfältet saknas, så tabellen wage_field_coefficients skulle\n"
+            "inte skapas och matchningen skulle köra utan priser. Lägg\n"
+            "wage_field_coefficients.csv i export-katalogen, eller kör med\n"
+            "--write --allow-missing-prices om det är avsiktligt.")
+    write_to_db(occ_geom, fam_geom, a.db, pf=pf)
+    print(f"\nSkrev onet_occupation_space, onet_job_family_geometry"
+          + (" och wage_field_coefficients" if pf is not None else "")
+          + f" till {a.db}.")
+
+
+if __name__ == "__main__":
+    main()

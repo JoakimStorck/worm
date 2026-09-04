@@ -83,3 +83,15 @@ def test_parameters_reach_the_kernel(monkeypatch, individuals, jobs, fn_name):
                         commute_cost_per_km=0.0077, min_surplus=0.013)
     assert seen, "kärnan anropades aldrig"
     assert seen[0] == (0.61, 0.0077, 0.013)
+
+
+def test_missing_prices_is_detectable(individuals, jobs):
+    """REGRESSION: prisfältet kunde saknas helt utan att någon märkte det.
+    Jobben fick lön 1.0, ingen fick reservationslön, och överskottet blev
+    S = p - c*km -- vilket gav 98 % fyllnadsgrad och median 0.955."""
+    flat = jobs.assign(wage=1.0)
+    no_res = individuals.assign(w_res=0.0)
+    res_flat = global_greedy_matching(no_res, flat, sigma_gamma=0.6)
+    res_real = global_greedy_matching(individuals, jobs, sigma_gamma=0.6)
+    assert len(res_flat) > len(res_real)
+    assert res_flat["surplus"].median() > res_real["surplus"].median()
