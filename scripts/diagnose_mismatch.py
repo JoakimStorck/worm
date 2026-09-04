@@ -37,13 +37,53 @@ ROOT = find_repo_root(os.path.dirname(__file__))
 sys.path.insert(0, ROOT)
 
 
+def _event_flows(run_dir):
+    """Räknar sökningar, träffar och missar ur eventloggen. Svarar på frågan om
+    de arbetslösa inte HITTAR jobb eller inte SÖKER."""
+    path = os.path.join(run_dir, "eventlog.csv")
+    if not os.path.isfile(path):
+        return
+    counts = {}
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            for key in ("match_completed", "match_failed", "job_destroyed_holder_displaced",
+                        "vacancy_destroyed"):
+                if key in line:
+                    counts[key] = counts.get(key, 0) + 1
+            if ", quit_job," in line:
+                counts["quit_job"] = counts.get("quit_job", 0) + 1
+            if ", start_job," in line:
+                counts["start_job"] = counts.get("start_job", 0) + 1
+    if not counts:
+        return
+    ok = counts.get("match_completed", 0)
+    bad = counts.get("match_failed", 0)
+    print("\nFlöden under körningen (ur eventloggen):")
+    for k in ("quit_job", "job_destroyed_holder_displaced", "match_completed",
+              "match_failed", "start_job", "vacancy_destroyed"):
+        if k in counts:
+            print(f"  {k:34s} {counts[k]:7d}")
+    if ok + bad:
+        print(f"  träffkvot vid sökning              {100*ok/(ok+bad):6.1f} %")
+
+
 def analyse(run_dir, sigma_gamma=0.6, utility_min=0.05, alpha_geo=0.1, chunk=2000):
     ind = pd.read_csv(os.path.join(run_dir, "final_state_individuals.csv"))
     jobs = pd.read_csv(os.path.join(run_dir, "final_state_jobs.csv"))
 
     unemp = ind[ind["status"] == "unemployed"].copy()
     vac = jobs[jobs["individual_id"].isna()].copy()
-    print(f"Arbetslösa: {len(unemp)}   Vakanser: {len(vac)}")
+    n_all_vacant = len(vac)
+    if "active" in jobs.columns:
+        # Förstörda positioner har individual_id NaN men finns inte längre.
+        vac = vac[vac["active"].astype(bool)]
+    print(f"Arbetslösa: {len(unemp)}   Vakanser: {len(vac)}"
+          + (f"  (av {n_all_vacant} obesatta rader; {n_all_vacant - len(vac)} förstörda)"
+             if n_all_vacant != len(vac) else ""))
+    if "active" in jobs.columns:
+        act = jobs["active"].astype(bool)
+        print(f"Jobb: {int(act.sum())} aktiva, {int((~act).sum())} förstörda, "
+              f"{int((act & jobs['individual_id'].notna()).sum())} tillsatta")
     if unemp.empty or vac.empty:
         print("Inget att analysera.")
         return
@@ -90,6 +130,8 @@ def analyse(run_dir, sigma_gamma=0.6, utility_min=0.05, alpha_geo=0.1, chunk=200
     print(f"  median {np.median(best_d):.3f}   p90 {np.percentile(best_d, 90):.3f}")
     print("Geografiskt avstånd till bästa vakans (km):")
     print(f"  median {np.median(best_geo):.1f}   p90 {np.percentile(best_geo, 90):.1f}")
+
+    _event_flows(run_dir)
 
     # Hur mycket skulle en mjukare kalibrering hjälpa?
     print("\nAndel geometriskt blockerade vid andra trösklar:")
