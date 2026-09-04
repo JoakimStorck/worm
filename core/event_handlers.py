@@ -4,6 +4,21 @@ import numpy as np
 import pandas as pd
 from core.occupations.utils import xi_add, chi_add, r_add, apply_capability_update, effective_wage
 
+def _resolve_individual_index(world, holder):
+    """jobs['individual_id'] innehåller historiskt två olika saker: strängen ur
+    kolumnen individual_id (batch-matchningen) eller DataFrame-indexet
+    (handle_start_job). Denna funktion accepterar båda och returnerar ett
+    giltigt index, eller None. Aldrig .at[] direkt på ett okänt värde -- det
+    SKAPAR en ny rad i pandas i stället för att höja fel."""
+    if holder is None or (isinstance(holder, float) and pd.isna(holder)):
+        return None
+    ind = world.individuals
+    if holder in ind.index:
+        return holder
+    hit = ind.index[ind['individual_id'] == holder]
+    return hit[0] if len(hit) else None
+
+
 def _update_individual(world, idx, delta_chi=0.0, delta_xi=0.0, delta_r=0.0):
     """Uppdaterar chi/xi/r_i, haller x_occ/y_occ synkade och tar ut bytarkostnad."""
     ind = world.individuals
@@ -81,7 +96,9 @@ def handle_start_job(event, world):
     individuals.at[idx, 'status'] = 'employed'
     individuals.at[idx, 'job_id'] = job_id
     job_idx = jobs['job_id'] == job_id
-    jobs.loc[job_idx, 'individual_id'] = idx
+    # Skriv kolumnvärdet, inte radindexet: batch-matchningen gör likadant.
+    jobs.loc[job_idx, 'individual_id'] = (
+        individuals.at[idx, 'individual_id'] if 'individual_id' in individuals.columns else idx)
 
     job_row = jobs[jobs['job_id'] == job_id].iloc[0]
     # Reservationslön = faktisk lön i det nya jobbet: ett byte måste förbättra.
@@ -316,9 +333,9 @@ def handle_destroy_job(event, world):
     jobs.loc[m, 'destroyed_time'] = float(event['time'])
     jobs.loc[m, 'individual_id'] = np.nan
 
-    if pd.notna(holder):
+    idx = _resolve_individual_index(world, holder)
+    if idx is not None:
         ind = world.individuals
-        idx = holder
         ind.at[idx, 'status'] = 'unemployed'
         ind.at[idx, 'job_id'] = np.nan
         if 'w_res' in ind.columns:

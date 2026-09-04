@@ -120,3 +120,49 @@ def test_system_handlers_run(monkeypatch):
                  "params": params}, w)
     logged = dict(w.event_logger.events[-1][1])
     assert "active_jobs" in logged
+
+
+def _world_with_string_ids(n=3):
+    """Som den riktiga byggaren: individual_id är en sträng, indexet ett heltal."""
+    w = make_world(n_employers=n, size=1)
+    w.individuals = pd.DataFrame({
+        "individual_id": [f"2062_i{i:06d}" for i in range(n)],
+        "status": "employed",
+        "job_id": w.jobs["job_id"].tolist(),
+        "w_res": 1.0, "chi": 0.4, "xi": 0.3, "r_i": 0.0,
+        "x_occ": 0.3, "y_occ": 0.1,
+    })
+    w.jobs["individual_id"] = w.individuals["individual_id"].tolist()
+    return w
+
+
+def test_destroy_job_does_not_create_phantom_individuals():
+    """REGRESSION: jobs['individual_id'] innehåller strängen ur kolumnen, inte
+    radindexet. .at[] på ett okänt värde SKAPAR en ny rad i pandas i stället
+    för att höja fel, så populationen växte med hundratals NaN-individer per
+    simulerat år och sluttillståndets histogram kraschade."""
+    from core.event_handlers import handle_destroy_job
+    w = _world_with_string_ids(3)
+    n_before = len(w.individuals)
+    for job_id in w.jobs["job_id"]:
+        handle_destroy_job({"time": 10.0, "agent_id": None, "event_type": "destroy_job",
+                            "params": {"job_id": job_id}}, w)
+    assert len(w.individuals) == n_before, "spökrader skapades"
+    assert w.individuals["chi"].notna().all(), "NaN i chi"
+    assert (w.individuals["status"] == "unemployed").all(), "innehavare inte förskjutna"
+
+
+def test_population_is_invariant_over_a_year():
+    """Summan sysselsatta + arbetslösa + utanför arbetskraften ska vara konstant."""
+    from core.event_handlers import handle_destroy_job
+    w = _world_with_string_ids(40)
+    w._schedule_destruction(w.jobs["job_id"].tolist(), 0.0)
+    n = len(w.individuals)
+    for m in range(1, 13):
+        t = m * 30.44
+        while not w.event_queue.is_empty() and w.event_queue.peek()["time"] <= t:
+            ev = w.event_queue.pop()
+            if ev["event_type"] == "destroy_job":
+                handle_destroy_job(ev, w)
+        w.post_vacancies_batch(t)
+    assert len(w.individuals) == n
