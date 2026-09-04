@@ -262,7 +262,60 @@ class ScenarioBuilder:
         return df.set_index("onet_code")
 
 
+    # ------------------------------------------------------------------
+    # Yrkeskälla: 'sni' (SNI-fördelning x sni_onet_link, default) eller
+    # 'register' (tabellen occupation_weights_by_municipality, t.ex. ur
+    # SCB:s yrkesregister eller höstprojektets per-kommun-geometri).
+    # Kolumnen onet_code betyder "yrkeskod i det system geometritabellen
+    # deklarerar" (code_system) -- inte nödvändigtvis O*NET-SOC.
+    # ------------------------------------------------------------------
+    def occupation_source(self):
+        return str(self.cfg_reader.config.get("simulation", {})
+                   .get("occupation_source", "sni")).lower()
+
+    def _register_profile(self, municipal_code, year=None):
+        """Yrkesprofil ur occupation_weights_by_municipality. Kolumner: onet_code, freq, prob.
+        Koder som saknas i geometritabellen släpps med varning. Tom DataFrame om
+        tabellen saknas eller inte täcker kommunen."""
+        key = ("register", str(municipal_code), year)
+        if not hasattr(self, "_reg_cache"):
+            self._reg_cache = {}
+        if key in self._reg_cache:
+            return self._reg_cache[key]
+        try:
+            q = "SELECT onet_code, weight, year FROM occupation_weights_by_municipality WHERE municipal_code = ?"
+            df = pd.read_sql(q, self.conn, params=(str(municipal_code),))
+        except Exception:
+            self._reg_cache[key] = pd.DataFrame(columns=["onet_code", "freq", "prob"])
+            return self._reg_cache[key]
+        if df.empty:
+            self._reg_cache[key] = pd.DataFrame(columns=["onet_code", "freq", "prob"])
+            return self._reg_cache[key]
+        if year is not None and "year" in df.columns and df["year"].notna().any():
+            yrs = df["year"].dropna().astype(int)
+            use = int(yrs[yrs <= int(year)].max()) if (yrs <= int(year)).any() else int(yrs.min())
+            df = df[df["year"].astype(int) == use]
+        known = set(self.onet_space_df.index)
+        unknown = df.loc[~df["onet_code"].isin(known), "onet_code"]
+        if len(unknown):
+            print(f"[register] {len(unknown)} yrkeskoder saknar geometri och släpps "
+                  f"(kommun {municipal_code}), t.ex. {list(unknown[:3])}")
+            df = df[df["onet_code"].isin(known)]
+        prof = (df.groupby("onet_code")["weight"].sum().rename("freq").reset_index()
+                  .sort_values("freq", ascending=False).reset_index(drop=True))
+        prof["prob"] = prof["freq"] / prof["freq"].sum() if prof["freq"].sum() > 0 else 0.0
+        self._reg_cache[key] = prof
+        return prof
+
     def municipality_occupational_profile(self, municipal_code, year):
+        if self.occupation_source() == "register":
+            prof = self._register_profile(municipal_code, year)
+            if not prof.empty:
+                return prof
+            print(f"[register] inga vikter för kommun {municipal_code} -- faller tillbaka på SNI.")
+        return self._sni_occupational_profile(municipal_code, year)
+
+    def _sni_occupational_profile(self, municipal_code, year):
         """
         Returnerar en DataFrame med alla O*NET-yrken och deras totala frekvens (prob) för en kommun och ett år.
         Kombinerar kommunens SNI-struktur och kopplingen SNI→O*NET.
@@ -318,11 +371,16 @@ class ScenarioBuilder:
             for _ in range(int(row['size'])):
                 sni = row['sni_code']
 
-                occ_freq = self.get_onet_codes_with_freq_for_sni(sni)
-                onet_codes, freqs = zip(*occ_freq)
-
-                # Välj ett onet_code slumpmässigt enligt frekvens
-                onet_code = np.random.choice(onet_codes, p=np.array(freqs)/np.sum(freqs))
+                prof = (self._register_profile(row['municipal_code'])
+                        if self.occupation_source() == "register" else None)
+                if prof is not None and not prof.empty:
+                    onet_code = np.random.choice(prof["onet_code"].to_numpy(),
+                                                 p=prof["prob"].to_numpy())
+                else:
+                    # SNI-vägen (default, och fallback om registret saknar kommunen)
+                    occ_freq = self.get_onet_codes_with_freq_for_sni(sni)
+                    onet_codes, freqs = zip(*occ_freq)
+                    onet_code = np.random.choice(onet_codes, p=np.array(freqs)/np.sum(freqs))
 
                 x_occ, y_occ, r_o, chi, xi, geom_source, wage = self.get_geom_for_onet_code(onet_code)
 

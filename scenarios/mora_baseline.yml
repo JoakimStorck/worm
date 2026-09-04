@@ -108,6 +108,9 @@ simulation:
   log_to_file: true
   logfile_path: "output/mora_baseline.log"
   # alpha_chi/alpha_xi: OBSOLETA – ersatta av euklidiskt avstånd i planet
+  # --- Yrkeskälla: 'sni' (SNI-fördelning x sni_onet_link) eller 'register'
+  #     (tabellen occupation_weights_by_municipality, se scripts/load_occupation_weights.py)
+  occupation_source: sni
   # alpha_geo, utility_min: OBSOLETA – ersatta av överskottsmatchning nedan
   sigma_gamma: 0.6          # kärnbredd = sigma_gamma * sqrt(r_o^2 + r_i^2); <1 skärper matchningen
   # --- Överskottsmatchning: S = p*w - c*km - w_res, allt i löneandelar (medellön = 1)

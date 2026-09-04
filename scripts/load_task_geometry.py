@@ -168,6 +168,7 @@ def build_tables(export_dir=EXPORT_DIR):
 
     occ_geom = full[["onet_code", "Title", "Job Family", "xi", "chi",
                      "x_occ", "y_occ", "r_o", "w_rel", "pi_rel", "geom_source"]].copy()
+    occ_geom["code_system"] = "onet_soc"     # vilket kodsystem onet_code är uttryckt i
     return occ_geom, fam_geom, r_max, pf
 
 
