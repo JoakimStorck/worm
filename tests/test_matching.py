@@ -95,3 +95,35 @@ def test_missing_prices_is_detectable(individuals, jobs):
     res_real = global_greedy_matching(individuals, jobs, sigma_gamma=0.6)
     assert len(res_flat) > len(res_real)
     assert res_flat["surplus"].median() > res_real["surplus"].median()
+
+
+def test_reservation_wage_decays_on_failed_search():
+    """Utan avtagande reservationslön ligger kravet kvar på 0.7 av senaste lön
+    hur länge arbetslösheten än varar, och marknaden klarerar aldrig: i en
+    körning var 97 % av de arbetslösa blockerade och träffkvoten 5.4 %."""
+    import pandas as pd
+    from conftest import FakeConfig, FakeQueue, FakeLogger
+    from core.event_handlers import handle_start_job_search
+
+    class W:
+        pass
+    w = W()
+    w.cfg_reader = FakeConfig({"reservation_decay_per_search": 0.9,
+                               "reservation_floor": 0.2, "min_surplus": 0.0})
+    w.event_queue = FakeQueue()
+    w.event_logger = FakeLogger()
+    w.n_matched_in_month = 0
+    w._push_event = lambda e: w.event_queue.push(e)
+    w.individuals = pd.DataFrame([{"individual_id": "i0", "status": "unemployed",
+                                   "w_res": 1.0, "propensity_start_education": 0.0}])
+    w.match_individuals_to_jobs = lambda **kw: pd.DataFrame()   # inga träffar
+
+    for _ in range(3):
+        handle_start_job_search({"time": 1.0, "agent_id": 0,
+                                 "event_type": "start_job_search", "params": {}}, w)
+    assert w.individuals.at[0, "w_res"] == pytest.approx(0.729)     # 0.9^3
+
+    for _ in range(30):
+        handle_start_job_search({"time": 1.0, "agent_id": 0,
+                                 "event_type": "start_job_search", "params": {}}, w)
+    assert w.individuals.at[0, "w_res"] == pytest.approx(0.2)       # golvet håller

@@ -101,14 +101,28 @@ def handle_start_job(event, world):
         individuals.at[idx, 'individual_id'] if 'individual_id' in individuals.columns else idx)
 
     job_row = jobs[jobs['job_id'] == job_id].iloc[0]
+
+    # Övergångens geometri: avstånd i planet, och samma storhet normaliserad mot
+    # jobbets task-radie. u_R är direkt jämförbar med den empiriska
+    # mobilitetsfördelningen (median 1.03 task-radier, CPS 2020-2024).
+    extra = {'job_id': job_id}
+    try:
+        d_task = float(np.hypot(individuals.at[idx, 'x_occ'] - job_row['x_occ'],
+                                individuals.at[idx, 'y_occ'] - job_row['y_occ']))
+        r_o = float(job_row.get('r_o', np.nan))
+        extra['d_task'] = round(d_task, 4)
+        if r_o and not np.isnan(r_o) and r_o > 0:
+            extra['u_R'] = round(d_task / r_o, 4)
+    except (KeyError, TypeError, ValueError):
+        pass
+
     # Reservationslön = faktisk lön i det nya jobbet: ett byte måste förbättra.
     if 'w_res' in individuals.columns and 'wage' in jobs.columns:
         sg = world.cfg_reader.config['simulation'].get('sigma_gamma', 1.0)
         w_eff = effective_wage(individuals.loc[idx], job_row, sigma_gamma=sg)
         individuals.at[idx, 'w_res'] = w_eff
-        world.event_logger.log_event(world, event, extra={'job_id': job_id, 'wage_eff': round(w_eff, 4)})
-    else:
-        world.event_logger.log_event(world, event, extra={'job_id': job_id})
+        extra['wage_eff'] = round(w_eff, 4)
+    world.event_logger.log_event(world, event, extra=extra)
     n_employees = job_row['employer_size']
     prop_training = individuals.at[idx, 'propensity_internal_training']
     P_training = prop_training * world.employer_training_prob(n_employees)
@@ -198,6 +212,17 @@ def handle_start_job_search(event, world):
         current_prop = world.individuals.at[idx, 'propensity_start_education']
         new_prop = min(current_prop + 0.1, 1.0)
         world.individuals.at[idx, 'propensity_start_education'] = new_prop
+
+        # Reservationslönen faller med arbetslöshetens längd. Utan detta ligger
+        # kravet kvar på 0.7 av senaste lön hur länge spellet än varar, och den
+        # som förlorat ett välbetalt jobb blir permanent arbetslös: marknaden
+        # klarerar aldrig. Standard i sökteorin (Mortensen; Ljungqvist-Sargent).
+        sim = world.cfg_reader.config.get('simulation', {})
+        decay = float(sim.get('reservation_decay_per_search', 1.0))
+        floor = float(sim.get('reservation_floor', 0.0))
+        if 'w_res' in world.individuals.columns and decay < 1.0:
+            w_res = float(world.individuals.at[idx, 'w_res'])
+            world.individuals.at[idx, 'w_res'] = max(w_res * decay, floor)
 
         timing = world.cfg_reader.get_event_timing('start_job_search')
         if timing['dist'] == 'exponential':
