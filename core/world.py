@@ -257,11 +257,7 @@ class World:
         employed_mask = self.individuals['status'] == 'employed'
         n_emp = employed_mask.sum()
         if n_emp > 0:
-            timing = self.cfg_reader.get_event_timing('quit_job') or {}
-            if 'dist' not in timing:
-                timing = {'dist': 'normal', 'mean': 1461.0, 'std': 730.5}
-                print("VARNING: scenariot saknar event_timings.quit_job — "
-                      "använder default (normal, 4 år ± 2 år).")
+            timing = self.cfg_reader.get_event_timing('quit_job')
             print("QUIT_JOB TIMING:", timing)
             if timing['dist'] == 'normal':
                 durations = np.random.normal(timing['mean'], timing['std'], size=n_emp)

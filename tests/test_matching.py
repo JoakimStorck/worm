@@ -165,3 +165,23 @@ def test_reservation_wage_decays_on_failed_search():
         handle_start_job_search({"time": 1.0, "agent_id": 0,
                                  "event_type": "start_job_search", "params": {}}, w)
     assert w.individuals.at[0, "w_res"] == pytest.approx(0.2)       # golvet håller
+
+
+def test_missing_event_timings_get_defaults():
+    """REGRESSION: falun_baseline.yml saknar event_timings helt, vilket gav
+    KeyError: 'dist' i _init_events. Varje händelsetyp ska få ett giltigt
+    default, och scenariots egna värden ska gå före."""
+    from core.configreader import ConfigReader
+
+    cfg = ConfigReader({"simulation": {}}, None)
+    for ev in ("quit_job", "start_job_search", "start_education",
+               "end_education", "start_internal_training",
+               "internal_job_change", "career_break"):
+        assert "dist" in cfg.get_event_timing(ev), ev
+
+    own = ConfigReader({"simulation": {"event_timings": {
+        "quit_job": {"dist": "normal", "mean": "2y", "std": "1y"}}}}, None)
+    t = own.get_event_timing("quit_job")
+    assert t["mean"] == pytest.approx(730.5)
+
+    assert ConfigReader({"simulation": {}}, None).get_event_timing("okänd") == {}

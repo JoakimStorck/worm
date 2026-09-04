@@ -38,10 +38,26 @@ class ConfigReader:
                 raise ValueError(f"Unknown time unit in {val}, use 'd', 'w', or 'y'")
         raise ValueError(f"Unsupported time value: {val}")
 
+    # Defaultvärden i dagar. Ett scenario som saknar event_timings ska ge en
+    # varning och köra vidare, inte KeyError: 'dist' mitt i _init_events.
+    # falun_baseline.yml saknar blocket helt.
+    DEFAULT_EVENT_TIMINGS = {
+        "quit_job":                {"dist": "normal", "mean": 1461.0, "std": 730.5},
+        "start_job_search":        {"dist": "exponential", "mean": 28.0},
+        "start_education":         {"dist": "uniform", "min": 30.0, "max": 365.0},
+        "end_education":           {"dist": "uniform", "min": 365.0, "max": 1095.0},
+        "start_internal_training": {"dist": "uniform", "min": 90.0, "max": 730.0},
+        "internal_job_change":     {"dist": "uniform", "min": 365.0, "max": 1461.0},
+        "career_break":            {"dist": "uniform", "min": 365.0, "max": 2190.0},
+    }
+
     def get_event_timing(self, event_name):
         """
         Return timing config for a given event (e.g. 'start_job_search'), all units converted to days.
         Returns a dict with all relevant keys converted.
+
+        Saknar scenariot posten helt används ett default, med varning en gång
+        per händelsetyp. Nycklar som finns i scenariot går före defaulten.
         """
         timing = self.config.get("simulation", {}).get("event_timings", {}).get(event_name, {})
         result = {}
@@ -50,6 +66,20 @@ class ConfigReader:
                 result[k] = self.parse_time_with_unit(v)
             else:
                 result[k] = v
+
+        if "dist" not in result:
+            default = self.DEFAULT_EVENT_TIMINGS.get(event_name)
+            if default is None:
+                return result
+            if not hasattr(self, "_timing_warned"):
+                self._timing_warned = set()
+            if event_name not in self._timing_warned:
+                self._timing_warned.add(event_name)
+                print(f"VARNING: scenariot saknar event_timings.{event_name} — "
+                      f"använder default {default}.")
+            merged = dict(default)
+            merged.update(result)          # scenariots egna nycklar vinner
+            return merged
         return result
 
     def _to_list(self, item):

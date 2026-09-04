@@ -136,16 +136,22 @@ def main(dirs):
     pd.set_option("display.width", 160)
     print(df.to_string(index=False, float_format=lambda v: f"{v:.3f}"))
 
-    if len(df) >= 3 and df["C(0.25)"].notna().all():
-        print("\nSamband med täckning (Spearman):")
-        for col in ("u %", "median u_R", "tryck"):
-            if df[col].notna().sum() >= 3:
-                r = df[["C(0.25)", col]].corr(method="spearman").iloc[0, 1]
-                print(f"  C(0.25) mot {col:12s} {r:+.2f}")
+    print("\nSamband med täckning (Spearman, parvis kompletta rader):")
+    any_shown = False
+    for col in ("u %", "median u_R", "tryck"):
+        if col not in df.columns:
+            continue
+        sub = df[["C(0.25)", col]].dropna()
+        if len(sub) >= 3:
+            r = sub.corr(method="spearman").iloc[0, 1]
+            print(f"  C(0.25) mot {col:12s} {r:+.2f}   (n={len(sub)})")
+            any_shown = True
+        else:
+            print(f"  C(0.25) mot {col:12s} —      (n={len(sub)}, minst 3 krävs)")
+    if any_shown:
         print("\nHypotesen förutsäger negativ korrelation mot arbetslöshet och mot")
         print("median u_R: tjockare uppgiftsrum ger kortare omställningar.")
-    else:
-        print("\n(minst tre körningar krävs för korrelationer)")
+    print("\nOBS: jämför bara körningar från samma kodversion och parametrar.")
 
 
 if __name__ == "__main__":
