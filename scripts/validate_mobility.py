@@ -116,9 +116,19 @@ def report(run_dir):
 
     # Implicerad kärnbredd om fördelningen vore Rayleigh
     sigma_implied = m / np.sqrt(2 * np.log(2))
-    print(f"\nImplicerad sigma_gamma ur modellens median: {sigma_implied:.3f}")
-    print("  (empirin ger 0.875; stora avvikelser betyder att jobbtätheten runt")
-    print("   arbetarna inte är lokalt likformig, eller att reservationslönen binder)")
+    print(f"\nImplicerad sigma_gamma ur modellens median: {sigma_implied:.3f}"
+          f"  (empirin ger 0.875)")
+    if m > REFERENCE["median_uR"] * 1.15:
+        print("\n  Övergångarna är LÄNGRE än i den nationella empirin. Referensvärdet")
+        print("  1.03 gäller en tjock marknad (CPS, hela USA). Är vakanspoolen tunn")
+        print("  sätts avståndet av knapphet snarare än av kärnbredden: man tar det")
+        print("  som finns. Kontrollera marknadstrycket med diagnose_mismatch innan")
+        print("  sigma_gamma justeras -- i en gles kommun är längre övergångar en")
+        print("  PREDIKTION, inte ett kalibreringsfel.")
+    elif m < REFERENCE["median_uR"] * 0.85:
+        print("\n  Övergångarna är KORTARE än i empirin. Det tyder på att kravet för")
+        print("  acceptans binder (reservationslön eller pendlingskostnad), eller att")
+        print("  tilldelningen väljer närmaste jobb i stället för högsta överskott.")
 
 
 if __name__ == "__main__":

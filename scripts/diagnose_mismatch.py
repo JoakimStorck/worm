@@ -131,7 +131,7 @@ def analyse(run_dir, sigma_gamma=0.6, commute_cost_per_km=0.005, min_surplus=0.0
         k = S_eff.argmax(axis=1)
         r = np.arange(len(b))
         no_viable = ~np.isfinite(S_eff[r, k])
-        best_s.append(np.where(no_viable, -np.inf, S[r, k]))
+        best_s.append(np.where(no_viable, np.nan, S[r, k]))
         best_d.append(d[r, k]); best_geo.append(gkm[r, k])
         best_p.append(p[r, k])
 
@@ -140,18 +140,30 @@ def analyse(run_dir, sigma_gamma=0.6, commute_cost_per_km=0.005, min_surplus=0.0
     best_geo = np.concatenate(best_geo)
     best_p = np.concatenate(best_p)
 
-    blocked = best_s <= min_surplus
+    n_none = int(np.isnan(best_s).sum())          # ingen vakans med rimlig passform
+    blocked = np.nan_to_num(best_s, nan=-np.inf) <= min_surplus
     n_b, n_c = int(blocked.sum()), int((~blocked).sum())
+    tightness = len(vac) / max(len(unemp), 1)
+    print(f"\nMarknadstryck: {tightness:.2f} vakanser per arbetslös")
+    if tightness < 0.5:
+        print("  OBS: tunn vakanspool. När vakanserna är få sätts övergångarnas längd")
+        print("  av knapphet snarare än av kärnbredden, och andelen 'blockerade'")
+        print("  mäter kö snarare än geometri.")
     print(f"\nParametrar: sigma_gamma={sigma_gamma}, c={commute_cost_per_km}/km, "
           f"min_surplus={min_surplus}")
     print(f"Geometriskt blockerade : {n_b:5d} ({100*n_b/len(best_s):.1f} %)  "
           f"-- inget jobb ger positivt överskott")
     print(f"Konkurrens/tajming     : {n_c:5d} ({100*n_c/len(best_s):.1f} %)  "
           f"-- överskott fanns, men jobbet gick till någon annan")
+    if n_none:
+        print(f"  därav utan någon vakans med rimlig passform: {n_none} "
+              f"({100*n_none/len(best_s):.1f} %)")
 
-    print("\nBästa uppnåeliga överskott:")
-    for q in (10, 25, 50, 75, 90):
-        print(f"  p{q:<3d} {np.percentile(best_s, q):+.4f}")
+    finite = best_s[np.isfinite(best_s)]
+    if finite.size:
+        print("\nBästa uppnåeliga överskott (bland dem som har någon möjlig vakans):")
+        for q in (10, 25, 50, 75, 90):
+            print(f"  p{q:<3d} {np.percentile(finite, q):+.4f}")
 
     print(f"\nAnställningssannolikhet vid bästa vakans: median {np.median(best_p):.3f}")
     print("\nAvstånd i planet till bästa vakans:")
@@ -168,7 +180,7 @@ def analyse(run_dir, sigma_gamma=0.6, commute_cost_per_km=0.005, min_surplus=0.0
     print("\nAndel blockerade vid andra pendlingskostnader:")
     for c in (0.001, 0.003, 0.005, 0.010):
         # approximativ: skala om den geografiska termen för bästa träffen
-        adj = best_s + (commute_cost_per_km - c) * best_geo
+        adj = np.nan_to_num(best_s, nan=-np.inf) + (commute_cost_per_km - c) * best_geo
         print(f"  c={c:<6} -> {100*(adj <= min_surplus).mean():.1f} %")
 
 
