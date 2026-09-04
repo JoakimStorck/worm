@@ -377,9 +377,8 @@ def handle_new_year(event, world):
         "unemployed": unemployed,
         "unmatched_jobs": unmatched_jobs,
         "not_in_labour_force": not_in_labour_force,
-        "active_jobs": n_jobs,
-        "posted": n_posted
-    }, print_line=True)        
+        "active_jobs": stats['total_jobs']
+    }, print_line=True)
 
 RULE_SWITCH = {
     "quit_job": handle_quit_job,

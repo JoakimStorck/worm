@@ -105,3 +105,18 @@ def test_only_active_jobs_are_counted():
     stats = analyze_world(w)
     assert stats["total_jobs"] == 70
     assert stats["unmatched_jobs"] == 70
+
+
+def test_system_handlers_run(monkeypatch):
+    """REGRESSION: handle_new_year refererade n_jobs/n_posted som bara fanns i
+    handle_new_month, vilket kraschade vid första årsskiftet."""
+    from core.event_handlers import handle_new_month, handle_new_year
+    w = make_world(n_employers=5, size=4)
+    w.individuals = pd.DataFrame({"individual_id": [], "status": [], "job_id": []})
+    for handler, params in ((handle_new_month, {"month": 1, "year": 2024}),
+                            (handle_new_year, {"year": 2024})):
+        handler({"time": 30.0, "agent_id": None,
+                 "event_type": handler.__name__.replace("handle_", ""),
+                 "params": params}, w)
+    logged = dict(w.event_logger.events[-1][1])
+    assert "active_jobs" in logged
