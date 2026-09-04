@@ -67,7 +67,16 @@ def _event_flows(run_dir):
         print(f"  träffkvot vid sökning              {100*ok/(ok+bad):6.1f} %")
 
 
-def analyse(run_dir, sigma_gamma=0.6, utility_min=0.05, alpha_geo=0.1, chunk=2000):
+def analyse(run_dir, sigma_gamma=0.6, commute_cost_per_km=0.005, min_surplus=0.0):
+    """Delar upp de arbetslösa efter VARFÖR de inte matchas.
+
+    Använder samma överskottsformel som matchningskärnan:
+
+        S = p * w_j - c * km - w_res
+
+    Parametrarna ska stämma med scenariots simulation-block. Läses de fel
+    mäter diagnosen en annan modell än den som kördes.
+    """
     ind = pd.read_csv(os.path.join(run_dir, "final_state_individuals.csv"))
     jobs = pd.read_csv(os.path.join(run_dir, "final_state_jobs.csv"))
 
@@ -75,7 +84,6 @@ def analyse(run_dir, sigma_gamma=0.6, utility_min=0.05, alpha_geo=0.1, chunk=200
     vac = jobs[jobs["individual_id"].isna()].copy()
     n_all_vacant = len(vac)
     if "active" in jobs.columns:
-        # Förstörda positioner har individual_id NaN men finns inte längre.
         vac = vac[vac["active"].astype(bool)]
     print(f"Arbetslösa: {len(unemp)}   Vakanser: {len(vac)}"
           + (f"  (av {n_all_vacant} obesatta rader; {n_all_vacant - len(vac)} förstörda)"
@@ -88,55 +96,70 @@ def analyse(run_dir, sigma_gamma=0.6, utility_min=0.05, alpha_geo=0.1, chunk=200
         print("Inget att analysera.")
         return
 
+    has_wage = "wage" in vac.columns and vac["wage"].notna().any()
+    has_res = "w_res" in unemp.columns and unemp["w_res"].notna().any()
+    if not has_wage or not has_res:
+        print("\nVARNING: jobben saknar lön eller individerna reservationslön. "
+              "Diagnosen körs utan priser (S = p - c*km).")
+
     jx = vac["x_occ"].to_numpy(); jy = vac["y_occ"].to_numpy()
     jro = vac["r_o"].to_numpy()
+    jw = vac["wage"].to_numpy() if has_wage else np.ones(len(vac))
     jgx = vac["x"].to_numpy(); jgy = vac["y"].to_numpy()
 
-    best_u, best_d, best_geo = [], [], []
+    best_s, best_d, best_geo = [], [], []
     ri_col = "r_i" if "r_i" in unemp.columns else None
-
-    for s in range(0, len(unemp), chunk):
-        b = unemp.iloc[s:s + chunk]
+    chunk = 2000
+    for st in range(0, len(unemp), chunk):
+        b = unemp.iloc[st:st + chunk]
         ix = b["x_occ"].to_numpy()[:, None]; iy = b["y_occ"].to_numpy()[:, None]
         ri = (np.nan_to_num(b[ri_col].to_numpy())[:, None] if ri_col else 0.0)
+        wres = (np.nan_to_num(b["w_res"].to_numpy())[:, None] if has_res else 0.0)
 
         d = np.sqrt((ix - jx[None, :]) ** 2 + (iy - jy[None, :]) ** 2)
         sigma2 = np.maximum((sigma_gamma ** 2) * (jro[None, :] ** 2 + ri ** 2), 1e-9)
-        occ_prob = np.exp(-0.5 * d ** 2 / sigma2)
-
+        p = np.exp(-0.5 * d ** 2 / sigma2)
         gkm = np.sqrt((b["x"].to_numpy()[:, None] - jgx[None, :]) ** 2 +
                       (b["y"].to_numpy()[:, None] - jgy[None, :]) ** 2) / 1000.0
-        u = occ_prob * np.exp(-alpha_geo * gkm)
+        S = p * jw[None, :] - commute_cost_per_km * gkm - wres
 
-        k = u.argmax(axis=1)
-        best_u.append(u[np.arange(len(b)), k])
-        best_d.append(d[np.arange(len(b)), k])
-        best_geo.append(gkm[np.arange(len(b)), k])
+        k = S.argmax(axis=1)
+        r = np.arange(len(b))
+        best_s.append(S[r, k]); best_d.append(d[r, k]); best_geo.append(gkm[r, k])
 
-    best_u = np.concatenate(best_u)
+    best_s = np.concatenate(best_s)
     best_d = np.concatenate(best_d)
     best_geo = np.concatenate(best_geo)
 
-    blocked = best_u < utility_min
+    blocked = best_s <= min_surplus
     n_b, n_c = int(blocked.sum()), int((~blocked).sum())
-    print(f"\nGeometriskt blockerade : {n_b:5d} ({100*n_b/len(best_u):.1f} %)")
-    print(f"Konkurrens/tajming     : {n_c:5d} ({100*n_c/len(best_u):.1f} %)")
+    print(f"\nParametrar: sigma_gamma={sigma_gamma}, c={commute_cost_per_km}/km, "
+          f"min_surplus={min_surplus}")
+    print(f"Geometriskt blockerade : {n_b:5d} ({100*n_b/len(best_s):.1f} %)  "
+          f"-- inget jobb ger positivt överskott")
+    print(f"Konkurrens/tajming     : {n_c:5d} ({100*n_c/len(best_s):.1f} %)  "
+          f"-- överskott fanns, men jobbet gick till någon annan")
 
-    print("\nBästa uppnåeliga nytta (alla arbetslösa):")
+    print("\nBästa uppnåeliga överskott:")
     for q in (10, 25, 50, 75, 90):
-        print(f"  p{q:<3d} {np.percentile(best_u, q):.4f}")
+        print(f"  p{q:<3d} {np.percentile(best_s, q):+.4f}")
 
     print("\nAvstånd i planet till bästa vakans:")
     print(f"  median {np.median(best_d):.3f}   p90 {np.percentile(best_d, 90):.3f}")
     print("Geografiskt avstånd till bästa vakans (km):")
     print(f"  median {np.median(best_geo):.1f}   p90 {np.percentile(best_geo, 90):.1f}")
+    if has_res:
+        print(f"Reservationslön: median {np.median(unemp['w_res'].dropna()):.3f}")
+    if has_wage:
+        print(f"Vakansernas lön: median {np.median(jw):.3f}")
 
     _event_flows(run_dir)
 
-    # Hur mycket skulle en mjukare kalibrering hjälpa?
-    print("\nAndel geometriskt blockerade vid andra trösklar:")
-    for um in (0.01, 0.03, 0.05, 0.10):
-        print(f"  utility_min={um:<5} -> {100*(best_u < um).mean():.1f} %")
+    print("\nAndel blockerade vid andra pendlingskostnader:")
+    for c in (0.001, 0.003, 0.005, 0.010):
+        # approximativ: skala om den geografiska termen för bästa träffen
+        adj = best_s + (commute_cost_per_km - c) * best_geo
+        print(f"  c={c:<6} -> {100*(adj <= min_surplus).mean():.1f} %")
 
 
 if __name__ == "__main__":
