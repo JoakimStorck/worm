@@ -46,6 +46,8 @@ ROOT = find_repo_root(os.path.dirname(__file__))
 
 def coverage(jobs, s, n_grid=200):
     """Andel av enhetsskivan inom avståndet s från något aktivt jobb."""
+    if "x_occ" not in jobs.columns or "y_occ" not in jobs.columns:
+        return np.nan                     # körning från före geometrin
     if "active" in jobs.columns:
         jobs = jobs[jobs["active"].astype(bool)]
     x = jobs["x_occ"].dropna().to_numpy()
@@ -86,6 +88,8 @@ def _parse(line):
 def metrics(run_dir):
     ind = pd.read_csv(os.path.join(run_dir, "final_state_individuals.csv"))
     jobs = pd.read_csv(os.path.join(run_dir, "final_state_jobs.csv"))
+    if "status" not in ind.columns or "individual_id" not in jobs.columns:
+        return {"körning": os.path.basename(run_dir.rstrip("/")), "jobb": len(jobs)}
     act = jobs["active"].astype(bool) if "active" in jobs.columns else pd.Series(True, index=jobs.index)
 
     unemp = int((ind["status"] == "unemployed").sum())
@@ -120,7 +124,14 @@ def metrics(run_dir):
 
 
 def main(dirs):
-    rows = [metrics(d) for d in dirs]
+    rows = []
+    for d in dirs:
+        try:
+            rows.append(metrics(d))
+        except Exception as e:
+            print(f"hoppar över {os.path.basename(d)}: {type(e).__name__}: {e}")
+    if not rows:
+        raise SystemExit("Inga körningar kunde läsas.")
     df = pd.DataFrame(rows).sort_values("jobb")
     pd.set_option("display.width", 160)
     print(df.to_string(index=False, float_format=lambda v: f"{v:.3f}"))

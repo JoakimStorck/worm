@@ -192,7 +192,7 @@ class World:
             for _ in range(int(k)):
                 onet_code = self._draw_occupation_for_employer(base)
                 geom = self._geom_lookup(onet_code)
-                jid = f"J{self._next_job_seq:05d}"
+                jid = f"N{self._next_job_seq:07d}"      # N = nypostad, undviker krock
                 self._next_job_seq += 1
                 row = base.to_dict()
                 row.update({
@@ -257,7 +257,11 @@ class World:
         employed_mask = self.individuals['status'] == 'employed'
         n_emp = employed_mask.sum()
         if n_emp > 0:
-            timing = self.cfg_reader.get_event_timing('quit_job')
+            timing = self.cfg_reader.get_event_timing('quit_job') or {}
+            if 'dist' not in timing:
+                timing = {'dist': 'normal', 'mean': 1461.0, 'std': 730.5}
+                print("VARNING: scenariot saknar event_timings.quit_job — "
+                      "använder default (normal, 4 år ± 2 år).")
             print("QUIT_JOB TIMING:", timing)
             if timing['dist'] == 'normal':
                 durations = np.random.normal(timing['mean'], timing['std'], size=n_emp)

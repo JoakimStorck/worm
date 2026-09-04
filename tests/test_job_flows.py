@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from conftest import make_world, run_months
+from conftest import make_world, run_months, FakeConfig
 
 
 def theoretical_stock(target, delta, fill):
@@ -166,3 +166,45 @@ def test_population_is_invariant_over_a_year():
                 handle_destroy_job(ev, w)
         w.post_vacancies_batch(t)
     assert len(w.individuals) == n
+
+
+def test_job_ids_unique_across_municipalities():
+    """REGRESSION: generate_jobs_from_employers anropas en gång per kommun och
+    nollställde sin lokala räknare, så sex kommuner fick sex jobb med id
+    J00000. update_after_matching föll då med InvalidIndexError."""
+    import geopandas as gpd
+    from shapely.geometry import Point
+    import core.scenariobuilder as sbmod
+    from core.scenariobuilder import ScenarioBuilder
+
+    sb = ScenarioBuilder.__new__(ScenarioBuilder)
+    sb.conn = None
+    sb.cfg_reader = FakeConfig({})
+    sb.onet_space_df = pd.DataFrame(
+        {"chi": [0.3], "xi": [0.3], "x_occ": [0.29], "y_occ": [0.09],
+         "r_o": [0.27], "geom_source": ["occupation"], "w_rel": [1.0],
+         "pi_rel": [1.0]}, index=pd.Index(["11-1011.00"], name="onet_code"))
+    sb.get_onet_codes_with_freq_for_sni = lambda sni: [("11-1011.00", 1.0)]
+
+    orig = sbmod.assign_deso_code
+    sbmod.assign_deso_code = lambda df, zones, x_col, y_col: "Z"
+
+    class _GW:
+        deso_zones = None
+    sb.geoworld = _GW()
+
+    ids = []
+    try:
+        for kommun in ("2080", "2081", "2026"):
+            emp = gpd.GeoDataFrame({
+                "employer_id": [f"{kommun}_e0", f"{kommun}_e1"],
+                "municipal_code": kommun, "size": [3, 2], "sni_code": "A",
+                "layer": "deso", "zone_code": f"{kommun}A",
+                "geometry": [Point(0, 0), Point(1, 1)],
+            })
+            jobs, _ = sb.generate_jobs_from_employers(emp)
+            ids.extend(jobs["job_id"].tolist())
+    finally:
+        sbmod.assign_deso_code = orig
+
+    assert len(ids) == len(set(ids)), f"dubbletter: {len(ids) - len(set(ids))}"

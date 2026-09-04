@@ -224,9 +224,9 @@ def handle_start_job_search(event, world):
             w_res = float(world.individuals.at[idx, 'w_res'])
             world.individuals.at[idx, 'w_res'] = max(w_res * decay, floor)
 
-        timing = world.cfg_reader.get_event_timing('start_job_search')
-        if timing['dist'] == 'exponential':
-            interval = np.random.exponential(timing['mean'])
+        timing = world.cfg_reader.get_event_timing('start_job_search') or {}
+        if timing.get('dist', 'exponential') == 'exponential':
+            interval = np.random.exponential(timing.get('mean', 28.0))
         else:
             interval = 30.0
         t_retry = event['time'] + interval
@@ -366,9 +366,9 @@ def handle_destroy_job(event, world):
         if 'w_res' in ind.columns:
             rho = world.cfg_reader.config['simulation'].get('rho_reservation', 0.7)
             ind.at[idx, 'w_res'] = rho * float(ind.at[idx, 'w_res'])
-        timing = world.cfg_reader.get_event_timing('start_job_search')
-        interval = (np.random.exponential(timing['mean'])
-                    if timing.get('dist') == 'exponential' else 0.0)
+        timing = world.cfg_reader.get_event_timing('start_job_search') or {}
+        interval = (np.random.exponential(timing.get('mean', 28.0))
+                    if timing.get('dist', 'exponential') == 'exponential' else 0.0)
         world._push_event({"time": float(event['time'] + interval), "agent_id": idx,
                            "event_type": "start_job_search", "params": {}})
         world.event_logger.log_event(world, event,

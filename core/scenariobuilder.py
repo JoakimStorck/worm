@@ -364,7 +364,11 @@ class ScenarioBuilder:
         Lägger även in medianposition i occ-space för varje arbetsgivare.
         """
         jobs = []
-        job_id = 0
+        # Räknaren måste vara global över kommuner: metoden anropas en gång per
+        # kommun, och en lokal nollställning gav samma job_id i flera kommuner.
+        # Dubbletter fick update_after_matching att falla med InvalidIndexError.
+        if not hasattr(self, "_job_seq"):
+            self._job_seq = 0
         for idx, row in employers_df.iterrows():
             geom = row['geometry']
             x, y = geom.x, geom.y
@@ -385,7 +389,7 @@ class ScenarioBuilder:
                 x_occ, y_occ, r_o, chi, xi, geom_source, wage = self.get_geom_for_onet_code(onet_code)
 
                 jobs.append({
-                    "job_id": f"J{job_id:05d}",
+                    "job_id": f"J{self._job_seq:07d}",
                     "employer_id": row.get('employer_id', idx),
                     "individual_id" : None,
                     "municipal_code": row['municipal_code'],
@@ -405,7 +409,7 @@ class ScenarioBuilder:
                     "geom_source": geom_source,
                     "wage": wage,
                 })
-                job_id += 1
+                self._job_seq += 1
 
         df = pd.DataFrame(jobs)
         df["deso_code"] = assign_deso_code(df, self.geoworld.deso_zones, x_col="x", y_col="y")
