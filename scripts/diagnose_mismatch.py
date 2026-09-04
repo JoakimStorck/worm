@@ -153,11 +153,12 @@ def analyse(run_dir, sigma_gamma=0.6, commute_cost_per_km=0.005, min_surplus=0.0
           f"min_surplus={min_surplus}")
     print(f"Geometriskt blockerade : {n_b:5d} ({100*n_b/len(best_s):.1f} %)  "
           f"-- inget jobb ger positivt överskott")
+    if n_none:
+        print(f"  därav utan NÅGON vakans med rimlig passform: {n_none} "
+              f"({100*n_none/len(best_s):.1f} %) -- kö, inte geometri, "
+              f"om marknadstrycket är lågt")
     print(f"Konkurrens/tajming     : {n_c:5d} ({100*n_c/len(best_s):.1f} %)  "
           f"-- överskott fanns, men jobbet gick till någon annan")
-    if n_none:
-        print(f"  därav utan någon vakans med rimlig passform: {n_none} "
-              f"({100*n_none/len(best_s):.1f} %)")
 
     finite = best_s[np.isfinite(best_s)]
     if finite.size:
