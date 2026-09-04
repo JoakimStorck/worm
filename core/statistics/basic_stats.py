@@ -4,8 +4,6 @@ import os
 import yaml
 import numpy as np
 
-from core.scenario_result import ScenarioResult 
-
 
 def analyze_world(world):
     """
