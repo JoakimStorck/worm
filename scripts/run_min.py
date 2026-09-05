@@ -52,6 +52,7 @@ def main():
     # 1. Scenario (YAML) -> dict
     with open(SCENARIO_PATH, "r", encoding="utf-8") as f:
         scenario = yaml.safe_load(f)
+    scenario = ConfigReader.resolve_extends(scenario, os.path.dirname(SCENARIO_PATH))
 
     # 2. Konfiguration + DB-anslutning
     conn = sqlite3.connect(DB_PATH)

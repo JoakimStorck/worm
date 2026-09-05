@@ -99,16 +99,10 @@ hiring_policy: "random"
 wage_policy: "market_adjust"
 
 # === Simulation parameters ===
-simulation:
-  avg_employment_duration: 4.0     # år
-  employment_duration_std: 3.0     # år
-  job_search_interval: 0.083       # år (ca 1 månad)
-  start_year: 2024
-  log_to_console: true
-  log_to_file: true
-  logfile_path: "output/falun_baseline.log"
-  alpha_chi: 5.0
-  alpha_xi: 5.0
-  alpha_geo: 1.0
-  switch_cost_kappa: 0.05
+# Delad simulation-konfiguration, så att jämförelser mellan kommuner mäter
+# kommunskillnader och inte parameterskillnader. Enskilda nycklar kan
+# överskuggas genom att ange dem under simulation: här nedan.
+extends: _simulation_defaults.yml
 
+simulation:
+  logfile_path: output/falun_baseline_log.txt

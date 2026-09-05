@@ -301,9 +301,9 @@ class World:
         self.schedule_calendar_events()
 
     def schedule_calendar_events(self):
-        n_years = self.cfg_reader.config['simulation'].get('n_years', 5)
-        start_year = self.cfg_reader.config['simulation'].get('start_year', 2024)
-        start_month = self.cfg_reader.config['simulation'].get('start_month', 1)
+        n_years = self.cfg_reader.config.get('simulation', {}).get('n_years', 5)
+        start_year = self.cfg_reader.config.get('simulation', {}).get('start_year', 2024)
+        start_month = self.cfg_reader.config.get('simulation', {}).get('start_month', 1)
 
         day = 0
         # Lägg till new_year för startåret

@@ -185,3 +185,48 @@ def test_missing_event_timings_get_defaults():
     assert t["mean"] == pytest.approx(730.5)
 
     assert ConfigReader({"simulation": {}}, None).get_event_timing("okänd") == {}
+
+
+def test_extends_merges_shared_simulation_config(tmp_path):
+    """Scenarier delar simulation-block via 'extends', så att en jämförelse
+    mellan kommuner mäter kommunskillnader och inte parameterskillnader.
+    falun_baseline och kluster_fbr saknade tidigare event_timings respektive
+    hela simulation-blocket, vilket gav KeyError mitt i en körning."""
+    import yaml
+    from core.configreader import ConfigReader
+
+    (tmp_path / "base.yml").write_text(yaml.safe_dump({
+        "simulation": {"sigma_gamma": 0.875, "job_flows": True,
+                       "event_timings": {"quit_job": {"dist": "normal"}}}}),
+        encoding="utf-8")
+    (tmp_path / "kommun.yml").write_text(yaml.safe_dump({
+        "extends": "base.yml", "scenario_name": "X",
+        "simulation": {"sigma_gamma": 0.7}}), encoding="utf-8")
+
+    d = ConfigReader.resolve_extends(
+        yaml.safe_load((tmp_path / "kommun.yml").read_text(encoding="utf-8")), str(tmp_path))
+    sim = d["simulation"]
+    assert sim["sigma_gamma"] == 0.7          # egen nyckel vinner
+    assert sim["job_flows"] is True           # ärvd
+    assert sim["event_timings"]["quit_job"]["dist"] == "normal"   # djup merge
+    assert "extends" not in d
+
+
+def test_real_scenarios_are_complete():
+    """Alla scenarier i repot ska ha fullständig simulation-konfiguration."""
+    import glob
+    import os
+    import yaml
+    from core.configreader import ConfigReader
+
+    root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scenarios")
+    for path in glob.glob(os.path.join(root, "*.yml")):
+        if os.path.basename(path).startswith("_"):
+            continue
+        d = ConfigReader.resolve_extends(
+            yaml.safe_load(open(path, encoding="utf-8")), root)
+        sim = d.get("simulation", {})
+        name = os.path.basename(path)
+        assert sim.get("event_timings"), f"{name} saknar event_timings"
+        assert sim.get("event_effects"), f"{name} saknar event_effects"
+        assert sim.get("sigma_gamma"), f"{name} saknar sigma_gamma"

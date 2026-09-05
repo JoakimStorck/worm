@@ -47,6 +47,10 @@ def run_and_log_scenario(config_path):
         # --- 1. Ladda scenario och skapa run-mapp ---
         with open(config_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
+        # Lös upp 'extends' så att kommuner kan dela en gemensam
+        # simulation-konfiguration (se scenarios/_simulation_defaults.yml).
+        from core.configreader import ConfigReader as _CR
+        config = _CR.resolve_extends(config, os.path.dirname(os.path.abspath(scenario_path)))
 
         db_path = "data/worm.sqlite3"
         conn = sqlite3.connect(db_path)

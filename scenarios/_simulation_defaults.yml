@@ -1,0 +1,102 @@
+# _simulation_defaults.yml
+# ------------------------------------------------------------------
+# Delad grundkonfiguration för simulering och matchning.
+#
+# Scenarier hämtar in den med
+#
+#     extends: _simulation_defaults.yml
+#
+# och kan sedan överskugga enskilda nycklar. Poängen är att en jämförelse
+# MELLAN kommuner ska mäta kommunskillnader, inte parameterskillnader: kör
+# Mora med sina egna värden och Falun med implicita defaultvärden, och
+# skillnaden i utfall blir delvis en artefakt av konfigurationen.
+#
+# Geometri- och matchningsparametrarna är kalibrerade enligt
+# "Two scales of occupational mobility" (median 1.03 task-radier).
+# ------------------------------------------------------------------
+
+simulation:
+  log_to_console: true
+  log_to_file: true
+  logfile_path: "output/mora_baseline.log"
+  # alpha_chi/alpha_xi: OBSOLETA – ersatta av euklidiskt avstånd i planet
+  # --- Yrkeskälla: 'sni' (SNI-fördelning x sni_onet_link) eller 'register'
+  #     (tabellen occupation_weights_by_municipality, se scripts/load_occupation_weights.py)
+  occupation_source: sni
+  # alpha_geo, utility_min: OBSOLETA – ersatta av överskottsmatchning nedan
+  # Kärnbredd sigma = sigma_gamma * sqrt(r_o^2 + r_i^2).
+  # Empiriskt grundad: med lokalt likformig jobbtäthet är accepterat avstånd
+  # Rayleigh-fördelat med median sigma*sqrt(2 ln 2) = 1.1774*sigma. Observerad
+  # median är 1.03 task-radier (CPS 2020-2024, Two scales of occupational
+  # mobility), vilket ger sigma = 1.03/1.1774 = 0.875 * r_o.
+  sigma_gamma: 0.875
+  # --- Överskottsmatchning: S = p*w - c*km - w_res, allt i löneandelar (medellön = 1)
+  rho_reservation: 0.7      # reservationslön = rho * Π(egen position); faller till rho*lön vid arbetslöshet
+  commute_cost_per_km: 0.005  # pendlingskostnad per km i löneandelar (26 km ≈ 13 % av medellönen)
+  min_surplus: 0.0          # acceptera om S > min_surplus
+  reservation_decay_per_search: 0.95   # w_res faller 5 % per misslyckad sökning
+  reservation_floor: 0.10              # men aldrig under denna nivå
+  # --- Jobbflöden: positioner föds och dör. Utan detta är antalet jobb konstant
+  #     och Beveridgekurvan en bokföringsidentitet (v linjär i u).
+  job_flows: true
+  job_destruction_rate: 0.10   # andel av positionerna som upphör per år
+  vacancy_fill_rate: 0.25      # andel av arbetsgivarens underskott som postas per månad
+  employer_growth_rate: 0.0    # måltalets tillväxt per år (0 = stationärt)
+  switch_cost_kappa: 0.05   # djupkostnad per radian vid riktningsbyte
+  breadth_from_move: 0.25   # hur mycket förflyttning breddar erfarenhetsradien
+
+  # Samla ALLA event-tider på samma ställe – alla tider med enhet!
+  event_timings:
+    start_job_search:
+      dist: exponential
+      mean: 4w      # 4 veckor
+    start_education:
+      dist: uniform
+      min: 5d       # 5 dagar
+      max: 40d      # 40 dagar
+    quit_job:
+      dist: normal
+      mean: 4y      # 4 år
+      std: 2y       # 2 år
+    career_break:
+      dist: uniform
+      min: 2w
+      max: 12w
+    start_internal_training:
+      dist: uniform
+      min: 14d      # 2 veckor
+      max: 60d      # 8 veckor + 4 dagar
+    internal_job_change:
+      dist: exponential
+      mean: 26w     # 6 månader
+
+  # Eventuella effekter av events – ALLTID på events
+  event_effects:
+    start_education:
+      broad:
+        delta_chi: 0.8
+        delta_r: 0.3
+        delta_xi: 10
+        duration: 0.7y   # 0.7 år
+      specialist:
+        delta_chi: 1.5
+        delta_r: 0.1
+        delta_xi: 3
+        duration: 1.2y   # 1.2 år
+    internal_training:
+      delta_chi: 0.05
+      delta_r: 0.2
+      delta_xi: 0
+      duration: 0.15y    # 0.15 år
+    career_break:
+      delta_chi: -0.05
+      delta_r: -0.02
+      delta_xi: 0
+      duration: 0.5y     # 0.5 år
+    internal_job_change:
+      delta_chi: 0.01
+      delta_r: 0.1
+      delta_xi: 0
+
+
+# --- Slut på scenariofil ---

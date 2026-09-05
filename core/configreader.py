@@ -51,6 +51,44 @@ class ConfigReader:
         "career_break":            {"dist": "uniform", "min": 365.0, "max": 2190.0},
     }
 
+    @staticmethod
+    def _deep_merge(base, over):
+        """Rekursiv sammanslagning; värden i 'over' vinner."""
+        out = dict(base)
+        for k, v in over.items():
+            if isinstance(v, dict) and isinstance(out.get(k), dict):
+                out[k] = ConfigReader._deep_merge(out[k], v)
+            else:
+                out[k] = v
+        return out
+
+    @staticmethod
+    def resolve_extends(scenario, scenario_dir):
+        """Löser upp 'extends' i ett scenario-dict.
+
+        extends kan vara en filnamnssträng eller en lista av sådana, relativa
+        till scenariokatalogen. Basen läses in först och scenariots egna
+        nycklar läggs ovanpå, rekursivt. Så kan alla kommuner dela en
+        gemensam simulation-konfiguration och ändå överskugga enskilda värden.
+        """
+        import os
+        import yaml as _yaml
+
+        ext = scenario.get("extends")
+        if not ext:
+            return scenario
+        names = [ext] if isinstance(ext, str) else list(ext)
+        merged = {}
+        for name in names:
+            path = name if os.path.isabs(name) else os.path.join(scenario_dir, name)
+            with open(path, encoding="utf-8") as f:
+                base = _yaml.safe_load(f) or {}
+            base = ConfigReader.resolve_extends(base, scenario_dir)   # kedjade extends
+            merged = ConfigReader._deep_merge(merged, base)
+        out = ConfigReader._deep_merge(merged, scenario)
+        out.pop("extends", None)
+        return out
+
     def get_event_timing(self, event_name):
         """
         Return timing config for a given event (e.g. 'start_job_search'), all units converted to days.

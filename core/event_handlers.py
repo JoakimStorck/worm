@@ -48,12 +48,13 @@ def handle_quit_job(event, world):
         individuals.at[idx, 'job_id'] = np.nan
     # Arbetslös: reservationslönen faller till rho * senaste lön
     if 'w_res' in individuals.columns:
-        rho = world.cfg_reader.config['simulation'].get('rho_reservation', 0.7)
+        rho = world.cfg_reader.config.get('simulation', {}).get('rho_reservation', 0.7)
         individuals.at[idx, 'w_res'] = rho * float(individuals.at[idx, 'w_res'])
 
     prop_edu = individuals.at[idx, 'propensity_start_education']
     if np.random.rand() < prop_edu:
-        eff = world.cfg_reader.config['simulation']['event_effects']['start_education']['broad']
+        eff = (world.cfg_reader.config.get('simulation', {})
+               .get('event_effects', {}).get('start_education', {}).get('broad', {}))
         timing = world.cfg_reader.get_event_timing('start_education')
         if timing['dist'] == 'uniform':
             days_until_start = np.random.uniform(timing['min'], timing['max'])
@@ -118,7 +119,7 @@ def handle_start_job(event, world):
 
     # Reservationslön = faktisk lön i det nya jobbet: ett byte måste förbättra.
     if 'w_res' in individuals.columns and 'wage' in jobs.columns:
-        sg = world.cfg_reader.config['simulation'].get('sigma_gamma', 1.0)
+        sg = world.cfg_reader.config.get('simulation', {}).get('sigma_gamma', 1.0)
         w_eff = effective_wage(individuals.loc[idx], job_row, sigma_gamma=sg)
         individuals.at[idx, 'w_res'] = w_eff
         extra['wage_eff'] = round(w_eff, 4)
@@ -154,7 +155,8 @@ def handle_start_job(event, world):
         else:
             interval = 182
         t_change = event['time'] + interval
-        effects = world.cfg_reader.config['simulation']['event_effects']['internal_job_change']
+        effects = (world.cfg_reader.config.get('simulation', {})
+               .get('event_effects', {}).get('internal_job_change', {}))
         delta_xi = effects.get('delta_xi', 0.0)
         delta_chi = effects.get('delta_chi', 0.0)
         delta_r = effects.get('delta_r', effects.get('delta_H', 0.0))
@@ -191,9 +193,9 @@ def handle_start_job_search(event, world):
     matches = world.match_individuals_to_jobs(
         individuals=df,
         mode="exhaustive_multilevel",
-        sigma_gamma=world.cfg_reader.config['simulation'].get('sigma_gamma', 1.0),
-        commute_cost_per_km=world.cfg_reader.config['simulation'].get('commute_cost_per_km', 0.005),
-        min_surplus=world.cfg_reader.config['simulation'].get('min_surplus', 0.0),
+        sigma_gamma=world.cfg_reader.config.get('simulation', {}).get('sigma_gamma', 1.0),
+        commute_cost_per_km=world.cfg_reader.config.get('simulation', {}).get('commute_cost_per_km', 0.005),
+        min_surplus=world.cfg_reader.config.get('simulation', {}).get('min_surplus', 0.0),
     )
     if not matches.empty:
         job_id = matches.iloc[0]['job_id']
@@ -364,7 +366,7 @@ def handle_destroy_job(event, world):
         ind.at[idx, 'status'] = 'unemployed'
         ind.at[idx, 'job_id'] = np.nan
         if 'w_res' in ind.columns:
-            rho = world.cfg_reader.config['simulation'].get('rho_reservation', 0.7)
+            rho = world.cfg_reader.config.get('simulation', {}).get('rho_reservation', 0.7)
             ind.at[idx, 'w_res'] = rho * float(ind.at[idx, 'w_res'])
         timing = world.cfg_reader.get_event_timing('start_job_search') or {}
         interval = (np.random.exponential(timing.get('mean', 28.0))

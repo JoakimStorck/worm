@@ -1,3 +1,5 @@
+extends: _simulation_defaults.yml
+
 scenario_name: "Falun gradual transition"
 municipalities: ["2081"]
 start_year: 2024
