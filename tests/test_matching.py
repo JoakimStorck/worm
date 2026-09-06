@@ -139,7 +139,6 @@ def test_reservation_wage_decays_on_failed_search():
     """Utan avtagande reservationslön ligger kravet kvar på 0.7 av senaste lön
     hur länge arbetslösheten än varar, och marknaden klarerar aldrig: i en
     körning var 97 % av de arbetslösa blockerade och träffkvoten 5.4 %."""
-    import pandas as pd
     from conftest import FakeConfig, FakeQueue, FakeLogger
     from core.event_handlers import handle_start_job_search
 
@@ -153,8 +152,14 @@ def test_reservation_wage_decays_on_failed_search():
     w.n_matched_in_month = 0
     w._push_event = lambda e: w.event_queue.push(e)
     w.individuals = pd.DataFrame([{"individual_id": "i0", "status": "unemployed",
-                                   "w_res": 1.0, "propensity_start_education": 0.0}])
-    w.match_individuals_to_jobs = lambda **kw: pd.DataFrame()   # inga träffar
+                                   "w_res": 1.0, "propensity_start_education": 0.0,
+                                   "x_occ": 0.3, "y_occ": 0.1, "r_i": 0.0,
+                                   "x": 0.0, "y": 0.0}])
+    # Inga lediga positioner: varje sökning misslyckas
+    w.jobs = pd.DataFrame({"job_id": ["J0"], "individual_id": ["i1"], "active": [True],
+                           "x_occ": [0.3], "y_occ": [0.1], "r_o": [0.27],
+                           "wage": [1.0], "x": [0.0], "y": [0.0]})
+    w.job_arrays = lambda: __import__("core.occupations.utils", fromlist=["x"]).build_job_arrays(w.jobs)
 
     for _ in range(3):
         handle_start_job_search({"time": 1.0, "agent_id": 0,
