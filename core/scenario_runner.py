@@ -50,7 +50,7 @@ def run_and_log_scenario(config_path):
         # Lös upp 'extends' så att kommuner kan dela en gemensam
         # simulation-konfiguration (se scenarios/_simulation_defaults.yml).
         from core.configreader import ConfigReader as _CR
-        config = _CR.resolve_extends(config, os.path.dirname(os.path.abspath(scenario_path)))
+        config = _CR.resolve_extends(config, os.path.dirname(os.path.abspath(config_path)))
 
         db_path = "data/worm.sqlite3"
         conn = sqlite3.connect(db_path)
