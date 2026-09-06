@@ -81,12 +81,19 @@ def series(run_dir):
     return {k: np.array([r[k] for r in rows]) for k in rows[0]}
 
 
-def fit_exponential(t, y):
+def fit_exponential(t, y, lower=None, upper=None):
     """y(t) = y_inf + (y0 - y_inf) exp(-t/tau). Skattar y_inf och tau genom
     att söka det y_inf som gör log|y - y_inf| mest linjärt i t."""
     if y.size < 5 or np.allclose(y, y[0]):
         return float(y[-1]), np.nan, np.nan
-    lo, hi = (0.0, float(y.min())) if y[-1] < y[0] else (float(y.max()), float(y.max()) * 3)
+    if y[-1] < y[0]:
+        lo = 0.0 if lower is None else float(lower)
+        hi = float(y.min())
+    else:
+        lo = float(y.max())
+        hi = float(y.max()) * 3 if upper is None else float(upper)
+    if not (hi > lo):
+        return float(y[-1]), np.nan, np.nan
     best = (None, -np.inf, np.nan)
     for cand in np.linspace(lo, hi, 400):
         d = y - cand
@@ -99,7 +106,9 @@ def fit_exponential(t, y):
         ss = 1 - np.sum((z - pred) ** 2) / max(np.sum((z - z.mean()) ** 2), 1e-12)
         if ss > best[1] and coef[0] < 0:
             best = (cand, ss, -1.0 / coef[0])
-    return best[0] if best[0] is not None else float(y[-1]), best[2], best[1]
+    if best[0] is None:
+        return float(y[-1]), np.nan, np.nan
+    return best[0], best[2], best[1]
 
 
 def report(run_dir):
@@ -122,13 +131,27 @@ def report(run_dir):
     print("  Arbetslösheten är bunden av arbetskraft mot jobbstock, inte av")
     print("  geometrin. Endast vakanserna är fria.\n")
 
+    # Modellens egna gränser: V >= 0 och U >= L - J (identiteten med V = 0).
+    bounds = {"aktiva jobb J": None,
+              "vakanser V": 0.0,
+              "arbetslösa U": float(max(L[-1] - J[-1], 0.0))}
     for namn, y in (("aktiva jobb J", J), ("vakanser V", V), ("arbetslösa U", U)):
-        y_inf, tau, r2 = fit_exponential(t, y)
+        y_inf, tau, r2 = fit_exponential(t, y, lower=bounds[namn])
         rel = abs(y[-1] - y_inf) / max(abs(y_inf), 1.0)
+        # Extrapolationen är opålitlig när det är långt kvar till den skattade
+        # jämvikten: anpassningen bestäms då av kurvans lutning snarare än av
+        # dess utplaning, och kan lägga asymptoten på gränsvärdet.
+        shaky = (not np.isfinite(tau)) or rel > 0.25
         line = (f"{namn:15s} nu {y[-1]:8.0f}   asymptot {y_inf:8.0f}   "
                 f"tau {tau:.2f} år" if np.isfinite(tau) else
                 f"{namn:15s} nu {y[-1]:8.0f}   (ingen tydlig exponentiell trend)")
         print(line)
+        if shaky:
+            at_bound = (bounds[namn] is not None
+                        and abs(y_inf - bounds[namn]) < 0.02 * max(abs(y[-1]), 1.0))
+            print(f"{'':15s}   OSÄKER: {100*rel:.0f} % kvar till den skattade jämvikten"
+                  + (" och asymptoten hamnar på gränsvärdet" if at_bound else "")
+                  + ". Kör längre innan siffran används.")
         if np.isfinite(tau) and tau > 0:
             for tol in (0.05, 0.01):
                 need = tau * np.log(abs(y[0] - y_inf) / max(tol * abs(y_inf), 1e-9))
