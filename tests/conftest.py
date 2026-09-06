@@ -56,6 +56,10 @@ class FakeConfig:
     def get_event_timing(self, name):
         return self._timings.get(name, {"dist": "exponential", "mean": 30.0})
 
+    @staticmethod
+    def parse_time_with_unit(v):
+        return float(v)
+
 
 def sample_disc(rng, n):
     r = np.sqrt(rng.uniform(0, 1, n))

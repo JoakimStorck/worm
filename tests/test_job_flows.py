@@ -445,3 +445,39 @@ def test_accounting_identity_holds():
                              & w.jobs["active"].astype(bool)).sum())
         assert emp == filled_active, (
             f"månad {m}: {emp} sysselsatta men {filled_active} tillsatta aktiva positioner")
+
+
+def test_leaving_employment_always_frees_the_position():
+    """REGRESSION: start_education satte status till in_education men lät
+    positionen stå kvar som tillsatt med arbetarens id. Den var då låst för
+    andra sökande och räknades som tillsatt utan sysselsatt innehavare, vilket
+    bröt identiteten U = L - J + V. career_break frigjorde redan korrekt.
+
+    Invarianten: ingen individ som lämnat sysselsättning får ha job_id kvar,
+    och ingen aktiv position får bära id:t på någon som inte är sysselsatt.
+    """
+    from core.event_handlers import handle_start_education, handle_career_break
+
+    for handler, params, vantad in (
+            (handle_start_education, {"education_type": "specialist",
+                                      "duration": 365.25}, "in_education"),
+            (handle_career_break, {"duration": 180.0}, "career_break")):
+        w = make_world(n_employers=3, size=2)
+        w.individuals = _worker()
+        jid = w.jobs.at[1, "job_id"]
+        w.individuals.at[0, "status"] = "employed"
+        w.individuals.at[0, "job_id"] = jid
+        w.jobs.loc[w.jobs.index[1], "individual_id"] = "i0"
+        w.set_job_filled(jid, True)
+
+        handler({"time": 10.0, "agent_id": 0, "event_type": "x", "params": params}, w)
+
+        assert w.individuals.at[0, "status"] == vantad
+        assert pd.isna(w.individuals.at[0, "job_id"]), f"{vantad}: job_id kvar"
+        assert pd.isna(w.jobs.at[1, "individual_id"]), f"{vantad}: positionen låst"
+        assert bool(w.vacant_mask()[1]), f"{vantad}: positionen inte sökbar igen"
+
+        emp = int((w.individuals["status"] == "employed").sum())
+        filled_active = int((w.jobs["individual_id"].notna()
+                             & w.jobs["active"].astype(bool)).sum())
+        assert emp == filled_active

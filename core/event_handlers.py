@@ -312,6 +312,19 @@ def handle_start_education(event, world):
     elif education_type == 'broad':
         _update_individual(world, idx, delta_xi=delta_xi, delta_r=delta_r)
 
+    # Den som börjar studera lämnar sin position. Utan detta stod jobbet kvar
+    # som tillsatt med hennes id: låst för andra sökande och räknat som
+    # tillsatt utan sysselsatt innehavare, vilket bröt identiteten
+    # U = L - J + V. career_break frigör redan på detta sätt.
+    jobs = world.jobs
+    prev_job = world.individuals.at[idx, 'job_id']
+    if pd.notna(prev_job):
+        prev_pos = world.job_index().get(prev_job)
+        if prev_pos is not None:
+            jobs.iat[prev_pos, jobs.columns.get_loc('individual_id')] = np.nan
+            world.set_job_filled(prev_job, False)
+        world.individuals.at[idx, 'job_id'] = np.nan
+
     world.individuals.at[idx, 'status'] = 'in_education'
     world.event_logger.log_event(world, event, extra={'education_type': education_type})
 

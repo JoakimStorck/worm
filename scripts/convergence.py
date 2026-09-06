@@ -86,6 +86,12 @@ def fit_exponential(t, y, lower=None, upper=None):
     att söka det y_inf som gör log|y - y_inf| mest linjärt i t."""
     if y.size < 5 or np.allclose(y, y[0]):
         return float(y[-1]), np.nan, np.nan
+    # En serie som knappt rört sig går inte att extrapolera: anpassningen
+    # styrs då av brus och kan lägga asymptoten var som helst. Jobbstocken gav
+    # asymptot 0 med tidskonstanten 691 år trots att den låg still.
+    movement = abs(y[0] - y[-1]) / max(abs(y[-1]), 1.0)
+    if movement < 0.02:
+        return float(y[-1]), 0.0, 1.0          # tau 0 = redan framme
     if y[-1] < y[0]:
         lo = 0.0 if lower is None else float(lower)
         hi = float(y.min())
@@ -141,7 +147,13 @@ def report(run_dir):
         # Extrapolationen är opålitlig när det är långt kvar till den skattade
         # jämvikten: anpassningen bestäms då av kurvans lutning snarare än av
         # dess utplaning, och kan lägga asymptoten på gränsvärdet.
-        shaky = (not np.isfinite(tau)) or rel > 0.25
+        shaky = ((not np.isfinite(tau)) or rel > 0.25
+                 or (np.isfinite(tau) and tau > 3 * t[-1]))
+        if np.isfinite(tau) and tau == 0.0:
+            print(f"{namn:15s} nu {y[-1]:8.0f}   ligger still (rörelse under 2 %) "
+                  f"-- betrakta som jämvikt")
+            print()
+            continue
         line = (f"{namn:15s} nu {y[-1]:8.0f}   asymptot {y_inf:8.0f}   "
                 f"tau {tau:.2f} år" if np.isfinite(tau) else
                 f"{namn:15s} nu {y[-1]:8.0f}   (ingen tydlig exponentiell trend)")
