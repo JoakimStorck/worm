@@ -241,3 +241,36 @@ def test_job_index_maps_ids_to_positions():
     ji = w.job_index()
     for pos, jid in enumerate(w.jobs["job_id"]):
         assert ji[jid] == pos
+
+
+def test_individual_id_column_is_object_dtype():
+    """REGRESSION: är jobs['individual_id'] float64 (enbart NaN) höjer
+    pandas 2.x TypeError när ett sträng-id skrivs in vid anställning."""
+    w = make_world(n_employers=3, size=2)
+    assert w.jobs["individual_id"].dtype == object
+    w.jobs.loc[w.jobs.index[0], "individual_id"] = "2062_i000001"
+    assert w.jobs.at[0, "individual_id"] == "2062_i000001"
+
+
+def test_start_job_fills_the_right_position():
+    """REGRESSION: raden som ANVÄNDE pos pushades utan raden som definierar
+    den, så simuleringen föll med NameError vid första anställningen."""
+    from core.event_handlers import handle_start_job
+
+    w = make_world(n_employers=4, size=3)
+    w.individuals = pd.DataFrame([{
+        "individual_id": "i0", "status": "unemployed", "job_id": None,
+        "w_res": 0.5, "chi": 0.3, "xi": 0.3, "r_i": 0.0,
+        "x_occ": 0.3, "y_occ": 0.1}]).astype({"job_id": object})
+    target = w.jobs.at[7, "job_id"]
+    before = int(w.vacant_mask().sum())
+    try:
+        handle_start_job({"time": 1.0, "agent_id": 0, "event_type": "start_job",
+                          "params": {"job_id": target}}, w)
+    except KeyError:
+        pass          # senare steg kräver full scenariokonfiguration
+    assert w.jobs.at[7, "individual_id"] == "i0"
+    assert int(w.vacant_mask().sum()) == before - 1
+    filled = w.jobs["individual_id"].notna().to_numpy()
+    assert np.array_equal(w.vacant_mask(),
+                          (~filled) & w.jobs["active"].to_numpy(dtype=bool))

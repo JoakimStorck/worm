@@ -126,6 +126,12 @@ class World:
 
     def _init_job_flows(self):
         """Ger jobben active/created_time och arbetsgivarna ett måltal."""
+        # individual_id måste vara object: är kolumnen float64 (enbart NaN)
+        # höjer pandas 2.x TypeError när ett sträng-id skrivs in. I praktiken
+        # räddas det av batch-matchningen vid t=0, men en händelsedriven
+        # anställning i en värld utan föregående batch skulle falla.
+        if 'individual_id' in self.jobs.columns and self.jobs['individual_id'].dtype != object:
+            self.jobs['individual_id'] = self.jobs['individual_id'].astype(object)
         if 'active' not in self.jobs.columns:
             self.jobs['active'] = True
             self.jobs['created_time'] = float(self.current_time)
