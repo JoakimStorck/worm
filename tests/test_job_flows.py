@@ -481,3 +481,35 @@ def test_leaving_employment_always_frees_the_position():
         filled_active = int((w.jobs["individual_id"].notna()
                              & w.jobs["active"].astype(bool)).sum())
         assert emp == filled_active
+
+
+def test_lost_promise_does_not_orphan_current_job():
+    """REGRESSION: föll den utlovade positionen bort sattes arbetaren
+    ovillkorligen till arbetslös med job_id nollat. Höll hon redan en position
+    blev den kvar tillsatt med hennes id men utan sysselsatt innehavare --
+    28 sådana fall i en femårskörning, kategori E i check_invariants."""
+    from core.event_handlers import handle_start_job
+
+    w = make_world(n_employers=4, size=3)
+    w.individuals = _worker()
+    nuvarande = w.jobs.at[0, "job_id"]
+    utlovad = w.jobs.at[5, "job_id"]
+
+    w.individuals.at[0, "status"] = "employed"
+    w.individuals.at[0, "job_id"] = nuvarande
+    w.jobs.loc[w.jobs.index[0], "individual_id"] = "i0"
+    w.set_job_filled(nuvarande, True)
+
+    # den utlovade positionen förstörs innan tillträdet
+    w.jobs.loc[w.jobs.index[5], "active"] = False
+    handle_start_job({"time": 40.0, "agent_id": 0, "event_type": "start_job",
+                      "params": {"job_id": utlovad}}, w)
+
+    assert w.individuals.at[0, "status"] == "employed", "förlorade sitt jobb i onödan"
+    assert w.individuals.at[0, "job_id"] == nuvarande
+    assert w.jobs.at[0, "individual_id"] == "i0"
+
+    emp = int((w.individuals["status"] == "employed").sum())
+    filled_active = int((w.jobs["individual_id"].notna()
+                         & w.jobs["active"].astype(bool)).sum())
+    assert emp == filled_active

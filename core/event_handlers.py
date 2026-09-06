@@ -114,6 +114,25 @@ def handle_start_job(event, world):
     if not still_available:
         if pos is not None and 'pending' in jobs.columns:
             jobs.iat[pos, jobs.columns.get_loc('pending')] = False
+
+        # Höll arbetaren redan en giltig position behåller hon den. Att
+        # ovillkorligen sätta status unemployed och nolla job_id lämnade den
+        # gamla positionen tillsatt med hennes id men utan sysselsatt
+        # innehavare -- 28 sådana fall i en femårskörning (kategori E i
+        # scripts/check_invariants.py).
+        held = individuals.at[idx, 'job_id'] if 'job_id' in individuals.columns else None
+        held_pos = world.job_index().get(held) if pd.notna(held) else None
+        still_holds = (
+            held_pos is not None
+            and bool(jobs.iat[held_pos, jobs.columns.get_loc('active')])
+            and jobs.iat[held_pos, jobs.columns.get_loc('individual_id')]
+                == individuals.at[idx, 'individual_id']
+        )
+        if still_holds:
+            world.event_logger.log_event(world, event, extra={
+                'event_detail': 'job_gone_before_start_kept_previous', 'job_id': job_id})
+            return
+
         individuals.at[idx, 'status'] = 'unemployed'
         individuals.at[idx, 'job_id'] = np.nan
         timing = world.cfg_reader.get_event_timing('start_job_search')
