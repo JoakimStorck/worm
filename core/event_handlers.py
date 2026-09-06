@@ -220,8 +220,17 @@ def handle_start_job_search(event, world):
 
     if job_pos is not None:
         job_id = world.jobs.iloc[job_pos]['job_id']
+        # Rekryteringstid: positionen är utlovad men tillträds först senare.
+        # Utan fördröjning fylls en vakans i samma ögonblick den matchas, och
+        # vakansvaraktigheten blir omkring 13 dagar mot faktiska 30-60. Det är
+        # därför vakansgraden hamnade under 1.3 procent mot svenska cirka 2.
+        world.set_job_pending(job_id)
+        lag_cfg = world.cfg_reader.get_event_timing('recruitment_lag')
+        lag = (np.random.exponential(lag_cfg.get('mean', 30.0))
+               if lag_cfg.get('dist', 'exponential') == 'exponential'
+               else float(lag_cfg.get('mean', 30.0)))
         world._push_event({
-            "time": event['time'],
+            "time": float(event['time'] + lag),
             "agent_id": idx,
             "event_type": "start_job",
             "params": {"job_id": job_id},

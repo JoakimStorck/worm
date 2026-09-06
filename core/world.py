@@ -132,6 +132,10 @@ class World:
         # anställning i en värld utan föregående batch skulle falla.
         if 'individual_id' in self.jobs.columns and self.jobs['individual_id'].dtype != object:
             self.jobs['individual_id'] = self.jobs['individual_id'].astype(object)
+        if 'pending' not in self.jobs.columns:
+            # Tillsatt men ännu inte tillträtt. Positionen är en öppen vakans i
+            # statistiken men får inte sökas av någon annan.
+            self.jobs['pending'] = False
         if 'active' not in self.jobs.columns:
             self.jobs['active'] = True
             self.jobs['created_time'] = float(self.current_time)
@@ -373,7 +377,9 @@ class World:
             filled = self.jobs["individual_id"].notna().to_numpy()
             act = (self.jobs["active"].to_numpy(dtype=bool)
                    if "active" in self.jobs.columns else np.ones(n, dtype=bool))
-            self._vm = (~filled) & act
+            pend = (self.jobs["pending"].to_numpy(dtype=bool)
+                    if "pending" in self.jobs.columns else np.zeros(n, dtype=bool))
+            self._vm = (~filled) & act & (~pend)
             self._vm_n = n
         return self._vm
 
@@ -382,6 +388,19 @@ class World:
         pos = self.job_index().get(job_id)
         if pos is not None and getattr(self, "_vm", None) is not None:
             self._vm[pos] = not filled
+        if pos is not None and "pending" in self.jobs.columns and not filled:
+            self.jobs.iat[pos, self.jobs.columns.get_loc("pending")] = False
+
+    def set_job_pending(self, job_id):
+        """Positionen är utlovad men inte tillträdd: ingen annan kan söka den,
+        men den räknas fortfarande som en öppen vakans."""
+        pos = self.job_index().get(job_id)
+        if pos is None:
+            return
+        if "pending" in self.jobs.columns:
+            self.jobs.iat[pos, self.jobs.columns.get_loc("pending")] = True
+        if getattr(self, "_vm", None) is not None:
+            self._vm[pos] = False
 
     def set_job_inactive(self, job_id):
         pos = self.job_index().get(job_id)

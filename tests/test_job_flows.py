@@ -274,3 +274,38 @@ def test_start_job_fills_the_right_position():
     filled = w.jobs["individual_id"].notna().to_numpy()
     assert np.array_equal(w.vacant_mask(),
                           (~filled) & w.jobs["active"].to_numpy(dtype=bool))
+
+
+def test_pending_job_is_reserved_but_still_a_vacancy():
+    """Rekryteringstid: en matchad position är utlovad men inte tillträdd.
+
+    Den får inte sökas av någon annan, men den ska räknas som en öppen vakans
+    i statistiken -- det är så vakansstatistik definieras, och det är det som
+    ger realistisk vakansvaraktighet. Utan fördröjning fylls en vakans i samma
+    ögonblick den matchas, vilket gav omkring 13 dagars varaktighet mot
+    faktiska 30-60 och en vakansgrad under 1.3 procent.
+    """
+    from core.statistics.basic_stats import analyze_world
+
+    w = make_world(n_employers=4, size=3)
+    w.individuals = pd.DataFrame({"individual_id": [], "status": [], "job_id": []})
+    jid = w.jobs.at[5, "job_id"]
+    n_vac_before = int(w.vacant_mask().sum())
+
+    w.set_job_pending(jid)
+
+    assert int(w.vacant_mask().sum()) == n_vac_before - 1, "utlovad position kan sökas"
+    assert bool(w.jobs.at[5, "pending"])
+    assert pd.isna(w.jobs.at[5, "individual_id"]), "positionen är inte tillträdd"
+    # räknas fortfarande som öppen vakans i statistiken
+    assert analyze_world(w)["unmatched_jobs"] == n_vac_before
+
+
+def test_pending_clears_when_job_is_filled_or_freed():
+    w = make_world(n_employers=2, size=2)
+    jid = w.jobs.at[0, "job_id"]
+    w.set_job_pending(jid)
+    assert bool(w.jobs.at[0, "pending"])
+    w.set_job_filled(jid, False)          # rekryteringen avbryts
+    assert not bool(w.jobs.at[0, "pending"])
+    assert bool(w.vacant_mask()[0]), "positionen ska vara sökbar igen"

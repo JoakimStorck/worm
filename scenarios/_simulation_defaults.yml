@@ -54,6 +54,9 @@ simulation:
 
   # Samla ALLA event-tider på samma ställe – alla tider med enhet!
   event_timings:
+    recruitment_lag:
+      dist: exponential
+      mean: 30d     # tid från matchning till tillträde; sätter vakansvaraktigheten
     start_job_search:
       dist: exponential
       mean: 4w      # 4 veckor

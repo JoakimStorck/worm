@@ -44,6 +44,7 @@ class ConfigReader:
     DEFAULT_EVENT_TIMINGS = {
         "quit_job":                {"dist": "normal", "mean": 1461.0, "std": 730.5},
         "start_job_search":        {"dist": "exponential", "mean": 28.0},
+        "recruitment_lag":         {"dist": "exponential", "mean": 30.0},
         "start_education":         {"dist": "uniform", "min": 30.0, "max": 365.0},
         "end_education":           {"dist": "uniform", "min": 365.0, "max": 1095.0},
         "start_internal_training": {"dist": "uniform", "min": 90.0, "max": 730.0},
