@@ -208,3 +208,36 @@ def test_job_ids_unique_across_municipalities():
         sbmod.assign_deso_code = orig
 
     assert len(ids) == len(set(ids)), f"dubbletter: {len(ids) - len(set(ids))}"
+
+
+def test_vacancy_mask_stays_in_sync():
+    """Vakansmasken cachas och uppdateras punktvis i stället för att räknas om
+    ur individual_id, eftersom isna på en strängkolumn kostade 392
+    mikrosekunder per sökning (6.7 av 33 sekunder i en Mora-körning). Den får
+    då inte glida ur synk med tabellen."""
+    from core.event_handlers import handle_destroy_job
+
+    def truth(w):
+        filled = w.jobs["individual_id"].notna().to_numpy()
+        return (~filled) & w.jobs["active"].to_numpy(dtype=bool)
+
+    w = make_world(n_employers=20, size=5)
+    w.individuals = pd.DataFrame({"individual_id": [], "status": [], "job_id": [], "w_res": []})
+    assert np.array_equal(w.vacant_mask(), truth(w))
+
+    w._schedule_destruction(w.jobs["job_id"].tolist(), 0.0)
+    for m in range(1, 13):
+        t = m * 30.44
+        while not w.event_queue.is_empty() and w.event_queue.peek()["time"] <= t:
+            ev = w.event_queue.pop()
+            if ev["event_type"] == "destroy_job":
+                handle_destroy_job(ev, w)
+        w.post_vacancies_batch(t)
+        assert np.array_equal(w.vacant_mask(), truth(w)), f"ur synk vid månad {m}"
+
+
+def test_job_index_maps_ids_to_positions():
+    w = make_world(n_employers=5, size=3)
+    ji = w.job_index()
+    for pos, jid in enumerate(w.jobs["job_id"]):
+        assert ji[jid] == pos

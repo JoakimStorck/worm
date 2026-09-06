@@ -159,7 +159,9 @@ def test_reservation_wage_decays_on_failed_search():
     w.jobs = pd.DataFrame({"job_id": ["J0"], "individual_id": ["i1"], "active": [True],
                            "x_occ": [0.3], "y_occ": [0.1], "r_o": [0.27],
                            "wage": [1.0], "x": [0.0], "y": [0.0]})
-    w.job_arrays = lambda: __import__("core.occupations.utils", fromlist=["x"]).build_job_arrays(w.jobs)
+    from core.occupations.utils import build_job_arrays
+    w.job_arrays = lambda: build_job_arrays(w.jobs)
+    w.vacant_mask = lambda: np.zeros(len(w.jobs), dtype=bool)   # inga lediga
 
     for _ in range(3):
         handle_start_job_search({"time": 1.0, "agent_id": 0,

@@ -46,6 +46,7 @@ def handle_quit_job(event, world):
     job_id = individuals.at[idx, 'job_id']
     if pd.notna(job_id):
         jobs.loc[jobs['job_id'] == job_id, 'individual_id'] = np.nan
+        world.set_job_filled(job_id, False)
         individuals.at[idx, 'job_id'] = np.nan
     # Arbetslös: reservationslönen faller till rho * senaste lön
     if 'w_res' in individuals.columns:
@@ -102,7 +103,8 @@ def handle_start_job(event, world):
     jobs.loc[job_idx, 'individual_id'] = (
         individuals.at[idx, 'individual_id'] if 'individual_id' in individuals.columns else idx)
 
-    job_row = jobs[jobs['job_id'] == job_id].iloc[0]
+    world.set_job_filled(job_id, True)
+    job_row = jobs.iloc[pos] if pos is not None else jobs[jobs['job_id'] == job_id].iloc[0]
 
     # Övergångens geometri: avstånd i planet, och samma storhet normaliserad mot
     # jobbets task-radie. u_R är direkt jämförbar med den empiriska
@@ -204,7 +206,7 @@ def handle_start_job_search(event, world):
 
     job_pos, surplus = search_once(
         world.individuals.loc[idx], world.jobs,
-        vacant_job_indices(world.jobs),
+        np.flatnonzero(world.vacant_mask()),
         sigma_gamma=sim.get('sigma_gamma', 1.0),
         commute_cost_per_km=sim.get('commute_cost_per_km', 0.005),
         min_surplus=sim.get('min_surplus', 0.0),
@@ -334,6 +336,7 @@ def handle_career_break(event, world):
     job_id = individuals.at[idx, 'job_id']
     if pd.notna(job_id):
         jobs.loc[jobs['job_id'] == job_id, 'individual_id'] = np.nan
+        world.set_job_filled(job_id, False)
         individuals.at[idx, 'job_id'] = np.nan
 
     individuals.at[idx, 'status'] = 'career_break'
@@ -361,6 +364,7 @@ def handle_destroy_job(event, world):
         return
     holder = jobs.loc[m, 'individual_id'].iloc[0]
     jobs.loc[m, 'active'] = False
+    world.set_job_inactive(job_id)
     jobs.loc[m, 'destroyed_time'] = float(event['time'])
     jobs.loc[m, 'individual_id'] = np.nan
 

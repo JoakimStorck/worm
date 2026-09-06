@@ -344,6 +344,44 @@ class World:
                 }
                 self._push_event(event)
 
+    def job_index(self):
+        """job_id -> positionsindex. Uppslag via boolesk jämförelse över hela
+        tabellen kostade 825 mikrosekunder per anrop; en dict kostar 33."""
+        n = len(self.jobs)
+        if getattr(self, "_ji_n", None) != n:
+            self._ji = {j: i for i, j in enumerate(self.jobs["job_id"].to_numpy())}
+            self._ji_n = n
+        return self._ji
+
+    def vacant_mask(self):
+        """Boolesk vy över lediga, aktiva positioner, underhållen inkrementellt.
+
+        Att räkna om masken ur individual_id kostade 392 mikrosekunder per
+        sökning, eftersom isna på en strängkolumn är dyr: 6.7 av 33 sekunder i
+        en Mora-körning låg i _isna_string_dtype. Cachad array kostar 3.
+        Masken byggs om när tabellen ändrar längd och uppdateras punktvis av
+        set_job_filled och set_job_inactive.
+        """
+        n = len(self.jobs)
+        if getattr(self, "_vm_n", None) != n:
+            filled = self.jobs["individual_id"].notna().to_numpy()
+            act = (self.jobs["active"].to_numpy(dtype=bool)
+                   if "active" in self.jobs.columns else np.ones(n, dtype=bool))
+            self._vm = (~filled) & act
+            self._vm_n = n
+        return self._vm
+
+    def set_job_filled(self, job_id, filled):
+        """Håller vakansmasken i synk när en position tillsätts eller frigörs."""
+        pos = self.job_index().get(job_id)
+        if pos is not None and getattr(self, "_vm", None) is not None:
+            self._vm[pos] = not filled
+
+    def set_job_inactive(self, job_id):
+        pos = self.job_index().get(job_id)
+        if pos is not None and getattr(self, "_vm", None) is not None:
+            self._vm[pos] = False
+
     def job_arrays(self):
         """Cachad numpy-vy av jobbtabellen, byggs om när tabellen ändrar längd
         (dvs. när vakanser postas). Attributen x_occ, y_occ, r_o, wage, x, y
