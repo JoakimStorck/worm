@@ -230,3 +230,68 @@ def test_real_scenarios_are_complete():
         assert sim.get("event_timings"), f"{name} saknar event_timings"
         assert sim.get("event_effects"), f"{name} saknar event_effects"
         assert sim.get("sigma_gamma"), f"{name} saknar sigma_gamma"
+
+
+def test_vacant_job_indices_excludes_filled_and_destroyed():
+    from core.occupations.utils import vacant_job_indices
+    jbs = pd.DataFrame({"individual_id": [np.nan, "i1", np.nan, np.nan],
+                        "active": [True, True, False, True]})
+    assert list(vacant_job_indices(jbs)) == [0, 3]
+
+
+def _search_market(n_jobs, seed=0, **kw):
+    """Syntetisk marknad; returnerar (träffkvot, u_R-lista, km-lista)."""
+    from core.occupations.utils import search_once, vacant_job_indices, build_job_arrays
+    rng = np.random.default_rng(seed)
+    jbs = pd.DataFrame({
+        "job_id": np.arange(n_jobs),
+        "x_occ": rng.uniform(-0.9, 0.9, n_jobs), "y_occ": rng.uniform(-0.9, 0.9, n_jobs),
+        "r_o": 0.272, "wage": rng.uniform(0.45, 0.85, n_jobs),
+        "x": rng.uniform(0, 3e4, n_jobs), "y": rng.uniform(0, 3e4, n_jobs),
+        "individual_id": np.nan, "active": True})
+    A = build_job_arrays(jbs)
+    cand = vacant_job_indices(jbs)
+    ind = pd.Series({"x_occ": 0.3, "y_occ": 0.1, "r_i": 0.0,
+                     "x": 15000.0, "y": 15000.0, "w_res": kw.pop("w_res", 0.40)})
+    uR, km, hits, N = [], [], 0, 600
+    for _ in range(N):
+        jp, _ = search_once(ind, jbs, cand, sigma_gamma=0.875,
+                            commute_cost_per_km=0.005, rng=rng, arrays=A, **kw)
+        if jp is not None:
+            hits += 1
+            uR.append(np.hypot(A["x_occ"][jp] - 0.3, A["y_occ"][jp] - 0.1) / A["r_o"][jp])
+            km.append(np.hypot(A["x"][jp] - 15000.0, A["y"][jp] - 15000.0) / 1000.0)
+    return hits / N, np.array(uR), np.array(km)
+
+
+def test_search_reproduces_empirical_transition_distances():
+    """Relevansmängden får inte bryta kalibreringen: bara p beror på avståndet
+    i planet, så realiserade övergångar ska förbli Rayleigh-fördelade med
+    median nära 1.03 task-radier."""
+    _, uR, _ = _search_market(4000, choice_scale=0.05)
+    assert np.median(uR) == pytest.approx(1.03, abs=0.20)
+    assert (uR > 2.0).mean() > 0.02, "svansen saknas"
+
+
+def test_choice_scale_governs_commuting():
+    """Låg skala: bara verkligt likvärdiga jobb uppfattas som utbytbara, så
+    den sökande tar det nära. Hög skala: mer uppfattas som likvärdigt och
+    pendlingen ökar."""
+    _, _, km_tight = _search_market(4000, choice_scale=0.01)
+    _, _, km_loose = _search_market(4000, choice_scale=0.30)
+    assert np.median(km_tight) < np.median(km_loose)
+
+
+def test_thicker_market_gives_more_options():
+    """Relevansmängden är inte begränsad till ett fast antal, så en tunn
+    marknad ska ge lägre träffkvot än en tät.
+
+    Effekten syns bara när acceptanskravet binder. Med låg reservationslön
+    matchar alla oavsett marknadsstorlek, eftersom det alltid finns
+    tillräckligt många godtagbara alternativ. w_res 0.78 mot löner i
+    intervallet 0.45-0.85 ger en snäv marginal, vilket är det läge där
+    tunnhet gör skillnad.
+    """
+    hit_thin, _, _ = _search_market(100, seed=5, choice_scale=0.05, w_res=0.78)
+    hit_thick, _, _ = _search_market(1000, seed=5, choice_scale=0.05, w_res=0.78)
+    assert hit_thin < hit_thick, f"{hit_thin:.2f} mot {hit_thick:.2f}"

@@ -344,6 +344,17 @@ class World:
                 }
                 self._push_event(event)
 
+    def job_arrays(self):
+        """Cachad numpy-vy av jobbtabellen, byggs om när tabellen ändrar längd
+        (dvs. när vakanser postas). Attributen x_occ, y_occ, r_o, wage, x, y
+        ändras inte för ett befintligt jobb."""
+        from core.occupations.utils import build_job_arrays
+        n = len(self.jobs)
+        if getattr(self, "_ja_n", None) != n:
+            self._ja = build_job_arrays(self.jobs)
+            self._ja_n = n
+        return self._ja
+
     def match_individuals_to_jobs(self, individuals=None, mode="exhaustive_multilevel", **kwargs):
         """
         Batch-matches individuals to jobs. If individuals is None, all unemployed individuals are used.

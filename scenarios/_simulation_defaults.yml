@@ -33,6 +33,13 @@ simulation:
   # --- Överskottsmatchning: S = p*w - c*km - w_res, allt i löneandelar (medellön = 1)
   rho_reservation: 0.7      # reservationslön = rho * Π(egen position); faller till rho*lön vid arbetslöshet
   commute_cost_per_km: 0.005  # pendlingskostnad per km i löneandelar (26 km ≈ 13 % av medellönen)
+  # Logit-val bland de positioner som är levande alternativ. choice_scale är
+  # den lönemarginal, i andelar av medellönen, inom vilken alternativ uppfattas
+  # som likvärdiga: ett närmare jobb väljs framför ett längre bort när lönen är
+  # ungefär densamma, men valet är inte deterministiskt. Låg skala ger kortare
+  # pendling (mätt 7.6 km vid 0.01 mot 12.1 vid 0.30) och kan kalibreras mot
+  # faktiska pendlingsavstånd.
+  choice_scale: 0.05
   min_surplus: 0.0          # acceptera om S > min_surplus
   reservation_decay_per_search: 0.95   # w_res faller 5 % per misslyckad sökning
   reservation_floor: 0.10              # men aldrig under denna nivå
