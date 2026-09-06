@@ -309,3 +309,55 @@ def test_pending_clears_when_job_is_filled_or_freed():
     w.set_job_filled(jid, False)          # rekryteringen avbryts
     assert not bool(w.jobs.at[0, "pending"])
     assert bool(w.vacant_mask()[0]), "positionen ska vara sökbar igen"
+
+
+def test_posted_jobs_are_searchable():
+    """REGRESSION: mallen för nya jobb kopierar ALLA kolumner. Utan att
+    pending nollställs föds ett nyskapat jobb osökbart -- det räknas som
+    vakans men kan aldrig tillsättas. Över fem år gav det 3 688 döda vakanser
+    i Mora medan sysselsättningen föll från 9 900 till 6 505."""
+    w = make_world(n_employers=6, size=4)
+    w.individuals = pd.DataFrame({"individual_id": [], "status": [], "job_id": []})
+
+    # Gör mallpositionerna utlovade, så att en naiv kopia ärver flaggan
+    for jid in w.jobs["job_id"]:
+        w.set_job_pending(jid)
+    w.jobs.loc[:, "active"] = True
+    w.jobs.loc[:, "individual_id"] = np.nan
+    w.employers["target_size"] = 8.0
+
+    n_before = len(w.jobs)
+    posted = w.post_vacancies_batch(30.0)
+    assert posted > 0
+    new = w.jobs.iloc[n_before:]
+    assert not new["pending"].any(), "nyskapade positioner ärvde pending"
+    # och de syns i vakansmasken efter ombyggnad
+    assert w.vacant_mask()[n_before:].all(), "nyskapade positioner är osökbara"
+
+
+def test_market_does_not_leak_positions_over_time():
+    """Invariant över en längre körning: varje aktiv position är antingen
+    tillsatt, utlovad eller sökbar. Läcker någon kategori kollapsar marknaden
+    långsamt utan att något enskilt steg ser fel ut."""
+    from core.event_handlers import handle_destroy_job
+
+    w = make_world(n_employers=30, size=6, simulation={"job_destruction_rate": 0.15})
+    w.individuals = pd.DataFrame({"individual_id": [], "status": [], "job_id": []})
+    w._schedule_destruction(w.jobs["job_id"].tolist(), 0.0)
+
+    for m in range(1, 61):
+        t = m * 30.44
+        while not w.event_queue.is_empty() and w.event_queue.peek()["time"] <= t:
+            ev = w.event_queue.pop()
+            if ev["event_type"] == "destroy_job":
+                handle_destroy_job(ev, w)
+        w.post_vacancies_batch(t)
+
+        act = w.jobs["active"].to_numpy(dtype=bool)
+        filled = w.jobs["individual_id"].notna().to_numpy()
+        pend = w.jobs["pending"].to_numpy(dtype=bool)
+        searchable = w.vacant_mask()
+        # Varje aktiv position hör till exakt en kategori
+        assert np.array_equal(act, filled | pend | searchable) or \
+               np.all(act <= (filled | pend | searchable)), f"position utan kategori, månad {m}"
+        assert searchable.sum() > 0, f"inga sökbara positioner kvar, månad {m}"

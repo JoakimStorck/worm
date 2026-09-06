@@ -208,6 +208,12 @@ class World:
                 row.update({
                     "job_id": jid, "employer_id": employer_id, "individual_id": None,
                     "onet_code": onet_code, "active": True,
+                    # Mallen kopierar ALLA kolumner. Utan denna rad ärver ett
+                    # nyskapat jobb mallens pending-flagga och föds osökbart:
+                    # det räknas som vakans men kan aldrig tillsättas. Över fem
+                    # år lade det 3 688 döda vakanser i Mora medan
+                    # sysselsättningen föll från 9 900 till 6 505.
+                    "pending": False,
                     "created_time": float(t_now), "destroyed_time": np.nan,
                 })
                 if geom is not None:
@@ -388,7 +394,9 @@ class World:
         pos = self.job_index().get(job_id)
         if pos is not None and getattr(self, "_vm", None) is not None:
             self._vm[pos] = not filled
-        if pos is not None and "pending" in self.jobs.columns and not filled:
+        if pos is not None and "pending" in self.jobs.columns:
+            # Rensas i båda riktningarna: rekryteringen är avslutad antingen
+            # genom tillträde eller genom att positionen frigjorts.
             self.jobs.iat[pos, self.jobs.columns.get_loc("pending")] = False
 
     def set_job_pending(self, job_id):
