@@ -5,6 +5,28 @@ import pandas as pd
 from core.occupations.utils import (xi_add, chi_add, r_add, apply_capability_update,
                                     effective_wage, search_once, vacant_job_indices)
 
+def _become_unemployed(world, idx, free_job=True):
+    """Sätter en individ till arbetslös och frigör hennes eventuella position.
+
+    Att skriva status utan att frigöra jobbet har varit samma återkommande fel
+    på flera ställen: positionen blir kvar tillsatt med individens id men utan
+    sysselsatt innehavare, låst för andra sökande, och bokföringen
+    U = L - J + V går inte ihop. Använd denna i stället för att sätta status
+    direkt.
+    """
+    ind = world.individuals
+    if free_job and 'job_id' in ind.columns:
+        held = ind.at[idx, 'job_id']
+        if pd.notna(held):
+            pos = world.job_index().get(held)
+            jobs = world.jobs
+            if pos is not None:
+                jobs.iat[pos, jobs.columns.get_loc('individual_id')] = np.nan
+                world.set_job_filled(held, False)
+            ind.at[idx, 'job_id'] = np.nan
+    ind.at[idx, 'status'] = 'unemployed'
+
+
 def _resolve_individual_index(world, holder):
     """jobs['individual_id'] innehåller historiskt två olika saker: strängen ur
     kolumnen individual_id (batch-matchningen) eller DataFrame-indexet
@@ -358,7 +380,15 @@ def handle_start_education(event, world):
 
 def handle_end_education(event, world):
     idx = event['agent_id']
-    world.individuals.at[idx, 'status'] = 'unemployed'
+    # En studerande kan ha tillträtt ett jobb under studietiden: hon matchade
+    # innan utbildningen började och tillträdet inföll under den. Att
+    # ovillkorligen sätta arbetslös lämnade då positionen tillsatt med hennes
+    # id utan sysselsatt innehavare (kategori E i check_invariants).
+    if world.individuals.at[idx, 'status'] == 'employed':
+        world.event_logger.log_event(world, event, extra={
+            'event_detail': 'education_finished_already_employed'})
+        return
+    _become_unemployed(world, idx)
     world.event_logger.log_event(world, event, extra={'event_detail': 'education_finished'})
 
     timing = world.cfg_reader.get_event_timing('start_job_search')

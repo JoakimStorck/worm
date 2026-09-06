@@ -513,3 +513,50 @@ def test_lost_promise_does_not_orphan_current_job():
     filled_active = int((w.jobs["individual_id"].notna()
                          & w.jobs["active"].astype(bool)).sum())
     assert emp == filled_active
+
+
+def test_education_ending_does_not_orphan_a_job_taken_meanwhile():
+    """REGRESSION: sekvensen som gav kategori E. En arbetslös matchar ett jobb
+    (utlovat, tillträde om 30 dagar), börjar sedan studera, och tillträder
+    jobbet under studietiden. handle_end_education satte då ovillkorligen
+    arbetslös, varpå positionen blev kvar tillsatt med hennes id utan
+    sysselsatt innehavare -- 21 sådana fall i en femårskörning."""
+    from core.event_handlers import handle_end_education
+
+    w = make_world(n_employers=3, size=2)
+    w.individuals = _worker()
+    jid = w.jobs.at[1, "job_id"]
+    w.individuals.at[0, "status"] = "employed"
+    w.individuals.at[0, "job_id"] = jid
+    w.jobs.loc[w.jobs.index[1], "individual_id"] = "i0"
+    w.set_job_filled(jid, True)
+
+    handle_end_education({"time": 400.0, "agent_id": 0,
+                          "event_type": "end_education",
+                          "params": {"education_type": "specialist"}}, w)
+
+    assert w.individuals.at[0, "status"] == "employed"
+    assert w.jobs.at[1, "individual_id"] == "i0"
+    emp = int((w.individuals["status"] == "employed").sum())
+    fa = int((w.jobs["individual_id"].notna() & w.jobs["active"].astype(bool)).sum())
+    assert emp == fa
+
+
+def test_become_unemployed_always_frees_the_job():
+    """Den gemensamma vägen ur sysselsättning ska alltid frigöra positionen."""
+    from core.event_handlers import _become_unemployed
+
+    w = make_world(n_employers=2, size=2)
+    w.individuals = _worker()
+    jid = w.jobs.at[0, "job_id"]
+    w.individuals.at[0, "status"] = "employed"
+    w.individuals.at[0, "job_id"] = jid
+    w.jobs.loc[w.jobs.index[0], "individual_id"] = "i0"
+    w.set_job_filled(jid, True)
+
+    _become_unemployed(w, 0)
+
+    assert w.individuals.at[0, "status"] == "unemployed"
+    assert pd.isna(w.individuals.at[0, "job_id"])
+    assert pd.isna(w.jobs.at[0, "individual_id"])
+    assert bool(w.vacant_mask()[0])
