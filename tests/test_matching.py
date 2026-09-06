@@ -302,3 +302,94 @@ def test_thicker_market_gives_more_options():
     hit_thin, _, _ = _search_market(100, seed=5, choice_scale=0.05, w_res=0.78)
     hit_thick, _, _ = _search_market(1000, seed=5, choice_scale=0.05, w_res=0.78)
     assert hit_thin < hit_thick, f"{hit_thin:.2f} mot {hit_thick:.2f}"
+
+
+def _edu_world(job_positions, wages=None):
+    """Liten värld där vakanserna ligger på angivna punkter i planet."""
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from conftest import make_world
+
+    n = len(job_positions)
+    w = make_world(n_employers=n, size=1)
+    for i, (x, y) in enumerate(job_positions):
+        w.jobs.loc[w.jobs.index[i], ["x_occ", "y_occ"]] = [x, y]
+        if wages is not None:
+            w.jobs.loc[w.jobs.index[i], "wage"] = wages[i]
+    w.jobs["individual_id"] = np.nan
+    w._vm_n = None                       # tvinga ombyggnad av masken
+    w._ja_n = None
+    return w
+
+
+def test_retraining_target_points_at_the_jobs():
+    """Riktningen ska bestämmas av var arbete finns, inte av ett fast delta."""
+    from core.occupations.utils import retraining_target, build_job_arrays, vacant_job_indices
+
+    w = _edu_world([(0.6, 0.0), (0.62, 0.05), (0.58, -0.03)])
+    ind = pd.Series({"x_occ": -0.5, "y_occ": 0.0, "x": 0.0, "y": 0.0})
+    tx, ty = retraining_target(ind, w.jobs, vacant_job_indices(w.jobs),
+                               arrays=build_job_arrays(w.jobs))
+    assert tx == pytest.approx(0.60, abs=0.05)
+    assert abs(ty) < 0.05
+
+
+def test_retraining_target_is_none_without_viable_jobs():
+    """Finns inget som lönar sig sker ingen omskolning. Det är det väntade
+    utfallet i en tunn marknad och ska inte tvinga fram en slumpvandring."""
+    from core.occupations.utils import retraining_target, build_job_arrays, vacant_job_indices
+
+    w = _edu_world([(0.6, 0.0)], wages=[0.0])
+    ind = pd.Series({"x_occ": -0.5, "y_occ": 0.0, "x": 0.0, "y": 0.0})
+    assert retraining_target(ind, w.jobs, vacant_job_indices(w.jobs),
+                             arrays=build_job_arrays(w.jobs),
+                             min_surplus=0.1) is None
+
+
+def test_education_updates_capability_at_the_end_not_the_start():
+    """Effekten ska komma av att fullfölja, inte av att skriva in sig."""
+    from core.event_handlers import handle_start_education, handle_end_education
+
+    w = _edu_world([(0.6, 0.0), (0.62, 0.05)])
+    w.individuals = pd.DataFrame([{
+        "individual_id": "i0", "status": "unemployed", "job_id": None,
+        "w_res": 0.2, "chi": 0.5, "xi": np.pi, "r_i": 0.0,
+        "x_occ": -0.5, "y_occ": 0.0, "x": 0.0, "y": 0.0,
+        "municipal_code": "2062", "propensity_start_education": 0.0,
+        "propensity_internal_training": 0.0, "propensity_quit_job": 0.0,
+        "propensity_internal_job_change": 0.0}]).astype({"job_id": object})
+
+    handle_start_education({"time": 0.0, "agent_id": 0,
+                            "event_type": "start_education", "params": {}}, w)
+    assert w.individuals.at[0, "status"] == "in_education"
+    assert w.individuals.at[0, "x_occ"] == pytest.approx(-0.5), "flyttades vid inskrivning"
+
+    ev = w.event_queue.pop()
+    assert ev["event_type"] == "end_education"
+    handle_end_education(ev, w)
+
+    assert w.individuals.at[0, "status"] == "unemployed"
+    assert w.individuals.at[0, "x_occ"] > -0.5, "flyttades inte vid slutet"
+    assert w.individuals.at[0, "r_i"] > 0.0, "erfarenhetsradien breddades inte"
+
+
+def test_thin_market_gives_longer_retraining():
+    """Varaktigheten följer förflyttningen, så omskolning tar längre tid när
+    målet ligger långt bort. Det är tunnhetsmekanismen: i en gles kommun finns
+    inget nära att rikta sig mot."""
+    from core.event_handlers import handle_start_education
+
+    def duration(job_x):
+        w = _edu_world([(job_x, 0.0), (job_x, 0.05)])
+        w.individuals = pd.DataFrame([{
+            "individual_id": "i0", "status": "unemployed", "job_id": None,
+            "w_res": 0.2, "chi": 0.5, "xi": np.pi, "r_i": 0.0,
+            "x_occ": -0.5, "y_occ": 0.0, "x": 0.0, "y": 0.0,
+            "municipal_code": "2062", "propensity_start_education": 0.0,
+            "propensity_internal_training": 0.0, "propensity_quit_job": 0.0,
+            "propensity_internal_job_change": 0.0}]).astype({"job_id": object})
+        handle_start_education({"time": 0.0, "agent_id": 0,
+                                "event_type": "start_education", "params": {}}, w)
+        return w.event_queue.pop()["time"]
+
+    assert duration(0.7) > duration(-0.2), "avlägset mål gav inte längre omskolning"

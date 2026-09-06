@@ -40,6 +40,11 @@ simulation:
   # pendling (mätt 7.6 km vid 0.01 mot 12.1 vid 0.30) och kan kalibreras mot
   # faktiska pendlingsavstånd.
   choice_scale: 0.05
+  # --- Omskolning: riktad mot där arbete finns, inte ett fast delta_xi ---
+  retraining_share: 0.5          # andel av vägen mot vakansernas tyngdpunkt
+  retraining_target_k: 50        # antal bästa vakanser som bestämmer riktningen
+  retraining_days_per_unit: 900  # varaktighet per enhet förflyttning i planet
+  retraining_min_days: 30        # kortaste omskolning
   min_surplus: 0.0          # acceptera om S > min_surplus
   reservation_decay_per_search: 0.95   # w_res faller 5 % per misslyckad sökning
   reservation_floor: 0.10              # men aldrig under denna nivå
@@ -66,10 +71,9 @@ simulation:
       max: 40d      # 40 dagar
     quit_job:
       dist: normal
-      mean: 7y        # 14 %/år, mot 25 % vid 4 år
-      std: 3y
-      mean: 4y      # 4 år
-      std: 2y       # 2 år    career_break:
+      mean: 7y      # 14 %/år. Littles lag: V = separationer x rekryteringstid,
+      std: 3y       # så 14 % uppsägningar + 10 % jobbförstörelse ger ~2 % vakanser
+    career_break:
       dist: uniform
       min: 2w
       max: 12w

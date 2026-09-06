@@ -3,7 +3,8 @@
 import numpy as np
 import pandas as pd
 from core.occupations.utils import (xi_add, chi_add, r_add, apply_capability_update,
-                                    effective_wage, search_once, vacant_job_indices)
+                                    effective_wage, search_once, vacant_job_indices,
+                                    retraining_target)
 
 def _become_unemployed(world, idx, free_job=True):
     """Sätter en individ till arbetslös och frigör hennes eventuella position.
@@ -342,70 +343,112 @@ def handle_start_job_search(event, world):
 
 
 def handle_start_education(event, world):
+    """Omskolning riktad mot där arbete faktiskt finns.
+
+    Tre ändringar mot den tidigare mekanismen. Riktningen var ett fast
+    delta_xi som roterade alla åt samma håll oavsett var jobben fanns, alltså
+    en slumpvandring. Kompetensen uppdaterades vid INSKRIVNINGEN, så effekten
+    kom av att anmäla sig. Och en studerande kunde tillträda ett jobb mitt
+    under studietiden, eftersom ett tidigare löfte låg kvar i kön.
+
+    Nu bestäms målet av en överskottsviktad tyngdpunkt av de nåbara
+    vakanserna, kompetensen uppdateras först vid slutet, och studier utesluter
+    anställning. Finns inget rimligt mål sker ingen omskolning -- vilket är
+    det väntade utfallet i en tunn marknad.
+    """
     idx = event['agent_id']
-    education_type = event['params'].get('education_type', 'specialist')
-    delta_chi = event['params'].get('delta_chi', 0.2)
-    delta_r = event['params'].get('delta_r', event['params'].get('delta_H', 0.0))
-    delta_xi = event['params'].get('delta_xi', 0.5)
+    sim = world.cfg_reader.config.get('simulation', {})
+    ind = world.individuals
 
-    if education_type == 'specialist':
-        _update_individual(world, idx, delta_chi=delta_chi, delta_r=delta_r)
-    elif education_type == 'broad':
-        _update_individual(world, idx, delta_xi=delta_xi, delta_r=delta_r)
+    target = retraining_target(
+        ind.loc[idx], world.jobs, np.flatnonzero(world.vacant_mask()),
+        arrays=world.job_arrays(),
+        commute_cost_per_km=sim.get('commute_cost_per_km', 0.005),
+        min_surplus=sim.get('min_surplus', 0.0),
+        top_k=int(sim.get('retraining_target_k', 50)))
 
-    # Den som börjar studera lämnar sin position. Utan detta stod jobbet kvar
-    # som tillsatt med hennes id: låst för andra sökande och räknat som
-    # tillsatt utan sysselsatt innehavare, vilket bröt identiteten
-    # U = L - J + V. career_break frigör redan på detta sätt.
-    jobs = world.jobs
-    prev_job = world.individuals.at[idx, 'job_id']
-    if pd.notna(prev_job):
-        prev_pos = world.job_index().get(prev_job)
-        if prev_pos is not None:
-            jobs.iat[prev_pos, jobs.columns.get_loc('individual_id')] = np.nan
-            world.set_job_filled(prev_job, False)
-        world.individuals.at[idx, 'job_id'] = np.nan
+    if target is None:
+        world.event_logger.log_event(world, event, extra={
+            'event_detail': 'education_no_target'})
+        return
 
-    world.individuals.at[idx, 'status'] = 'in_education'
-    world.event_logger.log_event(world, event, extra={'education_type': education_type})
+    x0, y0 = float(ind.at[idx, 'x_occ']), float(ind.at[idx, 'y_occ'])
+    share = float(sim.get('retraining_share', 0.5))     # andel av vägen dit
+    x1 = x0 + share * (target[0] - x0)
+    y1 = y0 + share * (target[1] - y0)
+    move = float(np.hypot(x1 - x0, y1 - y0))
 
-    education_duration = world.cfg_reader.parse_time_with_unit(event['params'].get('duration', 365.25))
-    end_event = {
-        "time": event['time'] + education_duration,
+    # Studier utesluter anställning: ett utlovat jobb släpps tillbaka.
+    held = ind.at[idx, 'job_id'] if 'job_id' in ind.columns else None
+    if pd.notna(held):
+        pos = world.job_index().get(held)
+        if pos is not None:
+            world.jobs.iat[pos, world.jobs.columns.get_loc('individual_id')] = np.nan
+            world.set_job_filled(held, False)
+        ind.at[idx, 'job_id'] = np.nan
+
+    ind.at[idx, 'status'] = 'in_education'
+
+    # Varaktighet efter förflyttning: en kort sträcka är en kurs, en lång är en
+    # utbildning. Omställningstiden blir därmed ett utfall, inte en konstant,
+    # och längre i tunna marknader där målet ligger långt bort.
+    days_per_unit = float(sim.get('retraining_days_per_unit', 900.0))
+    min_days = float(sim.get('retraining_min_days', 30.0))
+    duration = max(min_days, days_per_unit * move)
+
+    world.event_logger.log_event(world, event, extra={
+        'event_detail': 'education_started',
+        'x_from': round(x0, 4), 'y_from': round(y0, 4),
+        'x_to': round(x1, 4), 'y_to': round(y1, 4),
+        'move': round(move, 4), 'duration_days': round(duration, 1),
+        'municipal_code': ind.at[idx, 'municipal_code']
+        if 'municipal_code' in ind.columns else None})
+
+    world._push_event({
+        "time": float(event['time'] + duration),
         "agent_id": idx,
         "event_type": "end_education",
-        "params": {'education_type': education_type}
-    }
-    world._push_event(end_event)
+        "params": {"x_to": x1, "y_to": y1, "move": move},
+    })
+
 
 def handle_end_education(event, world):
+    """Kompetensen uppdateras här, inte vid inskrivningen."""
     idx = event['agent_id']
-    # En studerande kan ha tillträtt ett jobb under studietiden: hon matchade
-    # innan utbildningen började och tillträdet inföll under den. Att
-    # ovillkorligen sätta arbetslös lämnade då positionen tillsatt med hennes
-    # id utan sysselsatt innehavare (kategori E i check_invariants).
-    if world.individuals.at[idx, 'status'] == 'employed':
+    ind = world.individuals
+
+    if ind.at[idx, 'status'] == 'employed':
+        # Skydd mot äldre löften i kön; med den nya mekanismen ska det inte ske.
         world.event_logger.log_event(world, event, extra={
             'event_detail': 'education_finished_already_employed'})
         return
+
+    x1 = event['params'].get('x_to')
+    y1 = event['params'].get('y_to')
+    if x1 is not None and y1 is not None:
+        chi = float(np.hypot(x1, y1))
+        xi = float(np.arctan2(y1, x1) % (2 * np.pi))
+        move = float(event['params'].get('move', 0.0))
+        ind.at[idx, 'x_occ'] = float(x1)
+        ind.at[idx, 'y_occ'] = float(y1)
+        ind.at[idx, 'chi'] = min(max(chi, 0.0), 1.0)
+        ind.at[idx, 'xi'] = xi
+        if 'r_i' in ind.columns:
+            # Omskolningen breddar erfarenhetsradien, som en förflyttning gör.
+            bfm = float(world.cfg_reader.config.get('simulation', {})
+                        .get('breadth_from_move', 0.25))
+            r_old = float(ind.at[idx, 'r_i'] or 0.0)
+            ind.at[idx, 'r_i'] = min(np.sqrt(r_old ** 2 + bfm * move ** 2), 1.0)
+        # Efter omskolning är kravet lägre: man söker sig till det nya området.
+        if 'w_res' in ind.columns:
+            rho = float(world.cfg_reader.config.get('simulation', {})
+                        .get('rho_reservation', 0.7))
+            ind.at[idx, 'w_res'] = rho * float(ind.at[idx, 'w_res'])
+
     _become_unemployed(world, idx)
-    world.event_logger.log_event(world, event, extra={'event_detail': 'education_finished'})
-
-    timing = world.cfg_reader.get_event_timing('start_job_search')
-    if timing['dist'] == 'exponential':
-        interval = np.random.exponential(timing['mean'])
-    elif timing['dist'] == 'uniform':
-        interval = np.random.uniform(timing['min'], timing['max'])
-    else:
-        raise ValueError("Unknown dist for start_job_search")
-
-    search_event = {
-        "time": event['time'] + interval,
-        "agent_id": idx,
-        "event_type": "start_job_search",
-        "params": {}
-    }
-    world._push_event(search_event)
+    world.event_logger.log_event(world, event, extra={
+        'event_detail': 'education_finished',
+        'move': round(float(event['params'].get('move', 0.0)), 4)})
 
 def handle_start_internal_training(event, world):
     idx = event['agent_id']

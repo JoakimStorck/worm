@@ -344,3 +344,43 @@ def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
     else:
         pick = k[int(np.argmax(Sk))]
     return int(cand_idx[pick]), float(S[pick])
+
+
+def retraining_target(ind, jobs_df, cand_idx, arrays=None,
+                      commute_cost_per_km=0.005, min_surplus=0.0, top_k=50):
+    """Målpunkt för omskolning: överskottsviktad tyngdpunkt av de nåbara
+    vakanserna.
+
+    Utbildning var tidigare en slumpvandring -- ett fast delta_xi roterade alla
+    åt samma håll oavsett var jobben fanns. Då kan omskolning inte fungera som
+    anpassningskanal, och modellen kan inte uttrycka att tunna marknader är
+    svårare att ställa om i.
+
+    Riktningen bestäms nu av var arbete faktiskt finns inom rimligt
+    pendlingsavstånd. I en tät kommun ligger tyngdpunkten nära och
+    omskolningen blir kort; i en gles ligger den långt bort, eller saknas helt,
+    och då sker ingen omskolning -- vilket i sig är resultatet.
+
+    Vikten är överskottet w - c*km (utan reservationslön: målet är vart det
+    lönar sig att gå, inte vad som är godtagbart i dag). Endast de top_k bästa
+    används, så att enstaka avlägsna positioner inte drar tyngdpunkten.
+
+    Returnerar (x, y) eller None om inget rimligt mål finns.
+    """
+    if cand_idx.size == 0:
+        return None
+    A = arrays if arrays is not None else build_job_arrays(jobs_df)
+    gx = float(ind["x"]) if "x" in ind.index else 0.0
+    gy = float(ind["y"]) if "y" in ind.index else 0.0
+    km = np.hypot(A["x"][cand_idx] - gx, A["y"][cand_idx] - gy) / 1000.0
+    val = A["wage"][cand_idx] - commute_cost_per_km * km
+    ok = val > min_surplus
+    if not ok.any():
+        return None
+    idx = cand_idx[ok]
+    val = val[ok]
+    if idx.size > top_k:
+        keep = np.argpartition(-val, top_k)[:top_k]
+        idx, val = idx[keep], val[keep]
+    w = val / val.sum()
+    return float((w * A["x_occ"][idx]).sum()), float((w * A["y_occ"][idx]).sum())

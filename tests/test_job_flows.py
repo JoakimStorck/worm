@@ -367,9 +367,11 @@ def _worker(iid="i0"):
     return pd.DataFrame([{
         "individual_id": iid, "status": "unemployed", "job_id": None,
         "w_res": 0.5, "chi": 0.3, "xi": 0.3, "r_i": 0.0,
-        "x_occ": 0.3, "y_occ": 0.1, "propensity_internal_training": 0.0,
+        "x_occ": 0.3, "y_occ": 0.1, "x": 0.0, "y": 0.0,
+        "municipal_code": "2062", "propensity_internal_training": 0.0,
         "propensity_quit_job": 0.0, "propensity_start_education": 0.0,
         "propensity_internal_job_change": 0.0,
+        "x": 0.0, "y": 0.0, "municipal_code": "2062",
     }]).astype({"job_id": object})
 
 
