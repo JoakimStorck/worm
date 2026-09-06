@@ -504,7 +504,7 @@ class World:
         self.jobs.loc[job_idx, 'individual_id'] = self.jobs.loc[job_idx, 'job_id'].map(job_to_ind)
 
     def employer_training_prob(self, n_employees):
-        tr_cfg = self.cfg_reader.config['defaults']['employer']['training_prob_by_size']
+        tr_cfg = self.cfg_reader.config.get('defaults', {}).get('employer', {}).get('training_prob_by_size', {})
         if n_employees < 10:
             return tr_cfg.get('small', 0.05)
         elif n_employees < 100:

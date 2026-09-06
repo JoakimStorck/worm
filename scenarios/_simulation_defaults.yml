@@ -66,9 +66,10 @@ simulation:
       max: 40d      # 40 dagar
     quit_job:
       dist: normal
+      mean: 7y        # 14 %/år, mot 25 % vid 4 år
+      std: 3y
       mean: 4y      # 4 år
-      std: 2y       # 2 år
-    career_break:
+      std: 2y       # 2 år    career_break:
       dist: uniform
       min: 2w
       max: 12w

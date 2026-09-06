@@ -361,3 +361,87 @@ def test_market_does_not_leak_positions_over_time():
         assert np.array_equal(act, filled | pend | searchable) or \
                np.all(act <= (filled | pend | searchable)), f"position utan kategori, månad {m}"
         assert searchable.sum() > 0, f"inga sökbara positioner kvar, månad {m}"
+
+
+def _worker(iid="i0"):
+    return pd.DataFrame([{
+        "individual_id": iid, "status": "unemployed", "job_id": None,
+        "w_res": 0.5, "chi": 0.3, "xi": 0.3, "r_i": 0.0,
+        "x_occ": 0.3, "y_occ": 0.1, "propensity_internal_training": 0.0,
+        "propensity_quit_job": 0.0, "propensity_start_education": 0.0,
+        "propensity_internal_job_change": 0.0,
+    }]).astype({"job_id": object})
+
+
+def test_worker_released_when_promised_job_disappears():
+    """REGRESSION: en UTLOVAD position har individual_id NaN, så
+    handle_destroy_job hittade ingen innehavare att meddela. Arbetaren
+    tillträdde trettio dagar senare ett jobb som inte längre fanns och blev
+    bokförd som sysselsatt utan aktiv position. Det gav en residual i
+    identiteten U = L - J + V på ett par hundra individer per femårskörning."""
+    from core.event_handlers import handle_destroy_job, handle_start_job
+
+    w = make_world(n_employers=3, size=2)
+    w.individuals = _worker()
+    jid = w.jobs.at[2, "job_id"]
+    w.set_job_pending(jid)
+
+    handle_destroy_job({"time": 10.0, "agent_id": None, "event_type": "destroy_job",
+                        "params": {"job_id": jid}}, w)
+    handle_start_job({"time": 40.0, "agent_id": 0, "event_type": "start_job",
+                      "params": {"job_id": jid}}, w)
+
+    assert w.individuals.at[0, "status"] == "unemployed"
+    assert pd.isna(w.individuals.at[0, "job_id"])
+    assert len(w.event_queue) > 0, "ingen ny sökning schemalagd"
+    assert not bool(w.jobs.at[2, "pending"])
+
+
+def test_worker_released_when_job_taken_by_someone_else():
+    """Samma kontroll fångar också att positionen hunnit tillsättas av annan."""
+    from core.event_handlers import handle_start_job
+
+    w = make_world(n_employers=3, size=2)
+    w.individuals = _worker()
+    jid = w.jobs.at[1, "job_id"]
+    w.jobs.loc[w.jobs.index[1], "individual_id"] = "nagon_annan"
+
+    handle_start_job({"time": 40.0, "agent_id": 0, "event_type": "start_job",
+                      "params": {"job_id": jid}}, w)
+    assert w.individuals.at[0, "status"] == "unemployed"
+    assert w.jobs.at[1, "individual_id"] == "nagon_annan"
+
+
+def test_accounting_identity_holds():
+    """Bokföringen ska gå ihop exakt: antalet sysselsatta måste vara lika med
+    antalet tillsatta aktiva positioner. En modell vars aggregat inte stämmer
+    går inte att dra slutsatser ur."""
+    from core.event_handlers import handle_destroy_job, handle_start_job
+
+    w = make_world(n_employers=10, size=4)
+    w.individuals = pd.concat([_worker(f"i{i}") for i in range(20)], ignore_index=True)
+    w._schedule_destruction(w.jobs["job_id"].tolist(), 0.0)
+
+    rng = np.random.default_rng(0)
+    for m in range(1, 37):
+        t = m * 30.44
+        while not w.event_queue.is_empty() and w.event_queue.peek()["time"] <= t:
+            ev = w.event_queue.pop()
+            if ev["event_type"] == "destroy_job":
+                handle_destroy_job(ev, w)
+            elif ev["event_type"] == "start_job":
+                handle_start_job(ev, w)
+        # lova ut och tillträd några positioner
+        free = np.flatnonzero(w.vacant_mask())
+        for pos in rng.choice(free, size=min(3, free.size), replace=False):
+            jid = w.jobs.at[pos, "job_id"]
+            w.set_job_pending(jid)
+            w._push_event({"time": t + 20.0, "agent_id": int(rng.integers(0, 20)),
+                           "event_type": "start_job", "params": {"job_id": jid}})
+        w.post_vacancies_batch(t)
+
+        emp = int((w.individuals["status"] == "employed").sum())
+        filled_active = int((w.jobs["individual_id"].notna()
+                             & w.jobs["active"].astype(bool)).sum())
+        assert emp == filled_active, (
+            f"månad {m}: {emp} sysselsatta men {filled_active} tillsatta aktiva positioner")

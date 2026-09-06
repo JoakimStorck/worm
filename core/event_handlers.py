@@ -96,11 +96,47 @@ def handle_start_job(event, world):
     job_id = event['params']['job_id']
     individuals = world.individuals
     jobs = world.jobs
-    individuals.at[idx, 'status'] = 'employed'
-    individuals.at[idx, 'job_id'] = job_id
+
     # Positionsuppslag via job_index: boolesk jämförelse över hela tabellen
     # kostade 825 mikrosekunder per anrop, en dict 33.
     pos = world.job_index().get(job_id)
+
+    # Positionen kan ha upphört under rekryteringstiden. En UTLOVAD position
+    # har individual_id NaN, så handle_destroy_job hittar ingen innehavare att
+    # meddela: arbetaren tillträdde ett jobb som inte längre fanns och blev
+    # bokförd som sysselsatt utan aktiv position. Det gav en residual i
+    # identiteten U = L - J + V på ett par hundra individer per femårskörning.
+    still_available = (
+        pos is not None
+        and bool(jobs.iat[pos, jobs.columns.get_loc('active')])
+        and pd.isna(jobs.iat[pos, jobs.columns.get_loc('individual_id')])
+    )
+    if not still_available:
+        if pos is not None and 'pending' in jobs.columns:
+            jobs.iat[pos, jobs.columns.get_loc('pending')] = False
+        individuals.at[idx, 'status'] = 'unemployed'
+        individuals.at[idx, 'job_id'] = np.nan
+        timing = world.cfg_reader.get_event_timing('start_job_search')
+        interval = (np.random.exponential(timing.get('mean', 28.0))
+                    if timing.get('dist', 'exponential') == 'exponential' else 30.0)
+        world._push_event({"time": float(event['time'] + interval), "agent_id": idx,
+                           "event_type": "start_job_search", "params": {}})
+        world.event_logger.log_event(world, event, extra={
+            'event_detail': 'job_gone_before_start', 'job_id': job_id})
+        return
+
+    # Ett jobbyte måste frigöra den gamla positionen. Utan det blir den kvar
+    # med arbetarens id utan innehavare, och antalet tillsatta positioner
+    # överstiger antalet sysselsatta.
+    prev = individuals.at[idx, 'job_id'] if 'job_id' in individuals.columns else None
+    if pd.notna(prev) and prev != job_id:
+        prev_pos = world.job_index().get(prev)
+        if prev_pos is not None:
+            jobs.iat[prev_pos, jobs.columns.get_loc('individual_id')] = np.nan
+            world.set_job_filled(prev, False)
+
+    individuals.at[idx, 'status'] = 'employed'
+    individuals.at[idx, 'job_id'] = job_id
     job_idx = (jobs.index[pos:pos + 1] if pos is not None
                else jobs.index[jobs['job_id'] == job_id])
     # Skriv kolumnvärdet, inte radindexet: batch-matchningen gör likadant.

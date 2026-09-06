@@ -48,8 +48,9 @@ class FakeLogger:
 
 
 class FakeConfig:
-    def __init__(self, simulation=None, timings=None):
-        self.config = {"simulation": simulation or {}}
+    def __init__(self, simulation=None, timings=None, defaults=None):
+        self.config = {"simulation": simulation or {},
+                       "defaults": defaults or {"employer": {"training_prob_by_size": {}}}}
         self._timings = timings or {}
 
     def get_event_timing(self, name):
