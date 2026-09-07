@@ -136,3 +136,73 @@ def test_summary_without_provenance_still_works(tmp_path):
     row = summary_row(run)
     assert "commit" not in row
     assert row["n_transitions"] > 0
+
+
+def test_ecdf_band_spans_the_runs():
+    """Med flera frön ska figuren visa bandet, inte ett godtyckligt utfall."""
+    from core.analysis.eventlog import ecdf_band
+    rng = np.random.default_rng(0)
+    runs = {f"r{i}": rng.rayleigh(0.55 + 0.05 * i, 800) for i in range(5)}
+    b = ecdf_band(runs)
+    assert not b.empty and int(b["n_runs"].iloc[0]) == 5
+    assert (b["min"] <= b["q25"]).all() and (b["q25"] <= b["median"]).all()
+    assert (b["median"] <= b["q75"]).all() and (b["q75"] <= b["max"]).all()
+    assert (b["max"] - b["min"]).max() > 0.01, "inget band trots olika frön"
+
+
+def test_group_stats_separates_within_from_between(tmp_path):
+    """Spridningen inom scenario måste kunna skiljas från skillnaden mellan
+    scenarier, annars tolkas brus som effekt."""
+    from core.analysis.eventlog import group_stats
+    df = pd.DataFrame({
+        "run": [f"r{i}" for i in range(6)],
+        "scenario": ["mora"] * 3 + ["falun"] * 3,
+        "seed": [1, 2, 3, 1, 2, 3],
+        "u_pct": [10.0, 10.4, 9.8, 8.1, 8.4, 7.9],
+        "median_u_R": [0.64, 0.66, 0.65, 0.70, 0.72, 0.69],
+    })
+    g = group_stats(df, by="scenario").set_index("scenario")
+    assert set(g.index) == {"mora", "falun"}
+    assert (g["n_runs"] == 3).all()
+    assert g.loc["mora", "u_pct_median"] > g.loc["falun", "u_pct_median"]
+    # Bandet inom scenario ska vara smalare än skillnaden mellan dem
+    within = g.loc["mora", "u_pct_max"] - g.loc["mora", "u_pct_min"]
+    between = g.loc["mora", "u_pct_median"] - g.loc["falun", "u_pct_median"]
+    assert within < between
+    assert g.loc["mora", "seeds"] == "1,2,3"
+
+
+def test_figure_manifest_records_provenance(tmp_path):
+    """En figur i ett manuskript ska gå att spåra till sina körningar."""
+    import json
+    from core.analysis.figio import write
+
+    run = tmp_path / "run_p"
+    run.mkdir()
+    (run / "run_meta.json").write_text(json.dumps(
+        {"git_commit": "deadbeef1234", "seed": 9, "scenario": "mora",
+         "git_dirty": False}), encoding="utf-8")
+    out = tmp_path / "figs"
+    m = write(None, "demo", str(out),
+              data={"serie": pd.DataFrame({"x": [1, 2], "y": [3, 4]})},
+              run_dirs=[str(run)], note="test", extra={"gamma": 0.875})
+    assert m["n_runs"] == 1 and m["seeds"] == [9]
+    assert m["commits"] == ["deadbeef1234"] and not m["mixed_commits"]
+    assert m["parameters"]["gamma"] == 0.875
+    assert os.path.isfile(out / "demo__serie.csv")
+    saved = json.loads((out / "demo.json").read_text(encoding="utf-8"))
+    assert saved["figure"] == "demo"
+
+
+def test_manifest_flags_mixed_commits(tmp_path):
+    import json
+    from core.analysis.figio import write
+    runs = []
+    for i, c in enumerate(("aaa111", "bbb222")):
+        d = tmp_path / f"r{i}"
+        d.mkdir()
+        (d / "run_meta.json").write_text(json.dumps({"git_commit": c, "seed": i}),
+                                         encoding="utf-8")
+        runs.append(str(d))
+    m = write(None, "mix", str(tmp_path / "f"), run_dirs=runs)
+    assert m["mixed_commits"] is True and len(m["commits"]) == 2

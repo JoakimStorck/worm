@@ -37,6 +37,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import PowerNorm
 from matplotlib.lines import Line2D
 
+from core.analysis import figio
 from core.visualization import paperstyle as ps
 
 REF_WITHIN, REF_GLOBAL, REF_CROSS = 0.70, 1.03, 1.93
@@ -57,21 +58,51 @@ def read_transitions(run_dir):
 
 
 # ---------------------------------------------------------------------------
-def fig_mobility(run_dir, out):
-    df = read_transitions(run_dir)
-    if df.empty:
-        print("mobility: inga övergångar med u_R_occ i loggen"); return
-    task = df[df["changed"] & ~df["mgmt"]]["u_R"].to_numpy()
-    same = df[~df["changed"]]["u_R"].to_numpy()
-    mgmt = df[df["changed"] & df["mgmt"]]["u_R"].to_numpy()
+def fig_mobility(run_dirs, out):
+    """Fördelning av övergångslängder, med band över frön.
+
+    En enskild körning är inte ett resultat när flera frön finns: figuren
+    visar då ett godtyckligt utfall och läsaren får ingen uppfattning om
+    osäkerheten."""
+    from core.analysis.eventlog import ecdf_band, load_tables
+
+    per_run, same_sh, mgmt_sh, mgmt_vals = {}, [], [], []
+    for rd in run_dirs:
+        try:
+            tr = load_tables(rd)["transitions"]
+        except Exception:
+            continue
+        if tr.empty or "u_R_occ" not in tr.columns:
+            continue
+        n = len(tr)
+        ch = tr["occ_change"].fillna(True).astype(bool)
+        mg = tr["is_mgmt"].fillna(False).astype(bool)
+        same_sh.append(float((~ch).mean()))
+        mgmt_sh.append(float((ch & mg).mean()))
+        mgmt_vals.append(tr.loc[ch & mg, "u_R_occ"].dropna().to_numpy())
+        cps = tr[tr["in_cps_sample"].fillna(False).astype(bool)]
+        per_run[os.path.basename(str(rd).rstrip("/"))] = cps["u_R_occ"].dropna().to_numpy()
+
+    if not per_run:
+        print("mobility: inga övergångar med u_R_occ"); return
+    band = ecdf_band(per_run)
+    allv = np.concatenate(list(per_run.values()))
+    n_runs = len(per_run)
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.4), dpi=ps.DPI)
     ax = ps.cartesian_axes(axes[0])
-    for arr, lab, col in ((task, "Yrkesbyten (exkl. chefsyrken)", "#1f77b4"),
-                          (mgmt, "Till/från chefsyrke", "#ff7f0e")):
-        if arr.size:
-            x = np.sort(arr)
-            ax.plot(x, np.arange(1, x.size + 1) / x.size, lw=1.8, color=col, label=lab)
+    if n_runs > 1:
+        ax.fill_between(band["x"], band["min"], band["max"], color="#1f77b4",
+                        alpha=0.15, lw=0, label=f"spann över {n_runs} frön")
+        ax.fill_between(band["x"], band["q25"], band["q75"], color="#1f77b4",
+                        alpha=0.30, lw=0, label="kvartilavstånd")
+    ax.plot(band["x"], band["median"], lw=1.8, color="#1f77b4",
+            label="yrkesbyten (median)" if n_runs > 1 else "yrkesbyten")
+    mv = np.concatenate([m for m in mgmt_vals if m.size]) if any(m.size for m in mgmt_vals) else np.array([])
+    if mv.size:
+        x = np.sort(mv)
+        ax.plot(x, np.arange(1, x.size + 1) / x.size, lw=1.4, color="#ff7f0e",
+                label="till/från chefsyrke")
     for v, lab, col in ((REF_WITHIN, "inom delsystem 0,70", "#2ca02c"),
                         (REF_GLOBAL, "globalt 1,03", "#7f7f7f"),
                         (REF_CROSS, "tvär 1,93", "#d62728")):
@@ -85,22 +116,34 @@ def fig_mobility(run_dir, out):
 
     ax2 = ps.cartesian_axes(axes[1])
     bins = np.linspace(0, 3.5, 40)
-    ax2.hist(task, bins=bins, color="#1f77b4", alpha=0.75, label="Yrkesbyten")
-    if mgmt.size:
-        ax2.hist(mgmt, bins=bins, color="#ff7f0e", alpha=0.6, label="Chefsyrken")
-    ax2.axvline(np.median(task), ls="--", lw=1.4, color="#1f77b4")
+    ax2.hist(allv, bins=bins, color="#1f77b4", alpha=0.75, label="yrkesbyten")
+    if mv.size:
+        ax2.hist(mv, bins=bins, color="#ff7f0e", alpha=0.6, label="chefsyrken")
+    med = float(np.median(allv))
+    ax2.axvline(med, ls="--", lw=1.4, color="#1f77b4")
     ax2.axvline(REF_WITHIN, ls=":", lw=1.2, color="#2ca02c")
     ax2.set_xlabel("Övergångslängd $u_R$ (task-radier)", fontsize=9)
     ax2.set_ylabel("Antal", fontsize=9)
     ax2.legend(fontsize=7.5, framealpha=0.9)
-    ps.title(ax2, "Täthet", pad=10)
+    ps.title(ax2, f"Täthet ({n_runs} körning{'ar' if n_runs > 1 else ''})", pad=10)
 
-    n_same = same.size; n_tot = len(df)
-    ps.footnote(fig, f"Median {np.median(task):.2f} task-radier mot 0,70 inom delsystem "
-                     f"(papper 2). Återgång till eget yrke {100*n_same/max(n_tot,1):.0f} % "
-                     f"och chefsövergångar {100*mgmt.size/max(n_tot,1):.0f} % utesluts; "
-                     f"CPS räknar bara yrkesbyten, och tvärflödet är befordran.", y=-0.03)
-    ps.save(fig, os.path.join(out, "mobility_distribution.pdf"))
+    meds = [float(np.median(v)) for v in per_run.values() if v.size]
+    spread = (f" (spann {min(meds):.2f}–{max(meds):.2f} över {n_runs} frön)"
+              if n_runs > 1 else "")
+    ps.footnote(fig, f"Median {med:.2f} task-radier mot 0,70 inom delsystem "
+                     f"(papper 2){spread}. Återgång till eget yrke "
+                     f"{100*np.mean(same_sh):.0f} % och chefsövergångar "
+                     f"{100*np.mean(mgmt_sh):.0f} % utesluts; CPS räknar bara "
+                     f"yrkesbyten, och tvärflödet är befordran.", y=-0.03)
+
+    per = pd.DataFrame({"run": list(per_run), "n": [v.size for v in per_run.values()],
+                        "median_u_R": meds})
+    figio.write(fig, "mobility_distribution", out,
+                data={"band": band, "per_run": per},
+                run_dirs=run_dirs, save=ps.save,
+                note="CDF av u_R för yrkesbyten utan chefsövergångar; band över frön.",
+                extra={"ref_within": REF_WITHIN, "ref_global": REF_GLOBAL,
+                       "ref_cross": REF_CROSS})
 
 
 # ---------------------------------------------------------------------------
@@ -173,7 +216,25 @@ def fig_competence(out):
                      "men diffunderar när den inte används: spetsen går förlorad, resten "
                      "finns kvar. Gemensam färgskala, komprimerad ($\\gamma$ = 0,3), "
                      "eftersom spetsen är tvåhundra gånger högre än golvet.", y=-0.10)
-    ps.save(fig, os.path.join(out, "competence_circles.pdf"))
+    rows = []
+    for (c, lab), f in zip(panels, fields):
+        for j in range(c.K):
+            if c.key[0, j] == EMPTY:
+                continue
+            rows.append({"panel": lab.replace("\n", " "),
+                         "circle": c.key_names[c.key[0, j]],
+                         "x": c.x[0, j], "y": c.y[0, j],
+                         "rho": float(np.sqrt(c.rho2[0, j])), "mass": c.mass[0, j]})
+    qs = pd.DataFrame({"panel": [l.replace("\n", " ") for _, l in panels],
+                       "q": [float(c.competitiveness(0, [cx], [cy], [ro], p)[0])
+                             for c, _ in panels]})
+    figio.write(fig, "competence_circles", out,
+                data={"circles": pd.DataFrame(rows), "q": qs},
+                save=ps.save,
+                note="Kompetenscirklar för samma arbetare i tre skeden.",
+                extra={"lambda_half_life_years": float(np.log(2) / p.lam),
+                       "D": p.D, "tau_months": p.tau_months, "m_ref": p.m_ref,
+                       "gamma": p.gamma, "job": {"x": cx, "y": cy, "r_o": ro}})
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +244,7 @@ def fig_coverage(run_dirs, out, s=0.25):
                          np.linspace(0, 1.0, 121))
     gx, gy = rg * np.cos(tg), rg * np.sin(tg)
     n = len(run_dirs)
+    cov_rows = []
     fig, axes = plt.subplots(1, n, figsize=(4.6 * n, 4.8), dpi=ps.DPI,
                              subplot_kw={"projection": "polar"}, squeeze=False)
     for ax, rd in zip(axes[0], run_dirs):
@@ -208,10 +270,15 @@ def fig_coverage(run_dirs, out, s=0.25):
         ps.title(ax, os.path.basename(rd.rstrip("/")), pad=14)
         ax.text(0.5, -0.13, f"{len(jobs)} positioner    C({s}) = {C:.2f}",
                 transform=ax.transAxes, ha="center", fontsize=9)
+        cov_rows.append({"run": os.path.basename(str(rd).rstrip("/")),
+                         "n_positions": len(jobs), f"C_{s}": C})
     ps.footnote(fig, f"Täthet av lediga och tillsatta positioner i uppgiftsrummet. "
                      f"C({s}) är andelen av skivan inom {s} task-enheter från någon position: "
                      f"ett direkt mått på uppgiftsrummets tjocklek.", y=-0.06)
-    ps.save(fig, os.path.join(out, "coverage.pdf"))
+    figio.write(fig, "coverage", out, data=pd.DataFrame(cov_rows),
+                run_dirs=run_dirs, save=ps.save,
+                note="Positionernas täthet i uppgiftsrummet per körning.",
+                extra={"s": s})
 
 
 # ---------------------------------------------------------------------------
@@ -280,15 +347,23 @@ def fig_tenure(out):
                      f"helt men avtar långsamt; radien växer som $\\rho^2 = \\rho_0^2 + 2Dt$, "
                      f"så spetsen faller brant först och flackt sedan, aldrig till noll.",
                 y=-0.06)
-    ps.save(fig, os.path.join(out, "competence_over_tenure.pdf"))
+    series = {"q_by_years_worked": pd.DataFrame({"year": t, **{
+                  f"q_{yrs}y": trace(yrs, True)[0] for yrs in (40, 10, 3)}}),
+              "mass_and_radius": pd.DataFrame({"year": t, "mass_40y": m40,
+                                               "radius_10y": r10})}
+    figio.write(fig, "competence_over_tenure", out, data=series, save=ps.save,
+                note="Inlärning, mättnad och diffusion över fyrtio år.",
+                extra={"lambda_half_life_years": float(np.log(2) / p.lam),
+                       "D": p.D, "tau_months": p.tau_months,
+                       "m_sat": float(p.a / p.lam)})
 
 
 # ---------------------------------------------------------------------------
-def fig_wages(run_dir, out):
+def fig_wages(run_dirs, out):
     """Lönespridning: fältet ger yrkets nivå, individen förhandlar sin avvikelse."""
-    from core.analysis.eventlog import load_tables
+    from core.analysis.eventlog import pooled_transitions
 
-    tr = load_tables(run_dir)["transitions"]
+    tr = pooled_transitions(run_dirs, cps_only=False)
     df = pd.DataFrame()
     if not tr.empty and {"w_field", "w_neg"} <= set(tr.columns):
         df = tr[["w_field", "w_neg", "to_onet"]].dropna(
@@ -342,7 +417,17 @@ def fig_wages(run_dir, out):
                      "Samma position betalar olika beroende på arbetarens konkurrenskraft och "
                      "hennes alternativ, vilket ger lönespridning inom yrke som fältet ensamt "
                      "inte kan ge.", y=-0.10)
-    ps.save(fig, os.path.join(out, "wage_dispersion.pdf"))
+    per_occ = (df.groupby("onet")
+                 .agg(n=("w_neg", "size"), w_field=("w_field", "median"),
+                      w_neg_median=("w_neg", "median"),
+                      w_neg_q25=("w_neg", lambda x: x.quantile(0.25)),
+                      w_neg_q75=("w_neg", lambda x: x.quantile(0.75)))
+                 .reset_index().sort_values("n", ascending=False))
+    figio.write(fig, "wage_dispersion", out,
+                data={"per_occupation": per_occ,
+                      "ratio": df[["w_field", "w_neg", "ratio"]]},
+                run_dirs=run_dirs, save=ps.save,
+                note="Fältlön mot förhandlad lön; spridning inom yrke.")
 
 
 # ---------------------------------------------------------------------------
@@ -368,7 +453,7 @@ def main():
         print(f"(använder senaste: {os.path.basename(runs[0])})\n")
 
     if a.only in (None, "mobility"):
-        fig_mobility(runs[0], a.out)
+        fig_mobility(runs, a.out)
     if a.only in (None, "competence"):
         fig_competence(a.out)
     if a.only in (None, "coverage"):
@@ -376,7 +461,7 @@ def main():
     if a.only in (None, "tenure"):
         fig_tenure(a.out)
     if a.only in (None, "wages"):
-        fig_wages(runs[0], a.out)
+        fig_wages(runs, a.out)
 
 
 if __name__ == "__main__":

@@ -286,3 +286,95 @@ def load_tables(run_dir):
             "flows": pd.read_csv(os.path.join(t, "flows.csv")),
             "summary": pd.read_csv(os.path.join(t, "summary.csv")).iloc[0].to_dict(),
             "out_dir": t}
+
+
+# ---------------------------------------------------------------------------
+# Serier av körningar
+# ---------------------------------------------------------------------------
+def collect_runs(run_dirs):
+    """Summary för flera körningar som en DataFrame.
+
+    Med flera frön per scenario är en enskild körning inte ett resultat.
+    Spridningen inom scenario måste kunna skiljas från skillnaden mellan
+    scenarier, annars tolkas brus som effekt."""
+    rows = []
+    for rd in run_dirs:
+        try:
+            rows.append(summary_row(rd))
+        except Exception as e:
+            print(f"hoppar över {os.path.basename(str(rd))}: {type(e).__name__}: {e}")
+    return pd.DataFrame(rows)
+
+
+def group_stats(df, by="scenario", metrics=None):
+    """Median och spridning per grupp, samt antal frön.
+
+    Redovisar interkvartilavstånd snarare än standardavvikelse: med få frön är
+    medianen robustare och IQR säger mer om var utfallen faktiskt ligger."""
+    metrics = metrics or [c for c in
+                          ("u_pct", "v_pct", "tightness", "median_u_R",
+                           "median_wage_ratio", "coverage_0.25", "share_same_occ")
+                          if c in df.columns]
+    if by not in df.columns:
+        df = df.assign(**{by: "alla"})
+    out = []
+    for key, g in df.groupby(by, dropna=False):
+        row = {by: key, "n_runs": len(g),
+               "seeds": ",".join(map(str, sorted(g["seed"].dropna().astype(int))))
+               if "seed" in g else ""}
+        for m in metrics:
+            x = pd.to_numeric(g[m], errors="coerce").dropna()
+            if x.empty:
+                continue
+            row[f"{m}_median"] = float(x.median())
+            row[f"{m}_q25"] = float(x.quantile(0.25))
+            row[f"{m}_q75"] = float(x.quantile(0.75))
+            row[f"{m}_min"] = float(x.min())
+            row[f"{m}_max"] = float(x.max())
+        out.append(row)
+    return pd.DataFrame(out)
+
+
+def pooled_transitions(run_dirs, cps_only=True):
+    """Övergångar från flera körningar i en tabell, med run-kolumn.
+
+    Med fem frön ska en fördelningsfigur visa bandet, inte ett godtyckligt
+    frö."""
+    frames = []
+    for rd in run_dirs:
+        try:
+            tr = load_tables(rd)["transitions"]
+        except Exception:
+            continue
+        if tr.empty:
+            continue
+        if cps_only and "in_cps_sample" in tr.columns:
+            tr = tr[tr["in_cps_sample"].fillna(False).astype(bool)]
+        tr = tr.copy()
+        tr["run"] = os.path.basename(str(rd).rstrip("/"))
+        frames.append(tr)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def ecdf_band(values_by_run, grid=None, lo=0.0, hi=3.5, n=200):
+    """Median-CDF och band över körningar.
+
+    values_by_run : dict run -> array. Returnerar DataFrame med x, median,
+    q25, q75, min, max -- alltså den serie en bandfigur ritar och som skrivs
+    bredvid den."""
+    grid = grid if grid is not None else np.linspace(lo, hi, n)
+    curves = []
+    for arr in values_by_run.values():
+        a = np.asarray(arr, dtype=float)
+        a = a[np.isfinite(a)]
+        if a.size:
+            curves.append(np.searchsorted(np.sort(a), grid, side="right") / a.size)
+    if not curves:
+        return pd.DataFrame()
+    M = np.vstack(curves)
+    return pd.DataFrame({"x": grid,
+                         "median": np.median(M, axis=0),
+                         "q25": np.percentile(M, 25, axis=0),
+                         "q75": np.percentile(M, 75, axis=0),
+                         "min": M.min(axis=0), "max": M.max(axis=0),
+                         "n_runs": M.shape[0]})
