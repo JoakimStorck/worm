@@ -233,6 +233,11 @@ def handle_start_job(event, world):
                 extra['q_hire'] = round(float(q_par), 4)
             except (TypeError, ValueError):
                 pass
+        # Kravet loggas så att låg konkurrenskraft i KRÄVANDE jobb går att
+        # skilja från låg konkurrenskraft i jobb där den inte spelar roll.
+        rq = job_row.get('r_req') if hasattr(job_row, 'get') else None
+        if rq is not None and not (isinstance(rq, float) and np.isnan(rq)):
+            extra['r_req'] = round(float(rq), 3)
     world.event_logger.log_event(world, event, extra=extra)
     n_employees = job_row['employer_size']
     prop_training = individuals.at[idx, 'propensity_internal_training']
@@ -324,9 +329,11 @@ def handle_start_job_search(event, world):
             (lambda jx, jy, jro: world.circles.competitiveness(idx, jx, jy, jro,
                                                                world.competence_params()))
             if hasattr(world, 'circles') else None),
+        requirement_k=float(sim.get('requirement_k', 2.0)),
         bargaining=({"beta": float(brg.get("beta", 0.5)),
                      "kappa": float(brg.get("kappa", 0.10)),
-                     "labour_share": float(brg.get("labour_share", 0.57))}
+                     "labour_share": float(brg.get("labour_share", 0.57)),
+                     "wage_floor_share": float(brg.get("wage_floor_share", 0.0))}
                     if brg.get("enabled", True) else None),
     )
 

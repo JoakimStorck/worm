@@ -95,6 +95,26 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
         g.columns = [c.replace("_median", "").replace("_pct", " %") for c in cols]
         A(g.to_markdown(index=False, floatfmt=".3f") + "\n")
 
+    if "share_q_below_0.4" in df.columns:
+        A("## Passform vid anställning\n")
+        x = pd.to_numeric(df["share_q_below_0.4"], errors="coerce").dropna()
+        q10 = pd.to_numeric(df.get("p10_q_hire"), errors="coerce").dropna()
+        if len(x):
+            A(f"Andel anställningar med konkurrenskraft under 0,40: "
+              f"{100*x.median():.1f} %"
+              + (f" (p10 för q: {q10.median():.2f})" if len(q10) else "") + ".\n")
+            A("Låg konkurrenskraft är inte i sig ett fel: i jobb med lågt krav "
+              "(diskaren) är produktiviteten full ändå.\n")
+        if "share_lowq_in_demanding" in df.columns:
+            y = pd.to_numeric(df["share_lowq_in_demanding"], errors="coerce").dropna()
+            n = pd.to_numeric(df.get("n_demanding_hires"), errors="coerce").dropna()
+            if len(y):
+                A(f"**Det avslöjande måttet:** andel anställningar i krävande jobb "
+                  f"(r ≥ 0,6) med konkurrenskraft under 0,40: {100*y.median():.1f} % "
+                  f"(av {int(n.median()) if len(n) else '?'} sådana anställningar). "
+                  f"Den ska vara nära noll: annars tillträder folk jobb de inte "
+                  f"klarar.\n")
+
     A("## Mot referensvärden\n")
     A("| Storhet | Modell (median) | Spridning över frön | Referens | Källa |")
     A("|---|---|---|---|---|")
@@ -149,7 +169,7 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
         A("| Storhet | Median | Min | Max | Spann |")
         A("|---|---|---|---|---|")
         for key in ("median_u_R", "u_pct", "v_pct", "median_wage_ratio",
-                    "tightness"):
+                    "tightness", "share_q_below_0.4"):
             if key not in df.columns:
                 continue
             x = pd.to_numeric(df[key], errors="coerce").dropna()

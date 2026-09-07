@@ -56,6 +56,16 @@ simulation:
     tasks_per_occupation_default: 20   # k för r_o/sqrt(k) om n_tasks saknas
     retraining_radius2: 0.25      # omskolningscirkelns radie^2 (bred)
 
+  # --- Krav och produktivitet ---
+  # Produktivitet i ett jobb är q ** (requirement_k * r_req), där r_req är
+  # jobbets kravintensitet ur kapabilitetsfältet (Technology fields; läkare
+  # 0.84, advokater 0.81, snickare 0.15, diskare 0.00). r_req = 0 gör alla
+  # fullt produktiva; r_req = 1 gör produktiviteten q**k. Utan detta
+  # behandlades konkurrenskraft som produktivitet för alla jobb: en
+  # okvalificerad producerade fem procent av en kirurg och advokaten tio
+  # procent av en diskare -- båda fel. Job Zone ersätter r_req i steg 4.
+  requirement_k: 2.0
+
   # --- Förhandlad lön (docs/individmodell.md, avsnitt 5) ---
   # w = w_res + beta*(q*Pi - w_res - kappa*Pi). Fältet är grunden, individen
   # förhandlar sin avvikelse efter konkurrenskraft. Lokalt marknadstryck som
@@ -70,6 +80,11 @@ simulation:
     # 0.65*Pi. Arbetskraftens andel av förädlingsvärdet är omkring 0.57 i
     # Sverige, vilket ger w ungefär Pi vid full passform.
     labour_share: 0.57
+    # Kollektivavtalens minimilön som andel av yrkets fältlön. Lyfter låga bud
+    # till avtalsnivån. Tillsammans med kravet spärrar den kirurgjobbet för den
+    # okvalificerade (värdet räcker inte till golvet) utan att spärra
+    # diskjobbet för advokaten (kravet är noll, så värdet är fullt).
+    wage_floor_share: 0.70
 
   # --- Omskolning: riktad mot där arbete finns, inte ett fast delta_xi ---
   retraining_share: 0.5          # andel av vägen mot vakansernas tyngdpunkt
@@ -78,7 +93,9 @@ simulation:
   retraining_min_days: 30        # kortaste omskolning
   min_surplus: 0.0          # acceptera om S > min_surplus
   reservation_decay_per_search: 0.95   # w_res faller 5 % per misslyckad sökning
-  reservation_floor: 0.10              # men aldrig under denna nivå
+  # Reservationslönens golv. 0.10 av medellönen är orimligt lågt: med a-kassa
+  # och försörjningsstöd ligger den reella nivån kring 0.35-0.45.
+  reservation_floor: 0.40
   # --- Jobbflöden: positioner föds och dör. Utan detta är antalet jobb konstant
   #     och Beveridgekurvan en bokföringsidentitet (v linjär i u).
   job_flows: true

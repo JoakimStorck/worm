@@ -92,6 +92,7 @@ def transitions_table(events):
             "w_field": _f(r, "w_field"),
             "w_neg": _f(r, "w_neg"),
             "q_hire": _f(r, "q_hire"),
+            "r_req": _f(r, "r_req"),
             "occ_change": bool(int(r.get("occ_change", 1))) if "occ_change" in r else np.nan,
             "is_mgmt": (src.startswith(MGMT_PREFIX) or tgt.startswith(MGMT_PREFIX))
                        if (src or tgt) else np.nan,
@@ -223,6 +224,16 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
             q = cps["q_hire"].dropna()
             if len(q):
                 row["median_q_hire"] = round(float(q.median()), 4)
+                row["p10_q_hire"] = round(float(q.quantile(0.10)), 4)
+                row["share_q_below_0.4"] = round(float((q < 0.40).mean()), 4)
+                row["min_q_hire"] = round(float(q.min()), 4)
+            if "r_req" in cps.columns and cps["r_req"].notna().any():
+                # Det avslöjande måttet: låg q i jobb med högt krav.
+                hi = cps[cps["r_req"] >= 0.6]
+                if len(hi):
+                    row["share_lowq_in_demanding"] = round(
+                        float((hi["q_hire"] < 0.40).mean()), 4)
+                    row["n_demanding_hires"] = int(len(hi))
 
     # Täckning ur sluttillståndet, om det finns
     jp = os.path.join(run_dir, "final_state_jobs.csv")

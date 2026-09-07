@@ -258,7 +258,7 @@ def apply_capability_update_LEGACY(chi, xi, r_i, delta_chi=0.0, delta_xi=0.0, de
 # ---------------------------------------------------------------------------
 # Jobbsökning: relevansmängd och logit-val
 # ---------------------------------------------------------------------------
-JOB_ARRAY_COLS = ("x_occ", "y_occ", "r_o", "wage", "x", "y")
+JOB_ARRAY_COLS = ("x_occ", "y_occ", "r_o", "wage", "x", "y", "r_req")
 
 
 def build_job_arrays(jobs_df):
@@ -272,6 +272,12 @@ def build_job_arrays(jobs_df):
                   else np.zeros(len(jobs_df)))
     if "wage" not in jobs_df.columns:
         out["wage"] = np.ones(len(jobs_df))
+    if "r_req" not in jobs_df.columns:
+        # Utan kravintensitet behandlas konkurrenskraft som produktivitet
+        # för alla jobb (r = 1), dvs. det gamla beteendet.
+        out["r_req"] = np.ones(len(jobs_df))
+    else:
+        out["r_req"] = np.nan_to_num(out["r_req"], nan=1.0)
     return out
 
 
@@ -286,7 +292,7 @@ def vacant_job_indices(jobs_df):
 def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
                 commute_cost_per_km=0.005, min_surplus=0.0,
                 choice_scale=0.05, rng=None, arrays=None,
-                competitiveness=None, bargaining=None):
+                competitiveness=None, bargaining=None, requirement_k=2.0):
     """En sökomgång. Två steg, i linje med hur jobbsökning faktiskt går till.
 
     1. RELEVANSMÄNGD. Den sökande överväger de positioner hon rimligen kan
@@ -326,8 +332,13 @@ def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
 
     jx = A["x_occ"][cand_idx]; jy = A["y_occ"][cand_idx]
     if competitiveness is not None:
-        # Konkurrenskraft ur kompetenscirklarna (docs/individmodell.md, avsnitt 2).
-        p = competitiveness(jx, jy, A["r_o"][cand_idx])
+        # Konkurrenskraft ur kompetenscirklarna (docs/individmodell.md, avsnitt 2),
+        # översatt till PRODUKTIVITET via jobbets krav: p = q ** (k * r_req).
+        # r_req = 0 gör alla fullt produktiva (diskaren), r_req = 1 gör
+        # produktiviteten q**k (kirurgen). Se core/occupations/requirement.py.
+        from core.occupations.requirement import productivity
+        q = competitiveness(jx, jy, A["r_o"][cand_idx])
+        p = productivity(q, A["r_req"][cand_idx], k=requirement_k)
     else:
         d2 = (jx - ix) ** 2 + (jy - iy) ** 2
         sigma2 = np.maximum((sigma_gamma ** 2) * (A["r_o"][cand_idx] ** 2 + ri ** 2), 1e-9)
@@ -402,7 +413,7 @@ def retraining_target(ind, jobs_df, cand_idx, arrays=None,
 # Förhandlad lön (docs/individmodell.md, avsnitt 5)
 # ---------------------------------------------------------------------------
 def negotiated_wage(q, w_field, w_res, beta=0.5, kappa=0.10, k_vacancy=None,
-                    labour_share=0.57):
+                    labour_share=0.57, wage_floor_share=0.0):
     """Nash-förhandling med fältet som grund.
 
         y = q * Pi / labour_share            matchens produktion
@@ -419,6 +430,13 @@ def negotiated_wage(q, w_field, w_res, beta=0.5, kappa=0.10, k_vacancy=None,
     för en välmatchad arbetare, vilket är vad prisfältet påstår, och lägre för
     en sämre matchad. Ankaret är observerbart och ersätter godtycket.
 
+    LÖNEGOLVET är kollektivavtalens minimilön, wage_floor_share * Pi. Det
+    lyfter låga bud till avtalsnivån. Ligger arbetsgivarens värde under golvet
+    blir tjänsten obesatt -- och värdet är produktivitet via jobbets krav, så
+    det spärrar kirurgjobbet för den okvalificerade utan att spärra diskjobbet
+    för advokaten. Utan golv kunde en arbetare med grundskolegolvets
+    konkurrenskraft tillträda ett kirurgjobb för sju procent av yrkeslönen.
+
     k_vakans är arbetsgivarens alternativ -- fortsatt vakans -- här som andelen
     kappa av produktionen tills lokalt marknadstryck införs (steg 3).
 
@@ -431,4 +449,7 @@ def negotiated_wage(q, w_field, w_res, beta=0.5, kappa=0.10, k_vacancy=None,
     surplus = value - w_res - kv
     w = w_res + beta * surplus
     w = np.where(surplus > 0, np.minimum(w, value), np.nan)
+    if wage_floor_share:
+        floor = float(wage_floor_share) * w_field
+        w = np.where(value < floor, np.nan, np.maximum(w, floor))
     return w

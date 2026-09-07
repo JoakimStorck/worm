@@ -247,11 +247,13 @@ class ScenarioBuilder:
         try:
             r = self.onet_space_df.loc[onet_code]
             w = r["w_rel"] if "w_rel" in r.index else np.nan
+            rq = r["r_req"] if "r_req" in r.index else np.nan
             return (float(r["x_occ"]), float(r["y_occ"]), float(r["r_o"]),
                     float(r["chi"]), float(r["xi"]), str(r["geom_source"]),
-                    float(w) if pd.notna(w) else 1.0)
+                    float(w) if pd.notna(w) else 1.0,
+                    float(rq) if pd.notna(rq) else np.nan)
         except KeyError:
-            return None, None, None, None, None, None, None
+            return None, None, None, None, None, None, None, None
 
     def load_onet_occupation_space_table(self, db_path="data/worm.sqlite3"):
         import sqlite3
@@ -386,7 +388,7 @@ class ScenarioBuilder:
                     onet_codes, freqs = zip(*occ_freq)
                     onet_code = np.random.choice(onet_codes, p=np.array(freqs)/np.sum(freqs))
 
-                x_occ, y_occ, r_o, chi, xi, geom_source, wage = self.get_geom_for_onet_code(onet_code)
+                x_occ, y_occ, r_o, chi, xi, geom_source, wage, r_req = self.get_geom_for_onet_code(onet_code)
 
                 jobs.append({
                     "job_id": f"J{self._job_seq:07d}",
@@ -408,6 +410,7 @@ class ScenarioBuilder:
                     "r_o": r_o,
                     "geom_source": geom_source,
                     "wage": wage,
+                    "r_req": r_req,
                 })
                 self._job_seq += 1
 

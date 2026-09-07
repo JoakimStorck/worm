@@ -37,6 +37,7 @@ import sys
 if sys_path_root not in sys.path:
     sys.path.insert(0, sys_path_root)
 from core.occupations.price_field import PriceField
+from core.occupations.requirement import CapabilityField
 
 EXPORT_DIR = "data/geometry"          # dit du kopierat CSV-filerna
 DB_PATH    = "data/worm.sqlite3"
@@ -125,6 +126,20 @@ def build_tables(export_dir=EXPORT_DIR):
               f"w_rel spann {occ['w_rel'].min():.3f}–{occ['w_rel'].max():.3f}")
     else:
         occ["w_rel"] = np.nan; occ["pi_rel"] = np.nan
+
+    # --- Kravintensitet ur kapabilitetsfältet (Technology fields) ------------
+    cf_path = os.path.join(export_dir, "capability_field_coefficients.csv")
+    cf = None
+    if os.path.exists(cf_path):
+        cf = CapabilityField.from_csv(cf_path).calibrate(occ["x_occ"].to_numpy(),
+                                                          occ["y_occ"].to_numpy())
+        occ["r_req"] = cf.requirement(occ["x_occ"].to_numpy(), occ["y_occ"].to_numpy())
+        print(f"kapabilitetsfält: laddat; r_req medel {occ['r_req'].mean():.2f}, "
+              f"normering Q p5={cf.q_lo:.2f} p95={cf.q_hi:.2f}")
+    else:
+        occ["r_req"] = np.nan
+        print("kapabilitetsfält: capability_field_coefficients.csv SAKNAS -- r_req blir NaN,")
+        print("  och konkurrenskraft behandlas som produktivitet för alla jobb.")
         print("\n" + "!" * 72)
         print("VARNING: wage_field_coefficients.csv saknas i " + export_dir)
         print("  Utan prisfält får alla jobb lön 1.0 och ingen reservationslön.")
@@ -146,7 +161,7 @@ def build_tables(export_dir=EXPORT_DIR):
 
     # --- Full tabell: alla occ_meta-koder, fallback till familj, sedan global ---
     direct = occ[["onet_code", "Title", "Job Family", "xi", "chi", "x_occ", "y_occ", "r_o",
-                  "w_rel", "pi_rel", "n_tasks"]].copy()
+                  "w_rel", "pi_rel", "n_tasks", "r_req"]].copy()
     direct["geom_source"] = "occupation"
     full = meta[["onet_code", "Title", "Job Family"]].merge(
         direct.drop(columns=["Title", "Job Family"]), on="onet_code", how="left")
@@ -161,6 +176,9 @@ def build_tables(export_dir=EXPORT_DIR):
             full.loc[miss, "pi_rel"] = pf.pi_rel(full.loc[miss, "xi"].to_numpy(),
                                                  full.loc[miss, "chi"].to_numpy())
             full.loc[miss, "w_rel"] = full.loc[miss, "pi_rel"]
+        if cf is not None:
+            full.loc[miss, "r_req"] = cf.requirement(full.loc[miss, "x_occ"].to_numpy(),
+                                                     full.loc[miss, "y_occ"].to_numpy())
         full.loc[miss & full["x_occ"].notna(), "geom_source"] = "family"
 
     still = full["x_occ"].isna()
@@ -174,22 +192,31 @@ def build_tables(export_dir=EXPORT_DIR):
             full.loc[still, "pi_rel"] = pf.pi_rel(full.loc[still, "xi"].to_numpy(),
                                                   full.loc[still, "chi"].to_numpy())
             full.loc[still, "w_rel"] = full.loc[still, "pi_rel"]
+        if cf is not None:
+            full.loc[still, "r_req"] = cf.requirement(full.loc[still, "x_occ"].to_numpy(),
+                                                      full.loc[still, "y_occ"].to_numpy())
         full.loc[still, "geom_source"] = "global"
 
     if "n_tasks" not in full.columns:
         full["n_tasks"] = np.nan
+    if "r_req" not in full.columns:
+        full["r_req"] = np.nan
     occ_geom = full[["onet_code", "Title", "Job Family", "xi", "chi",
-                     "x_occ", "y_occ", "r_o", "w_rel", "pi_rel", "n_tasks", "geom_source"]].copy()
+                     "x_occ", "y_occ", "r_o", "w_rel", "pi_rel", "n_tasks", "r_req",
+                     "geom_source"]].copy()
     occ_geom["code_system"] = "onet_soc"     # vilket kodsystem onet_code är uttryckt i
-    return occ_geom, fam_geom, r_max, pf
+    return occ_geom, fam_geom, r_max, pf, cf
 
 
-def write_to_db(occ_geom, fam_geom, db_path=DB_PATH, pf=None):
+def write_to_db(occ_geom, fam_geom, db_path=DB_PATH, pf=None, cf=None):
     conn = sqlite3.connect(db_path)
     occ_geom.to_sql("onet_occupation_space", conn, if_exists="replace", index=False)
     fam_geom.to_sql("onet_job_family_geometry", conn, if_exists="replace", index=False)
     if pf is not None:
         pd.DataFrame(pf.to_rows()).to_sql("wage_field_coefficients", conn,
+                                          if_exists="replace", index=False)
+    if cf is not None:
+        pd.DataFrame(cf.to_rows()).to_sql("capability_field_coefficients", conn,
                                           if_exists="replace", index=False)
     conn.commit(); conn.close()
 
@@ -205,7 +232,7 @@ def main():
                     help="skriv även om prisfältet saknas")
     a = ap.parse_args()
 
-    occ_geom, fam_geom, r_max, pf = build_tables(a.export_dir)
+    occ_geom, fam_geom, r_max, pf, cf = build_tables(a.export_dir)
     print(f"r_max = {r_max:.5f}")
     print(f"yrken totalt: {len(occ_geom)}")
     print(occ_geom["geom_source"].value_counts().to_string())
@@ -220,9 +247,10 @@ def main():
             "inte skapas och matchningen skulle köra utan priser. Lägg\n"
             "wage_field_coefficients.csv i export-katalogen, eller kör med\n"
             "--write --allow-missing-prices om det är avsiktligt.")
-    write_to_db(occ_geom, fam_geom, a.db, pf=pf)
+    write_to_db(occ_geom, fam_geom, a.db, pf=pf, cf=cf)
     print(f"\nSkrev onet_occupation_space, onet_job_family_geometry"
           + (" och wage_field_coefficients" if pf is not None else "")
+          + (" och capability_field_coefficients" if cf is not None else "")
           + f" till {a.db}.")
 
 
