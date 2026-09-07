@@ -39,72 +39,111 @@ geometrisk storhet.
 
 ---
 
-## 2. Individens fem egenskaper
+## 2. Individen som överlagrade cirklar
 
-| Egenskap | Symbol | Bestäms av | Bunden till |
+Individen är inte en punkt med radie. Hon är en **samling cirklar**, en per
+erfarenhet, och summan av dem är ett fält över uppgiftsskivan. Cirkeln är
+samma primitiv som papper 1 bygger yrken av — centroid plus radie — så
+individen är gjord av samma delar som rummet hon rör sig i. Papper 2:s mått
+på överlapp mellan yrken, R_a + R_b − d_ab, är cirkelöverlappet; individens
+konkurrenskraft i ett jobb är dess mjuka form.
+
+### Cirkeln
+
+Varje cirkel k har centrum (x_k, y_k), radie ρ_k, massa m_k och en nyckel:
+det yrke eller den utbildning den kommer från. En individ har högst ett tiotal
+cirklar; tolv är taket, och den med minst massa faller bort om det nås.
+
+| Ursprung | Centrum | Radie | Massa |
 |---|---|---|---|
-| Riktning | ξ̄ | cirkulärt medelvärde av historikens ξ, varaktighetsviktat | papper 1:s ξ |
-| Specificitet | χ̄ | vanligt medelvärde av historikens χ, varaktighetsviktat | papper 1:s χ |
-| Riktningskonsekvens | R | resultantlängd \|Σw·e^{iξ}\| / Σw ∈ [0,1] | följer av konstruktionen |
-| Nivå | ℓ | SUN-kod ur SCB (tabellen `education_level_municipality`) | data |
-| Lönekrav | w_res | förhandlad lön vid anställning; avtar i arbetslöshet | Littles lag, arbetslöshetstider |
+| Grundskola | origo | 1 (hela skivan) | låg, lika för alla |
+| Gymnasium | programmets riktning | bred | måttlig |
+| Högskola | programmets riktning | smalare | högre |
+| Arbete i yrke o | yrkets centroid + personlig avvikelse | r_o | växer med tid i yrket |
 
-Därtill bostad (x, y) i meter, oförändrad.
+Grundskolan är ett golv: ingen riktning, låg massa överallt. Den som föds kan
+bli vad som helst och är ingenting än. Programriktningar för gymnasium och
+högskola kräver att utbildningar positioneras i skivan, vilket är samma
+projektionsproblem som för yrken; tills det är gjort används yrkets riktning
+som proxy.
 
-**Bredden härleds**, den är ingen egen tillväxtregel: för innehåll vid radien
-χ̄ med vinkelkoncentration R är RMS-avståndet från medelriktningens punkt
+Den personliga avvikelsen vid inträde i ett yrke är r_o/√k, där k är antalet
+uppgifter i yrket: individen utför en delmängd av dem, och hennes centroid
+avviker därefter. Det ersätter den hårdkodade jitterparametern med en
+härledning som skalar med yrket.
 
-    r_i = χ̄ · √(2(1 − R))
+### Dynamiken
 
-En rak karriär ger R ≈ 1 och r_i ≈ 0 utöver yrkets egen radie. En spretig
-karriär ger lågt R och stor bredd.
+Tre processer, med tre parametrar som var och en har en tidsskala.
 
-**Positionen är en konsekvens, inte ett val.** Individen väljer jobb och
-utbildning; ξ̄, χ̄ och R följer av vad hon gjort. Fem löpande summor per
-individ räcker för inkrementell uppdatering: Σw, Σw·cos ξ, Σw·sin ξ, Σw·χ,
-Σw·χ².
+**Exponering.** Arbete i yrke o lägger massa på o:s cirkel med takten a per
+år; finns ingen sådan cirkel skapas den. Avslutad utbildning lägger till en
+cirkel med programmets position och massa lika med studietiden gånger a.
 
-### Varför polärt och inte kartesiskt
+**Läckage.** All massa avtar med takten λ: dm/dt = −λm. Halveringstiden är
+decennier. Läckaget gör två saker med en parameter: det gallrar det gamla, och
+det **mättar** massan under aktivitet, eftersom dm/dt = a − λm går mot a/λ.
+Utan läckage skulle en stor massa göra diffusionen verkningslös — en snickare
+med fyrtio år bakom sig skulle vara fullt konkurrenskraftig efter trettio års
+uppehåll, eftersom massan äter upp utspridningen.
 
-Papper 1 summerar ett yrke kartesiskt: centroiden av dess uppgifter. Det
-blandar avsiktligt ihop specificitet och riktningsjämnhet i ett tal, χ_o.
-Tillämpat på en karriär ger samma konstruktion en drift mot origo: den som
-gjort två saker i olika riktning hamnar mellan dem och innanför, och efter
-ett långt yrkesliv nära centrum oavsett vad hon kunnat. Informationen om hur
-specifikt hennes arbete varit går förlorad.
+**Diffusion.** En cirkel som inte används sprids: dρ²/dt = 2D. Toppen faller
+som 1/(ρ₀² + 2Dt) — brant först, sedan flackt, aldrig noll. Det är glömska
+som du beskrev den: spetsen förloras där man inte verkar, men allt finns kvar,
+alltmer diffust. Med D ≈ 0,015 per år är en cirkel som börjat vid r_o ≈ 0,27
+halvt så skarp efter fem år och utspridd över hela skivan efter trettio.
 
-Den polära summeringen håller isär de två. χ̄ är begränsad av de χ hon
-faktiskt haft, och R bär riktningsjämnheten separat. Individen behåller sin
-karaktär: en specialist med spretig karriär skiljer sig från en generalist
-med rak.
+**Skärpning.** En cirkel som används dras tillbaka mot sin egen radie med
+tidskonstanten τ_s, i månader: dρ²/dt = (r_o² − ρ²)/τ_s. Den som återvänder
+till sitt gamla yrke har massan kvar men behöver några månader för att återfå
+skärpan.
 
-Fallgrop: har någon arbetat i motsatta riktningar är ξ̄ illa definierad. R
-blir då nära noll, r_i stor, och matchningen vidgas — vilket är rätt beteende
-för en person utan tydlig hemvist. Fallet är ovanligt; 73 procent av
-rörligheten sker inom ett delsystem.
+Samma D och λ för alla cirklar, oavsett ursprung.
 
-### Vad som händer vid inträde
+| Parameter | Betydelse | Skala |
+|---|---|---|
+| a | exponeringstakt | 1 per år (enhet) |
+| λ | läckage; ger mättnad a/λ | halveringstid ~15 år |
+| D | diffusion | spets halverad efter ~5 år |
+| τ_s | skärpning vid återupptagen aktivitet | ~6 månader |
+| m_ref | massa som ger nästan full konkurrenskraft | ~2 år |
 
-En individ utför en delmängd av sitt yrkes uppgifter. Hennes personliga
-position vid inträdet avviker därför från yrkets centroid med ungefär
-r_o/√k, där k är antalet uppgifter hon faktiskt utför. Med r_o ≈ 0,27 och ett
-tjugotal uppgifter ger det ≈ 0,06. Det ersätter den hårdkodade
-jitterparametern 0,05 med en härledning som skalar med yrket.
+### Konkurrenskraften
 
-### Historiken uppdateras av exponering
+Individens konkurrenskraft i jobb j är summan av cirklarnas bidrag:
 
-En enda primitiv ersätter dagens delta-regler: *exponera individen för
-position p med vikt w*. Varje anställning exponerar med vikt lika med
-varaktigheten. Varje avslutad utbildning exponerar med vikt lika med
-studietiden. `switch_cost_kappa` utgår: omorientering sänker R av sig själv,
-vilket är den urholkning parametern var avsedd att modellera.
+    q_ij = min(1, Σ_k  (1 − e^{−m_k/m_ref}) · [2r_o² / (ρ_k² + r_o²)] · exp(−d_kj² / 2γ²(ρ_k² + r_o²)))
 
-Advokaten som diskar ett år får diskningen inräknad. Hennes ξ̄ flyttas mot
-sydväst och R sjunker. Det är rätt: erfarenhet utanför cirkeln *är* en
-förändring av vem hon är på arbetsmarknaden, och det är så nedåtgående
-rörlighet blir bestående.
+Tre faktorer per cirkel. **Massan**, mättande: skillnaden mellan noll och två
+års erfarenhet är stor, mellan tio och tjugo liten. **Skärpan**: ett när
+cirkeln är lika skarp som jobbets egen radie, mot noll när den diffunderat.
+**Avståndet**: samma kärna som förut, med cirkelns radie i stället för r_i.
 
----
+Den mogna arbetaren vid sitt eget jobb: massa över referens, ρ = r_o, d = 0,
+q = 1. **Kalibreringen mot 1,03 task-radier står**, eftersom den handlar om
+erfarna som byter. Samma person efter tjugo år borta: skärpan ≈ 0,15 — hon
+känns igen men är inte den hon var. Nybörjaren med grundskola: q ≈ 0,05
+överallt. Advokaten vid diskbänken: lite från juridikcirkeln, lite från
+golvet, och en diskcirkel som växer från första månaden.
+
+### Vad detta ersätter
+
+Positionen som tillståndsvariabel, bredden r_i som tillväxtregel,
+`initial_r`, `switch_cost_kappa` och `breadth_from_move`. Omorientering
+urholkar av sig själv: den gamla cirkeln diffunderar medan den nya byggs.
+
+Sammanfattande mått — centroid, χ̄, ξ̄, riktningskonsekvens, spridning —
+härleds ur cirklarna för loggning och validering. De är inte tillstånd.
+
+### Kopplingen till teknikfälten
+
+Technology fields beskriver en teknik som ett fält över samma skiva, φ_K(r).
+Individen och tekniken har därmed samma form. En chock är att teknikens massa
+stiger i ett område; de arbetare vars cirklar ligger där förlorar sitt värde,
+de vars cirklar ligger bredvid eller är spridda klarar sig. **Utsattheten för
+en chock är ett överlapp mellan två fält**, beräkningsbart per individ i
+sluten form för gaussiska kärnor. Det är den koppling mellan papper 3 och
+simuleringen som saknats.
 
 ## 3. Jobbet
 
@@ -123,11 +162,12 @@ För varje par (individ, jobb) ställs två frågor.
 
 ### Kan hon få det — arbetsgivarens fråga
 
-    P(anställning) = p_geom(d, σ)^α(zon) · p_nivå(ℓ − zon, tryck)
+    P(anställning) = q_ij^α(zon) · p_nivå(ℓ − zon, tryck)
 
-**Passformen** p_geom = exp(−d²/2σ²) med σ² = γ²(r_o² + r_i²) och d avståndet
-mellan hennes position och jobbets. Kalibrerad: γ = 0,875 ger Rayleigh-median
-1,03 task-radier, papper 2:s observerade värde.
+**Passformen** är konkurrenskraften q_ij ur avsnitt 2: summan av hennes
+cirklars bidrag vid jobbet. För en mogen arbetare med en cirkel reduceras
+den till exp(−d²/2γ²(r_o² + ρ²)), och γ = 0,875 ger Rayleigh-median 1,03
+task-radier, papper 2:s observerade värde.
 
 **Exponenten α(zon)** stiger från nära noll på zon 1 till ett på zon 5. Ju mer
 ett jobb kräver, desto mer spelar det roll att man kommer från rätt håll.
@@ -165,9 +205,11 @@ det nya måste överstiga för att vara värt besväret. Friktionens storlek är
 Fältet Π ger yrkets prisnivå. Den individuella lönen förhandlas fram enligt
 Nash, standard i sökteorin sedan Mortensen och Pissarides:
 
-    w = w_res + β · (p·Π − w_res − k_vakans)
+    w = w_res + β · (q·Π − w_res − k_vakans)
 
-**Arbetarens värde i jobbet** är p·Π: fältet gånger passform. Den erfarna
+**Arbetarens värde i jobbet** är q·Π: fältet gånger konkurrenskraft. Den
+växer med tenure eftersom q gör det, vilket ger löneprofiler över karriären
+ur modellen. Den erfarna
 diskaren och advokaten som diskar har olika p och därmed olika värde.
 **Hennes alternativ** är w_res. **Arbetsgivarens alternativ** är fortsatt
 vakans, vars kostnad k_vakans beror på lokalt tryck inom räckhåll: många
@@ -290,9 +332,11 @@ mekanismen finns.
 
 Varje steg med tester och invariantkontroll från början.
 
-1. **Historiksummeringen.** Fem summor per individ, exponeringsprimitiven,
-   härledd bredd, härledd inträdesposition. `switch_cost_kappa` utgår. Allt
-   annat vilar på detta.
+1. **Kompetenscirklarna.** Cirkeltabellen, exponering, läckage, diffusion,
+   skärpning, konkurrenskraften q. Härledd inträdesposition. `initial_r`,
+   `switch_cost_kappa` och `breadth_from_move` utgår. Allt annat vilar på
+   detta. Kontroll: t = 0-matchningen ger samma antal ±2 % som före, eftersom
+   betydelsen ändrats men inte beteendet.
 2. **Sökning från anställning.** Puckelformad intensitet per jobb,
    bytesfriktion, uppsägningstid. Ersätter `quit_job` och de interna
    händelserna. Rättar kalibreringens population.
@@ -313,8 +357,9 @@ alla fyra.
 - Om k_vakans ska bero på tunnhet i uppgiftsrummet.
 - Nyckeln SUN ↔ Job Zone.
 - Form och skala för α(zon).
-- Glömska: om gammal exponering ska nedviktas. Utan drift mot origo finns
-  inget som tvingar fram det; parkerad.
-- Om R ska påverka anställning utöver r_i — om en spretig karriär är ett
-  signalproblem i sig. Parkerad.
-- Om bredden inom ett yrke ska växa med tid i yrket. Parkerad.
+- Programriktningar för gymnasium och högskola: kräver att utbildningar
+  positioneras i skivan. Yrkets riktning är proxy tills dess.
+- Ålder finns inte på individerna; tenure dras ur en fördelning. Kohortinträde
+  och åldersstruktur är ett senare demografiskt steg.
+- Om en spretig karriär är ett signalproblem i sig, utöver vad cirklarnas
+  överlapp ger. Parkerad.

@@ -75,9 +75,6 @@ defaults:
       internal_job_change:
         mean: 0.10
         std: 0.04
-    initial_r:                # Initial erfarenhetsradie (geometrisk bredd)
-      min: 0.0                #   0 = färsk arbetare är en punkt i planet
-      max: 0.05               #   växer sedan med faktiska yrkesbyten
     # Här kan du fylla på med fler default-attribut för individer!
 
   # === AGENT-PARAMETRAR: EMPLOYER ===
@@ -130,8 +127,6 @@ simulation:
   job_destruction_rate: 0.10   # andel av positionerna som upphör per år
   vacancy_fill_rate: 0.25      # andel av arbetsgivarens underskott som postas per månad
   employer_growth_rate: 0.0    # måltalets tillväxt per år (0 = stationärt)
-  switch_cost_kappa: 0.05   # djupkostnad per radian vid riktningsbyte
-  breadth_from_move: 0.25   # hur mycket förflyttning breddar erfarenhetsradien
 
   # Samla ALLA event-tider på samma ställe – alla tider med enhet!
   event_timings:

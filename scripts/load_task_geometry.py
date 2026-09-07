@@ -96,6 +96,11 @@ def build_tables(export_dir=EXPORT_DIR):
     r_o = task.groupby("onet_code").apply(occ_radius, include_groups=False).rename("r_o")
     occ = occ.merge(r_o, on="onet_code", how="left")
     occ["r_o"] = occ["r_o"].fillna(occ.groupby("Job Family")["r_o"].transform("median"))
+    # Antal uppgifter per yrke: ger den personliga inträdesavvikelsen r_o/sqrt(k)
+    # i individmodellen (docs/individmodell.md, avsnitt 2).
+    n_tasks = task.groupby("onet_code").size().rename("n_tasks")
+    occ = occ.merge(n_tasks, on="onet_code", how="left")
+    occ["n_tasks"] = occ["n_tasks"].fillna(occ.groupby("Job Family")["n_tasks"].transform("median"))
     occ["x_occ"], occ["y_occ"] = _scaled_xy(occ)
 
     # --- Prisfält Π och bundle-lön (om koefficientfil finns) ---------------
@@ -141,7 +146,7 @@ def build_tables(export_dir=EXPORT_DIR):
 
     # --- Full tabell: alla occ_meta-koder, fallback till familj, sedan global ---
     direct = occ[["onet_code", "Title", "Job Family", "xi", "chi", "x_occ", "y_occ", "r_o",
-                  "w_rel", "pi_rel"]].copy()
+                  "w_rel", "pi_rel", "n_tasks"]].copy()
     direct["geom_source"] = "occupation"
     full = meta[["onet_code", "Title", "Job Family"]].merge(
         direct.drop(columns=["Title", "Job Family"]), on="onet_code", how="left")
@@ -171,8 +176,10 @@ def build_tables(export_dir=EXPORT_DIR):
             full.loc[still, "w_rel"] = full.loc[still, "pi_rel"]
         full.loc[still, "geom_source"] = "global"
 
+    if "n_tasks" not in full.columns:
+        full["n_tasks"] = np.nan
     occ_geom = full[["onet_code", "Title", "Job Family", "xi", "chi",
-                     "x_occ", "y_occ", "r_o", "w_rel", "pi_rel", "geom_source"]].copy()
+                     "x_occ", "y_occ", "r_o", "w_rel", "pi_rel", "n_tasks", "geom_source"]].copy()
     occ_geom["code_system"] = "onet_soc"     # vilket kodsystem onet_code är uttryckt i
     return occ_geom, fam_geom, r_max, pf
 

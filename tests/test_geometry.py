@@ -4,8 +4,7 @@ import pandas as pd
 import pytest
 
 from core.occupations.utils import (
-    _occ_distance, _occ_prob, apply_capability_update,
-    sample_centers_xy_jitter,
+    _occ_distance, _occ_prob, sample_centers_xy_jitter,
 )
 
 
@@ -61,40 +60,3 @@ def test_sampler_stays_in_unit_disc(rng):
     x0, y0 = np.array([0.9, -0.9, 0.0]), np.array([0.0, 0.0, 0.95])
     x, y = sample_centers_xy_jitter(x0, y0, np.ones(3), 2000, sigma_xy=0.3)
     assert np.hypot(x, y).max() <= 1.0 + 1e-9
-
-
-class TestCapabilityUpdate:
-    def test_pure_deepening_is_free(self):
-        chi, xi, r_i, x, y = apply_capability_update(0.5, 0.0, 0.0,
-                                                     delta_chi=0.1, switch_cost_kappa=0.05)
-        assert chi == pytest.approx(0.6)
-
-    def test_reorientation_costs_depth(self):
-        chi, *_ = apply_capability_update(0.5, 0.0, 0.0,
-                                          delta_xi=1.5, switch_cost_kappa=0.05)
-        assert chi == pytest.approx(0.5 - 0.05 * 1.5)
-
-    def test_cost_uses_shortest_angle(self):
-        """Ett steg på 2pi-0.2 är i själva verket 0.2 radianer."""
-        a, *_ = apply_capability_update(0.6, 0.0, 0.0, delta_xi=0.2, switch_cost_kappa=0.05)
-        b, *_ = apply_capability_update(0.6, 0.0, 0.0, delta_xi=-(2 * np.pi - 0.2),
-                                        switch_cost_kappa=0.05)
-        assert a == pytest.approx(b)
-
-    def test_cartesian_stays_synced(self):
-        chi, xi, r_i, x, y = apply_capability_update(0.5, 0.3, 0.1, delta_xi=1.2,
-                                                     delta_chi=0.05, switch_cost_kappa=0.05)
-        assert x == pytest.approx(chi * np.cos(xi))
-        assert y == pytest.approx(chi * np.sin(xi))
-
-    def test_movement_widens_experience(self):
-        _, _, r_still, _, _ = apply_capability_update(0.5, 0.0, 0.0)
-        _, _, r_moved, _, _ = apply_capability_update(0.5, 0.0, 0.0, delta_xi=1.5)
-        assert r_still == pytest.approx(0.0)
-        assert r_moved > 0.0
-
-    def test_chi_bounded(self):
-        chi, *_ = apply_capability_update(0.95, 0.0, 0.0, delta_chi=1.0)
-        assert chi <= 1.0
-        chi, *_ = apply_capability_update(0.05, 0.0, 0.0, delta_chi=-1.0)
-        assert chi >= 0.0

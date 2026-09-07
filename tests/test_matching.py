@@ -322,6 +322,18 @@ def _edu_world(job_positions, wages=None):
     return w
 
 
+def _edu_individual():
+    return pd.DataFrame([{
+        "individual_id": "i0", "status": "unemployed", "job_id": None,
+        "w_res": 0.2, "chi": 0.5, "xi": np.pi, "r_i": 0.0,
+        "x_occ": -0.5, "y_occ": 0.0, "x": 0.0, "y": 0.0,
+        "onet_code": "11-1011.00", "r_o_home": 0.27, "tenure_years": 5.0,
+        "education_level": 3, "municipal_code": "2062",
+        "propensity_start_education": 0.0,
+        "propensity_internal_training": 0.0, "propensity_quit_job": 0.0,
+        "propensity_internal_job_change": 0.0}]).astype({"job_id": object})
+
+
 def test_retraining_target_points_at_the_jobs():
     """Riktningen ska bestämmas av var arbete finns, inte av ett fast delta."""
     from core.occupations.utils import retraining_target, build_job_arrays, vacant_job_indices
@@ -351,26 +363,23 @@ def test_education_updates_capability_at_the_end_not_the_start():
     from core.event_handlers import handle_start_education, handle_end_education
 
     w = _edu_world([(0.6, 0.0), (0.62, 0.05)])
-    w.individuals = pd.DataFrame([{
-        "individual_id": "i0", "status": "unemployed", "job_id": None,
-        "w_res": 0.2, "chi": 0.5, "xi": np.pi, "r_i": 0.0,
-        "x_occ": -0.5, "y_occ": 0.0, "x": 0.0, "y": 0.0,
-        "municipal_code": "2062", "propensity_start_education": 0.0,
-        "propensity_internal_training": 0.0, "propensity_quit_job": 0.0,
-        "propensity_internal_job_change": 0.0}]).astype({"job_id": object})
+    w.individuals = _edu_individual()
+    w.init_competence()
+    x0 = float(w.individuals.at[0, "x_occ"])       # sammanfattningen efter init
 
     handle_start_education({"time": 0.0, "agent_id": 0,
                             "event_type": "start_education", "params": {}}, w)
     assert w.individuals.at[0, "status"] == "in_education"
-    assert w.individuals.at[0, "x_occ"] == pytest.approx(-0.5), "flyttades vid inskrivning"
+    assert w.individuals.at[0, "x_occ"] == pytest.approx(x0), "flyttades vid inskrivning"
 
     ev = w.event_queue.pop()
     assert ev["event_type"] == "end_education"
     handle_end_education(ev, w)
 
     assert w.individuals.at[0, "status"] == "unemployed"
-    assert w.individuals.at[0, "x_occ"] > -0.5, "flyttades inte vid slutet"
-    assert w.individuals.at[0, "r_i"] > 0.0, "erfarenhetsradien breddades inte"
+    assert w.individuals.at[0, "x_occ"] > x0, "flyttades inte vid slutet"
+    names = {w.circles.key_names[k] for k in w.circles.key[0] if k >= 0}
+    assert any(n.startswith("RETRAIN") for n in names), "ingen omskolningscirkel"
 
 
 def test_thin_market_gives_longer_retraining():
@@ -381,13 +390,8 @@ def test_thin_market_gives_longer_retraining():
 
     def duration(job_x):
         w = _edu_world([(job_x, 0.0), (job_x, 0.05)])
-        w.individuals = pd.DataFrame([{
-            "individual_id": "i0", "status": "unemployed", "job_id": None,
-            "w_res": 0.2, "chi": 0.5, "xi": np.pi, "r_i": 0.0,
-            "x_occ": -0.5, "y_occ": 0.0, "x": 0.0, "y": 0.0,
-            "municipal_code": "2062", "propensity_start_education": 0.0,
-            "propensity_internal_training": 0.0, "propensity_quit_job": 0.0,
-            "propensity_internal_job_change": 0.0}]).astype({"job_id": object})
+        w.individuals = _edu_individual()
+        w.init_competence()
         handle_start_education({"time": 0.0, "agent_id": 0,
                                 "event_type": "start_education", "params": {}}, w)
         return w.event_queue.pop()["time"]

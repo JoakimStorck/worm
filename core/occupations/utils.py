@@ -221,7 +221,7 @@ def sample_from_centers_jitter(xi_vals, chi_vals, weights, n_samples, sigma_xi, 
     return xi, chi
 
 
-def apply_capability_update(chi, xi, r_i, delta_chi=0.0, delta_xi=0.0, delta_r=0.0,
+def apply_capability_update_LEGACY(chi, xi, r_i, delta_chi=0.0, delta_xi=0.0, delta_r=0.0,
                             switch_cost_kappa=0.0, breadth_from_move=0.25):
     """
     Uppdaterar (chi, xi, r_i) i enhetsskivan och returnerar synkade (x_occ, y_occ).
@@ -285,7 +285,8 @@ def vacant_job_indices(jobs_df):
 
 def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
                 commute_cost_per_km=0.005, min_surplus=0.0,
-                choice_scale=0.05, rng=None, arrays=None):
+                choice_scale=0.05, rng=None, arrays=None,
+                competitiveness=None):
     """En sökomgång. Två steg, i linje med hur jobbsökning faktiskt går till.
 
     1. RELEVANSMÄNGD. Den sökande överväger de positioner hon rimligen kan
@@ -324,9 +325,13 @@ def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
     w_res = float(ind.get("w_res", 0.0) or 0.0)
 
     jx = A["x_occ"][cand_idx]; jy = A["y_occ"][cand_idx]
-    d2 = (jx - ix) ** 2 + (jy - iy) ** 2
-    sigma2 = np.maximum((sigma_gamma ** 2) * (A["r_o"][cand_idx] ** 2 + ri ** 2), 1e-9)
-    p = np.exp(-0.5 * d2 / sigma2)
+    if competitiveness is not None:
+        # Konkurrenskraft ur kompetenscirklarna (docs/individmodell.md, avsnitt 2).
+        p = competitiveness(jx, jy, A["r_o"][cand_idx])
+    else:
+        d2 = (jx - ix) ** 2 + (jy - iy) ** 2
+        sigma2 = np.maximum((sigma_gamma ** 2) * (A["r_o"][cand_idx] ** 2 + ri ** 2), 1e-9)
+        p = np.exp(-0.5 * d2 / sigma2)
 
     km = np.hypot(A["x"][cand_idx] - gx, A["y"][cand_idx] - gy) / 1000.0
     S = A["wage"][cand_idx] - commute_cost_per_km * km - w_res

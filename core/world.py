@@ -266,6 +266,8 @@ class World:
 
     def _init_events(self):
         self._init_job_flows()
+        if "onet_code" in self.individuals.columns and not hasattr(self, "circles"):
+            self.init_competence()
         if self._job_flow_cfg()['enabled']:
             self._schedule_destruction(self.jobs.loc[self.jobs['active'], 'job_id'].tolist(),
                                        self.current_time)
@@ -359,6 +361,75 @@ class World:
                     "params": {"year": current_year + 1}
                 }
                 self._push_event(event)
+
+    # ------------------------------------------------------------------
+    # Kompetenscirklar (docs/individmodell.md, avsnitt 2)
+    # ------------------------------------------------------------------
+    def competence_params(self):
+        from core.occupations.competence import CompetenceParams
+        if not hasattr(self, "_cp"):
+            self._cp = CompetenceParams.from_config(
+                self.cfg_reader.config.get("simulation", {}))
+        return self._cp
+
+    def init_competence(self):
+        """Bygger startpopulationens cirklar ur onet_code, education_level och
+        tenure_years, och skriver de härledda måtten till individtabellen."""
+        from core.occupations.competence import Circles, seed_circles
+        ind = self.individuals
+        p = self.competence_params()
+        self.circles = Circles(len(ind), p.K)
+        codes = ind["onet_code"].to_numpy() if "onet_code" in ind.columns else [None] * len(ind)
+        xs = ind["x_occ"].to_numpy(float); ys = ind["y_occ"].to_numpy(float)
+        ro = (ind["r_o_home"].to_numpy(float) if "r_o_home" in ind.columns
+              else np.full(len(ind), 0.27))
+        ten = (ind["tenure_years"].to_numpy(float) if "tenure_years" in ind.columns
+               else np.full(len(ind), 5.0))
+        edu = (ind["education_level"].to_numpy() if "education_level" in ind.columns
+               else np.full(len(ind), 0))
+        for i in range(len(ind)):
+            e = edu[i]
+            try:
+                e = int(float(e))
+            except (TypeError, ValueError):
+                e = 0
+            seed_circles(self.circles, i, codes[i], xs[i], ys[i], ro[i], ten[i], e, p)
+        self._active_key = np.full(len(ind), -1, dtype=np.int64)
+        st = ind["status"].to_numpy() if "status" in ind.columns else None
+        if st is not None:
+            for i in np.flatnonzero(st == "employed"):
+                if codes[i] is not None and not (isinstance(codes[i], float) and np.isnan(codes[i])):
+                    self._active_key[i] = self.circles.code(str(codes[i]))
+        self._write_competence_summary()
+
+    def _write_competence_summary(self):
+        summ = self.circles.summarize()
+        ind = self.individuals
+        for col in ("x_occ", "y_occ", "chi", "xi", "r_i"):
+            ind[col] = summ[col]
+        ind["R"] = summ["R"]
+
+    def set_active_occupation(self, idx, onet_code, x, y, r_o):
+        """Anropas vid tillträde: individen arbetar nu i onet_code, och den
+        cirkeln får exponering och skärpning i kommande månadssteg."""
+        if not hasattr(self, "circles"):
+            return
+        c = self.circles
+        k = c.code(str(onet_code))
+        if not (c.key[idx] == k).any():
+            c.add(idx, str(onet_code), float(x), float(y), float(r_o) ** 2, 0.0,
+                  rho2_home=float(r_o) ** 2)
+        self._active_key[idx] = k
+
+    def clear_active_occupation(self, idx):
+        if hasattr(self, "_active_key"):
+            self._active_key[idx] = -1
+
+    def evolve_competence(self, dt_years):
+        if not hasattr(self, "circles"):
+            return
+        self.circles.evolve(dt_years, self._active_key, self.competence_params())
+        self._write_competence_summary()
 
     def job_index(self):
         """job_id -> positionsindex. Uppslag via boolesk jämförelse över hela

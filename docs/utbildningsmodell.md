@@ -17,9 +17,9 @@ Två skilda saker, som den ursprungliga modellen blandade ihop.
 
 **Exponering för uppgiftsinnehåll.** Att gå en kurs är att tillägna sig en
 uppgiftsbunt utan att ha ett jobb. Effekten är av samma slag som
-arbetserfarenhet: individens historik uppdateras med kursens position, viktat
-med dess längd, och hennes (ξ̄, χ̄, R) flyttas därefter. Detta är
-**omskolning**.
+arbetserfarenhet: en cirkel läggs till individens samling, med kursens
+position, nivåns radie och massa lika med studietiden. Detta är
+**omskolning**. Se `individmodell.md`, avsnitt 2.
 
 **Höjd kvalifikationsnivå.** Att ta en examen höjer ℓ och öppnar jobb som
 kräver den. Det rör inte geometrin. Detta är **formell utbildning**.
@@ -247,8 +247,8 @@ Vad mekanismen medvetet inte innehåller: nivåer, förkunskaper, utbildningsutb
 per kommun, kostnader, avhopp.
 
 **Vad som ändras när individmodellen är byggd.** Den förenklade mekanismen
-flyttar i dag en fri punkt. När historiksummeringen finns (steg 1) blir
-omskolningen i stället en exponering: kursens position läggs till historiken
-med vikt lika med studietiden, och (ξ̄, χ̄, R) följer. Riktningen mot
-vakansernas tyngdpunkt behålls; effekten blir principiell i stället för en
-godtycklig andel av vägen. Formell utbildning tillkommer i steg 4.
+flyttade en fri punkt. Med kompetenscirklarna (steg 1) blir omskolningen en
+cirkel: kursens position, en bred radie, och massa lika med studietiden.
+Riktningen mot vakansernas tyngdpunkt behålls; effekten blir principiell i
+stället för en godtycklig andel av vägen. Formell utbildning tillkommer i
+steg 4.

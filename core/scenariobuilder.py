@@ -257,7 +257,7 @@ class ScenarioBuilder:
         import sqlite3
         import pandas as pd
         conn = sqlite3.connect(db_path)
-        df = pd.read_sql("SELECT onet_code, chi, xi, x_occ, y_occ, r_o, w_rel, pi_rel, geom_source FROM onet_occupation_space", conn)
+        df = pd.read_sql("SELECT * FROM onet_occupation_space", conn)
         conn.close()
         return df.set_index("onet_code")
 
@@ -451,7 +451,7 @@ class ScenarioBuilder:
     # 1. Ladda occupation space EN gång, spara som self.onet_space_df
     def load_onet_occupation_space_table(self, db_path="data/worm.sqlite3"):
         conn = sqlite3.connect(db_path)
-        df = pd.read_sql("SELECT onet_code, chi, xi, x_occ, y_occ, r_o, w_rel, pi_rel, geom_source FROM onet_occupation_space", conn)
+        df = pd.read_sql("SELECT * FROM onet_occupation_space", conn)
         conn.close()
         return df.set_index("onet_code")
 
@@ -480,7 +480,10 @@ class ScenarioBuilder:
 
     def get_geom_for_onet_codes(self, onet_codes):
         """x_occ, y_occ, r_o (+ chi, xi) för en lista koder; NaN om kod saknas."""
-        return self.onet_space_df.reindex(onet_codes)[["x_occ", "y_occ", "r_o", "chi", "xi", "geom_source", "w_rel", "pi_rel"]]
+        cols = ["x_occ", "y_occ", "r_o", "chi", "xi", "geom_source", "w_rel", "pi_rel"]
+        if "n_tasks" in self.onet_space_df.columns:
+            cols.append("n_tasks")
+        return self.onet_space_df.reindex(onet_codes)[cols]
 
     def generate_individuals(self, municipal_code, population, workforce_ratio, unemployment_rate, year=2024):
         """
@@ -570,12 +573,38 @@ class ScenarioBuilder:
         valid = ~np.isnan(x_vals) & ~np.isnan(y_vals)
         x_vals, y_vals, weights = x_vals[valid], y_vals[valid], weights[valid]
 
-        sigma_xy = 0.05   # kartesisk jitter i enhetsskivan
-        x_occ, y_occ = sample_centers_xy_jitter(x_vals, y_vals, weights, len(df), sigma_xy)
+        # Dra yrke per individ och BEHÅLL det: kompetenscirklarna byggs på det.
+        # Personlig avvikelse från yrkets centroid är r_o/sqrt(k), där k är
+        # antalet uppgifter i yrket (individen utför en delmängd av dem). Det
+        # ersätter den hårdkodade jittern 0.05 med en härledning som skalar med
+        # yrket. Se docs/individmodell.md, avsnitt 2.
+        power = 1.5
+        w = weights ** power; w = w / w.sum()
+        codes_arr = profile["onet_code"].values[valid]
+        ro_arr = geom["r_o"].values[valid]
+        ntask_arr = (geom["n_tasks"].values[valid] if "n_tasks" in geom.columns
+                     else np.full(valid.sum(), np.nan))
+        k_default = float(self.cfg_reader.config.get("simulation", {})
+                          .get("competence", {}).get("tasks_per_occupation_default", 20))
+        pick = rng.choice(len(x_vals), size=len(df), p=w)
+        n_tasks = np.where(np.isnan(ntask_arr[pick]), k_default, ntask_arr[pick])
+        jit = np.nan_to_num(ro_arr[pick], nan=0.27) / np.sqrt(np.maximum(n_tasks, 1.0))
+        x_occ = x_vals[pick] + rng.normal(0.0, jit)
+        y_occ = y_vals[pick] + rng.normal(0.0, jit)
+        rad = np.hypot(x_occ, y_occ); over = rad > 1.0
+        x_occ[over] /= rad[over]; y_occ[over] /= rad[over]
+        df["onet_code"] = codes_arr[pick]
+        df["last_onet_code"] = codes_arr[pick]      # för u_R mätt som CPS: yrke till yrke
+        df["r_o_home"] = np.nan_to_num(ro_arr[pick], nan=0.27)
         df["x_occ"] = x_occ
         df["y_occ"] = y_occ
         df["chi"] = np.hypot(x_occ, y_occ)                # för visualisering/kompatibilitet
         df["xi"]  = np.arctan2(y_occ, x_occ) % (2 * np.pi)
+
+        # Tenure i nuvarande yrke: ålder saknas, så den dras ur en fördelning.
+        ten_mean = float(self.cfg_reader.config.get("simulation", {})
+                         .get("competence", {}).get("initial_tenure_mean_years", 8.0))
+        df["tenure_years"] = rng.exponential(ten_mean, size=len(df))
 
         # ---- Reservationslön: rho * Π(egen position), i löneandelar ----
         # Π saknas (ingen koefficienttabell) -> w_res = 0, dvs. S = p*w - c*km.
@@ -586,12 +615,9 @@ class ScenarioBuilder:
         else:
             df["w_res"] = 0.0
 
-        # 8. r_i – erfarenhetsradie (geometrisk bredd, ersätter entropin H).
-        #    Färsk arbetare = punkt (0). Växer med faktiska yrkesbyten.
-        r_cfg = indiv_defaults.get('initial_r', indiv_defaults.get('initial_H', {}))
-        r_min = r_cfg.get('min', 0.0)
-        r_max_i = r_cfg.get('max', 0.0)
-        df['r_i'] = rng.uniform(r_min, r_max_i, size=len(df))
+        # r_i är härledd ur kompetenscirklarna (World.init_competence). Tills
+        # cirklarna byggts: 0, dvs. samma som en färsk arbetare med en cirkel.
+        df['r_i'] = 0.0
 
         # 9. Z (kompetensbredd/specialisering) – valfritt, kan läggas in här
         # df['Z'] = ... (exempelvis beroende av chi)

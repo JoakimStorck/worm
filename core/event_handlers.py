@@ -2,8 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from core.occupations.utils import (xi_add, chi_add, r_add, apply_capability_update,
-                                    effective_wage, search_once, vacant_job_indices,
+from core.occupations.utils import (effective_wage, search_once, vacant_job_indices,
                                     retraining_target)
 
 def _become_unemployed(world, idx, free_job=True):
@@ -25,6 +24,7 @@ def _become_unemployed(world, idx, free_job=True):
                 jobs.iat[pos, jobs.columns.get_loc('individual_id')] = np.nan
                 world.set_job_filled(held, False)
             ind.at[idx, 'job_id'] = np.nan
+    world.clear_active_occupation(idx)
     ind.at[idx, 'status'] = 'unemployed'
 
 
@@ -41,24 +41,6 @@ def _resolve_individual_index(world, holder):
         return holder
     hit = ind.index[ind['individual_id'] == holder]
     return hit[0] if len(hit) else None
-
-
-def _update_individual(world, idx, delta_chi=0.0, delta_xi=0.0, delta_r=0.0):
-    """Uppdaterar chi/xi/r_i, haller x_occ/y_occ synkade och tar ut bytarkostnad."""
-    ind = world.individuals
-    sim = world.cfg_reader.config.get('simulation', {})
-    kappa = sim.get('switch_cost_kappa', 0.05)
-    bfm = sim.get('breadth_from_move', 0.25)
-    r_now = ind.at[idx, 'r_i'] if 'r_i' in ind.columns else 0.0
-    chi, xi, r_i, x, y = apply_capability_update(
-        ind.at[idx, 'chi'], ind.at[idx, 'xi'], r_now,
-        delta_chi=delta_chi, delta_xi=delta_xi, delta_r=delta_r,
-        switch_cost_kappa=kappa, breadth_from_move=bfm)
-    ind.at[idx, 'chi'] = chi
-    ind.at[idx, 'xi'] = xi
-    ind.at[idx, 'r_i'] = r_i
-    ind.at[idx, 'x_occ'] = x
-    ind.at[idx, 'y_occ'] = y
 
 
 def handle_quit_job(event, world):
@@ -179,6 +161,14 @@ def handle_start_job(event, world):
 
     individuals.at[idx, 'status'] = 'employed'
     individuals.at[idx, 'job_id'] = job_id
+    # Kompetens: jobbets yrke blir den aktiva cirkeln. last_onet_code behövs
+    # för u_R mätt från senaste yrkes centroid, som CPS gör.
+    _jr = jobs.iloc[pos] if pos is not None else None
+    if _jr is not None and 'onet_code' in jobs.columns:
+        world.set_active_occupation(idx, _jr['onet_code'], _jr['x_occ'], _jr['y_occ'],
+                                    _jr.get('r_o', 0.27))
+        if 'last_onet_code' in individuals.columns:
+            individuals.at[idx, 'last_onet_code'] = _jr['onet_code']
     job_idx = (jobs.index[pos:pos + 1] if pos is not None
                else jobs.index[jobs['job_id'] == job_id])
     # Skriv kolumnvärdet, inte radindexet: batch-matchningen gör likadant.
@@ -199,6 +189,16 @@ def handle_start_job(event, world):
         extra['d_task'] = round(d_task, 4)
         if r_o and not np.isnan(r_o) and r_o > 0:
             extra['u_R'] = round(d_task / r_o, 4)
+        # u_R som CPS mäter det: från senaste yrkes centroid, normerat med
+        # KÄLLANS radie. Det är detta som ska jämföras med 1.03.
+        prev = (individuals.at[idx, 'last_onet_code']
+                if 'last_onet_code' in individuals.columns else None)
+        if prev is not None and not (isinstance(prev, float) and np.isnan(prev)):
+            g = world._geom_lookup(prev)
+            if g is not None and g.get('r_o', 0) > 0:
+                d_occ = float(np.hypot(g['x_occ'] - job_row['x_occ'], g['y_occ'] - job_row['y_occ']))
+                extra['u_R_occ'] = round(d_occ / float(g['r_o']), 4)
+                extra['from_onet'] = prev
     except (KeyError, TypeError, ValueError):
         pass
 
@@ -294,6 +294,10 @@ def handle_start_job_search(event, world):
         min_surplus=sim.get('min_surplus', 0.0),
         choice_scale=sim.get('choice_scale', 0.05),
         arrays=world.job_arrays(),
+        competitiveness=(
+            (lambda jx, jy, jro: world.circles.competitiveness(idx, jx, jy, jro,
+                                                               world.competence_params()))
+            if hasattr(world, 'circles') else None),
     )
 
     if job_pos is not None:
@@ -408,7 +412,7 @@ def handle_start_education(event, world):
         "time": float(event['time'] + duration),
         "agent_id": idx,
         "event_type": "end_education",
-        "params": {"x_to": x1, "y_to": y1, "move": move},
+        "params": {"x_to": x1, "y_to": y1, "move": move, "duration_days": duration},
     })
 
 
@@ -425,36 +429,35 @@ def handle_end_education(event, world):
 
     x1 = event['params'].get('x_to')
     y1 = event['params'].get('y_to')
-    if x1 is not None and y1 is not None:
-        chi = float(np.hypot(x1, y1))
-        xi = float(np.arctan2(y1, x1) % (2 * np.pi))
-        move = float(event['params'].get('move', 0.0))
-        ind.at[idx, 'x_occ'] = float(x1)
-        ind.at[idx, 'y_occ'] = float(y1)
-        ind.at[idx, 'chi'] = min(max(chi, 0.0), 1.0)
-        ind.at[idx, 'xi'] = xi
-        if 'r_i' in ind.columns:
-            # Omskolningen breddar erfarenhetsradien, som en förflyttning gör.
-            bfm = float(world.cfg_reader.config.get('simulation', {})
-                        .get('breadth_from_move', 0.25))
-            r_old = float(ind.at[idx, 'r_i'] or 0.0)
-            ind.at[idx, 'r_i'] = min(np.sqrt(r_old ** 2 + bfm * move ** 2), 1.0)
-        # Efter omskolning är kravet lägre: man söker sig till det nya området.
+    move = float(event['params'].get('move', 0.0))
+    if x1 is not None and y1 is not None and hasattr(world, 'circles'):
+        # Omskolningen är en cirkel: kursens position, en bred radie, och massa
+        # lika med studietiden. Se docs/utbildningsmodell.md.
+        sim = world.cfg_reader.config.get('simulation', {})
+        dur_days = float(event['params'].get('duration_days', 365.0))
+        p = world.competence_params()
+        rho2 = float(sim.get('competence', {}).get('retraining_radius2', 0.25))
+        world.circles.add(idx, f"RETRAIN:{event['time']:.0f}", float(x1), float(y1),
+                          rho2, p.a * dur_days / 365.25)
+        world._write_competence_summary()
         if 'w_res' in ind.columns:
-            rho = float(world.cfg_reader.config.get('simulation', {})
-                        .get('rho_reservation', 0.7))
+            rho = float(sim.get('rho_reservation', 0.7))
             ind.at[idx, 'w_res'] = rho * float(ind.at[idx, 'w_res'])
-
     _become_unemployed(world, idx)
     world.event_logger.log_event(world, event, extra={
         'event_detail': 'education_finished',
         'move': round(float(event['params'].get('move', 0.0)), 4)})
 
 def handle_start_internal_training(event, world):
+    """Intern träning = extra exponering på den aktiva cirkeln. Ett halvårs
+    massa läggs till direkt; skärpningen sköter månadssteget."""
     idx = event['agent_id']
-    delta_r = event['params'].get('delta_r', event['params'].get('delta_H', 0.0))
-    delta_chi = event['params'].get('delta_chi', 0.05)
-    _update_individual(world, idx, delta_chi=delta_chi, delta_r=delta_r)
+    if hasattr(world, 'circles') and world._active_key[idx] >= 0:
+        k = int(world._active_key[idx])
+        j = np.flatnonzero(world.circles.key[idx] == k)
+        if j.size:
+            extra_years = float(event['params'].get('training_years', 0.5))
+            world.circles.mass[idx, j[0]] += world.competence_params().a * extra_years
     world.event_logger.log_event(world, event, extra={'event_detail': 'start_internal_training'})
 
     if world.individuals.at[idx, 'status'] == 'employed' and np.random.rand() < 0.15:
@@ -479,7 +482,8 @@ def handle_internal_job_change(event, world):
     delta_xi = event['params'].get('delta_xi', 3)
     delta_r = event['params'].get('delta_r', event['params'].get('delta_H', 0.0))
     delta_chi = event['params'].get('delta_chi', 0.03)
-    _update_individual(world, idx, delta_xi=delta_xi, delta_chi=delta_chi, delta_r=delta_r)
+    # Positionsdelta utgått: kompetenscirklarna sköter detta (steg 2 ersätter
+    # händelsen med sökning inom egen arbetsgivare).
     world.event_logger.log_event(world, event, extra={'event_detail': 'internal_job_change'})
 
 def handle_career_break(event, world):
@@ -496,7 +500,7 @@ def handle_career_break(event, world):
     individuals.at[idx, 'status'] = 'career_break'
     delta_chi = -1 * event['params'].get('delta_chi', 0.05)
     delta_r = -1 * event['params'].get('delta_r', event['params'].get('delta_H', 0.0))
-    _update_individual(world, idx, delta_chi=delta_chi, delta_r=delta_r)
+    pass
     world.event_logger.log_event(world, event, extra={'event_detail': 'career_break'})
     break_duration = event['params'].get('duration', 0.5 * 365.25)
     end_event = {
@@ -548,6 +552,7 @@ def handle_new_month(event, world):
     year = event['params'].get('year')
     month = event['params'].get('month')
     n_posted = world.post_vacancies_batch(event['time'])
+    world.evolve_competence(1.0 / 12.0)
     stats = analyze_world(world)
 
     n_individuals = stats['total_individuals']

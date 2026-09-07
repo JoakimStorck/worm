@@ -40,6 +40,22 @@ simulation:
   # pendling (mätt 7.6 km vid 0.01 mot 12.1 vid 0.30) och kan kalibreras mot
   # faktiska pendlingsavstånd.
   choice_scale: 0.05
+  # --- Kompetenscirklar (docs/individmodell.md, avsnitt 2) ---
+  # Individen är en samling cirklar, en per erfarenhet. Exponering bygger
+  # massa, läckage gallrar och mättar, diffusion suddar spetsen, skärpning
+  # återställer den vid aktivitet. Ersätter initial_r, switch_cost_kappa och
+  # breadth_from_move.
+  competence:
+    exposure_rate: 1.0            # a: massa per år i aktivt yrke (enhet)
+    leak_half_life_years: 15      # lambda = ln2/15; mättnad a/lambda ~ 21.6 år
+    diffusion: 0.015              # D: spets halverad efter ~5 år utan användning
+    sharpen_months: 6             # tau_s: månader att återfå skärpa
+    m_ref_years: 2.0              # massa som ger nästan full konkurrenskraft
+    max_circles: 12
+    initial_tenure_mean_years: 8  # ålder saknas; tenure dras exponentiellt
+    tasks_per_occupation_default: 20   # k för r_o/sqrt(k) om n_tasks saknas
+    retraining_radius2: 0.25      # omskolningscirkelns radie^2 (bred)
+
   # --- Omskolning: riktad mot där arbete finns, inte ett fast delta_xi ---
   retraining_share: 0.5          # andel av vägen mot vakansernas tyngdpunkt
   retraining_target_k: 50        # antal bästa vakanser som bestämmer riktningen
@@ -54,8 +70,6 @@ simulation:
   job_destruction_rate: 0.10   # andel av positionerna som upphör per år
   vacancy_fill_rate: 0.25      # andel av arbetsgivarens underskott som postas per månad
   employer_growth_rate: 0.0    # måltalets tillväxt per år (0 = stationärt)
-  switch_cost_kappa: 0.05   # djupkostnad per radian vid riktningsbyte
-  breadth_from_move: 0.25   # hur mycket förflyttning breddar erfarenhetsradien
 
   # Samla ALLA event-tider på samma ställe – alla tider med enhet!
   event_timings:

@@ -69,7 +69,7 @@ def collect(run_dir):
     path = os.path.join(run_dir, "eventlog.csv")
     if not os.path.isfile(path):
         raise SystemExit(f"Saknar {path}")
-    uR, d_abs = [], []
+    uR, uR_occ, d_abs = [], [], []
     for line in open(path, "r", encoding="utf-8", errors="replace"):
         if "u_R" not in line and "d_task" not in line:
             continue
@@ -77,12 +77,19 @@ def collect(run_dir):
         if rec is None:
             continue
         try:
+            if "u_R_occ" in rec:
+                uR_occ.append(float(rec["u_R_occ"]))
             if "u_R" in rec:
                 uR.append(float(rec["u_R"]))
             if "d_task" in rec:
                 d_abs.append(float(rec["d_task"]))
         except ValueError:
             continue
+    # u_R_occ är mätt som CPS: yrke till yrke, normerat med källans radie.
+    # Finns den används den; annars faller vi tillbaka på individpositionen.
+    if len(uR_occ) >= 0.5 * max(len(uR), 1) and uR_occ:
+        print("(u_R mätt från senaste yrkes centroid, som CPS)\n")
+        return np.array(uR_occ), np.array(d_abs)
     return np.array(uR), np.array(d_abs)
 
 
