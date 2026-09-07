@@ -1,6 +1,8 @@
 # core/scenario_runner.py
 
 import os
+import numpy as np
+import json
 import sys
 import sqlite3
 import yaml
@@ -30,6 +32,45 @@ def create_run_output_dir(scenario_name):
     outdir = os.path.join("output", f"run_{run_id}")
     os.makedirs(outdir, exist_ok=True)
     return outdir, run_id
+
+
+def _git_commit():
+    """Commit som körningen gjordes på. Utan den går utfall inte att koppla
+    till kod, och en samlad tabell blandar versioner utan att det syns."""
+    import subprocess
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=os.path.dirname(os.path.abspath(__file__)),
+            stderr=subprocess.DEVNULL, text=True).strip()
+    except Exception:
+        return "unknown"
+
+
+def _git_dirty():
+    import subprocess
+    try:
+        out = subprocess.check_output(
+            ["git", "status", "--porcelain"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            stderr=subprocess.DEVNULL, text=True)
+        return bool(out.strip())
+    except Exception:
+        return False
+
+
+def _resolve_seed(config):
+    """Frö ur scenariot, miljövariabeln WORM_SEED, eller slumpat.
+
+    Ett slumpat frö SPARAS, så att körningen kan upprepas i efterhand."""
+    env = os.environ.get("WORM_SEED")
+    if env:
+        return int(env)
+    s = config.get("seed") or config.get("simulation", {}).get("seed")
+    if s is not None:
+        return int(s)
+    import random
+    return random.randrange(2 ** 31)
+
 
 def run_and_log_scenario(config_path):
     """
@@ -63,11 +104,35 @@ def run_and_log_scenario(config_path):
         outdir, run_id = create_run_output_dir(scenario_name)
 
         # --- 2. Spara metadata för run ---
+        # Härkomst i maskinläsbar form. Utan den blandar en samlad tabell
+        # körningar från olika kodversioner, och en regression mäter
+        # kodhistorik i stället för det den ska mäta. Fröet gör körningen
+        # upprepbar och gör spridning över frön mätbar.
+        seed = _resolve_seed(config)
+        np.random.seed(seed)
+        meta = {
+            "run_id": run_id,
+            "scenario": scenario_name,
+            "scenario_file": os.path.basename(config_path),
+            "seed": seed,
+            "git_commit": _git_commit(),
+            "git_dirty": _git_dirty(),
+            "started": datetime.datetime.now().isoformat(timespec="seconds"),
+            "municipalities": config.get("municipalities"),
+            "n_years": config.get("n_years") or config.get("simulation", {}).get("n_years"),
+            "simulation": {k: v for k, v in config.get("simulation", {}).items()
+                           if not isinstance(v, (dict, list))},
+        }
+        with open(os.path.join(outdir, "run_meta.json"), "w", encoding="utf-8") as f:
+            json.dump(meta, f, indent=2, ensure_ascii=False)
         with open(os.path.join(outdir, "metadata.txt"), "w") as f:
             f.write(f"Run ID: {run_id}\n")
             f.write(f"Scenario: {scenario_name}\n")
-            f.write(f"Timestamp: {run_id}\n")
-            f.write(f"Config: {config}\n")
+            f.write(f"Seed: {seed}\n")
+            f.write(f"Commit: {meta['git_commit']}"
+                    f"{' (ocommittade ändringar)' if meta['git_dirty'] else ''}\n")
+        print(f"[RUN] {run_id}  seed={seed}  commit={meta['git_commit'][:8]}"
+              f"{'+dirty' if meta['git_dirty'] else ''}")
 
         # --- 3. Generera data ---
         individuals, jobs, employers, events = builder.generate()

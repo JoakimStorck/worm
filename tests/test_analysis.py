@@ -107,3 +107,32 @@ def test_scripts_agree_on_the_same_numbers(tmp_path):
     assert t["summary"]["median_u_R"] == pytest.approx(
         float(cps["u_R_occ"].median()), abs=1e-6)
     assert t["summary"]["n_cps_sample"] == len(cps)
+
+
+def test_summary_carries_provenance(tmp_path):
+    """REGRESSION i metod: utan härkomst blandar en samlad tabell körningar
+    från olika kodversioner, och en jämförelse mäter kodhistorik i stället
+    för skillnader mellan scenarier. Tjugo körningar samlades så en gång."""
+    import json
+    run, _, _ = _write_run(tmp_path)
+    (pd.Series(dtype=float))  # noqa
+    with open(os.path.join(run, "run_meta.json"), "w", encoding="utf-8") as f:
+        json.dump({"run_id": "run_x", "scenario": "mora", "seed": 4711,
+                   "git_commit": "abcdef1234567890", "git_dirty": False,
+                   "municipalities": ["2062"],
+                   "simulation": {"sigma_gamma": 0.875, "choice_scale": 0.05}}, f)
+    row = summary_row(run)
+    assert row["scenario"] == "mora"
+    assert row["seed"] == 4711
+    assert row["commit"] == "abcdef12"
+    assert row["dirty"] is False
+    assert row["municipalities"] == "2062"
+    assert row["p_sigma_gamma"] == 0.875
+
+
+def test_summary_without_provenance_still_works(tmp_path):
+    """Äldre körningar saknar run_meta.json och ska inte falla."""
+    run, _, _ = _write_run(tmp_path)
+    row = summary_row(run)
+    assert "commit" not in row
+    assert row["n_transitions"] > 0

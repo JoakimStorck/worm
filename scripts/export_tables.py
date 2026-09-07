@@ -44,6 +44,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("runs", nargs="*")
     ap.add_argument("--all", action="store_true", help="alla körningar under output/")
+    ap.add_argument("--since", default=None,
+                    help="ta bara med körningar från denna commit")
     ap.add_argument("--combined", default=None,
                     help="skriv en samlad summary över körningarna hit")
     a = ap.parse_args()
@@ -77,9 +79,33 @@ def main():
                   f"   residual {s.get('identity_residual_max', 0):.0f}")
 
     if a.combined and rows:
+        df = pd.DataFrame(rows)
+        if a.since:
+            before = len(df)
+            df = df[df.get("commit", pd.Series(dtype=str)) == a.since[:8]]
+            print(f"\nFiltrerat på commit {a.since[:8]}: {len(df)} av {before} körningar")
         path = a.combined if os.path.isabs(a.combined) else os.path.join(ROOT, a.combined)
-        pd.DataFrame(rows).to_csv(path, index=False)
-        print(f"\nSamlad: {path}  ({len(rows)} körningar)")
+        df.to_csv(path, index=False)
+        print(f"\nSamlad: {path}  ({len(df)} körningar)")
+
+        # Blandade kodversioner gör en jämförelse meningslös: den mäter då
+        # kodhistorik snarare än skillnader mellan scenarier.
+        if "commit" in df.columns:
+            commits = df["commit"].dropna().unique()
+            if len(commits) > 1:
+                print(f"\nVARNING: körningarna kommer från {len(commits)} olika "
+                      f"kodversioner ({', '.join(map(str, commits[:5]))}"
+                      f"{' ...' if len(commits) > 5 else ''}).")
+                print("Jämför bara körningar från samma commit, annars mäts kodhistorik.")
+                print("Använd --since <commit> för att filtrera.")
+            if df.get("dirty", pd.Series(dtype=bool)).any():
+                n = int(df["dirty"].sum())
+                print(f"VARNING: {n} körning(ar) gjordes med ocommittade ändringar "
+                      f"och går inte att återskapa.")
+        missing = int(df["commit"].isna().sum()) if "commit" in df.columns else len(df)
+        if missing:
+            print(f"({missing} körning(ar) saknar härkomst, gjorda före run_meta.json "
+                  f"infördes -- de bör arkiveras.)")
 
 
 if __name__ == "__main__":

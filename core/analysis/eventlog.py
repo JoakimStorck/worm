@@ -155,6 +155,29 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
 
     row = {"run": os.path.basename(run_dir.rstrip("/"))}
 
+    # Härkomst: utan den blandar en samlad tabell körningar från olika
+    # kodversioner, och en jämförelse mäter kodhistorik.
+    mp = os.path.join(run_dir, "run_meta.json")
+    if os.path.isfile(mp):
+        import json
+        try:
+            with open(mp, encoding="utf-8") as f:
+                meta = json.load(f)
+            row.update({
+                "scenario": meta.get("scenario"),
+                "seed": meta.get("seed"),
+                "commit": (meta.get("git_commit") or "")[:8],
+                "dirty": bool(meta.get("git_dirty")),
+                "municipalities": ",".join(map(str, meta.get("municipalities") or [])),
+            })
+            sim = meta.get("simulation") or {}
+            for k in ("sigma_gamma", "commute_cost_per_km", "choice_scale",
+                      "job_destruction_rate", "rho_reservation"):
+                if k in sim:
+                    row[f"p_{k}"] = sim[k]
+        except Exception:
+            pass
+
     if not ts.empty:
         last = ts.iloc[-1]
         row.update({
