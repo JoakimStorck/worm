@@ -3,29 +3,69 @@
 Detta är ett utkast, inte en specifikation. Det beskriver hur ett
 utbildningssystem med nivåer, förkunskaper och geografiskt utbud skulle kunna
 integreras, vilka data som krävs, och vilka avvägningar som måste avgöras
-först. Ingenting av detta är byggt.
+först. Det bygger på individmodellen i `individmodell.md`, som ska läsas
+först.
 
 En förenklad mekanism, som bygger enbart på befintliga delar, beskrivs sist och
 är införd.
 
 ---
 
-## Varför frågan är svår
+## Vad utbildning gör
 
-Geometrin är konstruerad **enbart ur uppgiftsinnehåll** — inbäddningar av
-O\*NET:s task statements. Utbildningskrav ingår inte i konstruktionen. Att de
-ändå organiseras systematiskt av (χ, ξ) är en *oberoende validering* i papper 1,
-och det är den valideringens styrka att de aldrig såg konstruktionen.
+Två skilda saker, som den ursprungliga modellen blandade ihop.
 
-Det innebär att geometrin **förutsäger** utbildningskrav utan att innehålla
-dem. Sambandet är empiriskt, inte en identitet — och ett starkt samband kan
-lämna betydande variation kvar. Den variationen är precis vad en
-utbildningsdimension skulle kunna bära: två yrken kan ligga på samma punkt i
-planet men kräva olika formell behörighet, vilket är en verklig restriktion som
-geometrin varken innehåller eller förutsäger.
+**Exponering för uppgiftsinnehåll.** Att gå en kurs är att tillägna sig en
+uppgiftsbunt utan att ha ett jobb. Effekten är av samma slag som
+arbetserfarenhet: individens historik uppdateras med kursens position, viktat
+med dess längd, och hennes (ξ̄, χ̄, R) flyttas därefter. Detta är
+**omskolning**.
 
-Invändningen är därför inte principiell utan empirisk, och den går att avgöra
-innan något byggs:
+**Höjd kvalifikationsnivå.** Att ta en examen höjer ℓ och öppnar jobb som
+kräver den. Det rör inte geometrin. Detta är **formell utbildning**.
+
+En yrkesutbildning gör båda. En akademisk examen gör mest det andra. En intern
+kurs gör mest det första. Distinktionen är mätbar i data.
+
+Utbildning ger **ingen egen löneeffekt**. Nivån öppnar jobb; att de betalar
+mer är prisfältets sak. Omskolning flyttar mot bättre betalda jobb; att de
+betalar mer är också fältets sak. Detta tar bort en parameter och gör
+grindvaktsfrågan nedan skarpare.
+
+---
+
+## Vad χ är och inte är
+
+Den ursprungliga modellen behandlade radiell förflyttning som fördjupning och
+antydde att djup är nivå. Det är fel, och papper 1 visar hur fel.
+
+χ mäter **hur skarpt orienterat uppgiftsinnehållet är mot sin riktning** — en
+strukturell egenskap hos arbetet, inte ett mått på hur krävande det är.
+Diskare har χ = 0,54 och ligger längre ut än servitörer på 0,49. Advokater
+har 0,39 och ligger närmare origo än kemiingenjörer på 0,52.
+
+Inom sektorer förutsäger χ högre utbildningskrav i norr (β = +3,55) och
+nordost (+8,45) men **lägre** i väster (−2,48) och sydväst (−4,93). Att öka
+χ innebär högre krav i norr och lägre i väster. χ och nivå är alltså inte
+samma sak, och sambandet mellan dem byter tecken med riktningen.
+
+Konsekvens för modellen: **utbildning ska inte höja χ.** Omskolning flyttar
+individens position mot där jobben finns, vilket kan öka eller minska χ̄
+beroende på var de ligger. Formell utbildning rör inte χ alls. Och
+"specialisering" i betydelsen skärpt profil sker genom att *arbeta*
+koncentrerat, inte genom att studera — diskaren blir inte diskare av en kurs.
+
+---
+
+## Varför nivån inte är överflödig
+
+Geometrin är konstruerad **enbart ur uppgiftsinnehåll**. Utbildningskrav ingår
+inte. Att de ändå organiseras systematiskt av (χ, ξ) är en oberoende
+validering i papper 1.
+
+Det innebär att geometrin *förutsäger* krav utan att innehålla dem. Men
+sambandet byter tecken med riktningen, så residualen efter (χ, ξ) lär vara
+både stor och systematisk. Frågan är empirisk:
 
 > **Grindvaktsfråga.** Hur mycket av variationen i kravnivå förklaras av
 > (χ, ξ), och hur mycket återstår?
@@ -34,16 +74,30 @@ innan något byggs:
 > samtliga yrken. Residualvariansens storlek och om den är systematisk
 > (klustrad på yrkesfamilj, licensierade yrken, offentlig sektor).
 >
-> *Slutsats:* Är residualen liten tillför en nivådimension lite utöver
-> geometrin. Är den stor och systematisk finns något eget att modellera, och
-> mönstret i residualen visar vad.
+> *Slutsats:* Är residualen liten tillför nivån lite. Är den stor och
+> systematisk — vilket papper 1:s sektortabell antyder — finns något eget att
+> modellera, och mönstret visar vad.
 
 Frågan kostar en eftermiddag och kräver bara O\*NET-data som redan hämtas. Den
-bör besvaras först, av samma skäl som fråga 1 i frågeställningarna besvaras
-före simuleringsarbetet.
+ska besvaras innan steg 4 i individmodellens byggordning.
 
-Oavsett utfall är två delar av förslaget genuina tillskott, eftersom de inte är
-nivådimensionen i sig utan restriktioner ovanpå den.
+---
+
+## Varför nivån behövs från *fel* ände
+
+Argumentet för nivån brukar vara att spärra svåra jobb. Diskaren visar att den
+behövs lika mycket för att **öppna enkla**.
+
+Den geometriska passformen är symmetrisk: en advokat är lika långt från
+diskaren som diskaren från advokaten. Men kraven är inte symmetriska.
+Advokaten kan diska; diskaren kan inte försvara i rätten. Utan en
+kravdimension låtsas kärnan att diskning ligger utom räckhåll för alla som
+arbetat med något annat.
+
+Svaret är att passformens vikt ska följa kravet: irrelevant på zon 1,
+avgörande på zon 5. Vem som helst kan få ett zon 1-jobb; frågan blir vem som
+vill, och det avgörs av lönekravet. Det ger en mekanism för nedåtgående
+rörlighet som geometrin ensam saknar.
 
 ---
 
@@ -53,31 +107,29 @@ nivådimensionen i sig utan restriktioner ovanpå den.
 
 Att en nivå förutsätter den föregående är en **diskret restriktion som
 geometrin inte innehåller**. Två yrken kan ligga nära varandra i planet medan
-det ena kräver en examen som det andra inte ger. Avståndet i planet säger
-ingenting om att vägen dit går via tre års studier.
-
-Detta gör omställningskostnaden icke-monoton i avstånd: ett kort hopp kan vara
-dyrare än ett långt, om det korta korsar en nivågräns. Det är ett verkligt
-tillskott till modellen och ett som går att pröva.
+det ena kräver en examen som det andra inte ger. Omställningskostnaden blir
+icke-monoton i avstånd: ett kort hopp kan vara dyrare än ett långt om det
+korsar en nivågräns.
 
 ### Utbildningens geografi
 
-Detta är den starkaste idén. Om omskolning kräver att man pendlar eller flyttar
-dit utbildningen ges, får glesbygdsarbetaren en **dubbel nackdel**: tunt
+Den starkaste idén. Om omskolning kräver att man pendlar eller flyttar dit
+utbildningen ges, får glesbygdsarbetaren en **dubbel nackdel**: tunt
 uppgiftsrum och ingen lokal väg ut ur det.
 
-Mekanismen finns inte i litteraturen om thick labor markets, den är mätbar, och
-den knyter ihop modellens två anpassningskanaler — pendling och omskolning —
-som i dag är oberoende. En kommun kan vara tunn i uppgiftsrummet men ha ett
-lärosäte, eller tät men sakna utbildningsutbud. Korsningen av de två är ny.
+Mekanismen finns inte i litteraturen om thick labor markets, den är mätbar,
+och den knyter ihop modellens två anpassningskanaler — pendling och omskolning.
+En kommun kan vara tunn i uppgiftsrummet men ha ett lärosäte, eller tät men
+sakna utbildningsutbud. Korsningen av de två är ny.
 
-### Vad som är osäkert
+### Den mjuka spärren som tunnhetsmekanism
 
-Att jobb kräver en viss nivå, och att individer har en nivå, i sig. Värdet av
-det beror på grindvaktsfrågans svar: förklaras kravnivån väl av (χ, ξ) tillför
-dimensionen mest brus, medan en stor och systematisk residual gör den
-meningsfull. Nivåerna är däremot en förutsättning för de två tillskotten ovan,
-som båda kräver att nivåer finns för att kunna uttryckas.
+Individmodellen gör nivåspärren mjuk och låter dess lutning mjukna med lågt
+lokalt marknadstryck. Arbetsgivare sänker krav när sökande är få (Modestino,
+Shoag & Ballance). Det ger en motkraft i tunna marknader: brist på
+kvalificerade gör att kraven mjuknar lokalt, vilket delvis kompenserar. Om det
+stämmer är det en av mekanismerna bakom att glesbygden fungerar bättre än en
+naiv modell förutsäger.
 
 ---
 
@@ -91,14 +143,9 @@ inläsning, inte en insamling.
 
 **Svensk motsvarighet saknas som yrkesattribut.** SCB har utbildningsnivå per
 person (SUN) och yrke per person i yrkesregistret. Kravnivån per SSYK måste
-därför **skattas** som den observerade fördelningen av utbildningsnivå bland
-dem som har yrket.
-
-Det är sämre än ett normativt krav men i en mening bättre: det ger en
-fördelning i stället för ett tröskelvärde, och kravet blir en sannolikhet
-snarare än ett ja eller nej. En arbetare under den vanligaste nivån kan få
-jobbet, bara mer sällan. Det passar dessutom modellens övriga logik, där
-anställning redan avgörs av en sannolikhet.
+**skattas** som den observerade fördelningen av utbildningsnivå bland dem som
+har yrket. Det ger en fördelning i stället för ett tröskelvärde — kravet blir
+en sannolikhet, vilket passar den mjuka spärren.
 
 ### Utbildningsutbud per kommun
 
@@ -106,47 +153,41 @@ UHR och Skolverket har programutbud per lärosäte och ort. Myndigheten för
 yrkeshögskolan har YH-utbildningar per kommun. Båda är öppna.
 
 Det som behövs är en tabell `education_supply(municipal_code, level, field,
-seats)` där `field` är kopplad till en position i uppgiftsrummet — vilket är
-samma projektionsproblem som papper 4:s huvudspår löser för yrken. Utbildningar
-kan positioneras med samma metod som yrken, ur kursbeskrivningar, och i samma
-frysta bas. Det är värt att notera att en sådan projektion vore ett resultat i
-sig: den placerar utbildningsutbudet och arbetsmarknaden i samma rum och gör
-avståndet mellan dem mätbart.
+seats)` där `field` är kopplad till en position i uppgiftsrummet — samma
+projektionsproblem som papper 4:s huvudspår löser för yrken. Utbildningar kan
+positioneras med samma metod, ur kursbeskrivningar, i samma frysta bas. En
+sådan projektion vore ett resultat i sig: den placerar utbildningsutbudet och
+arbetsmarknaden i samma rum och gör avståndet mellan dem mätbart.
 
 ### Individens nivå
 
-Finns redan. `education_level` sätts per individ ur SCB:s utbildningsnivåer
-(tabellen `education_level_municipality`, koderna 1–7). Fältet **används dock
-ingenstans** i matchning eller dynamik. Det bör antingen kopplas in eller tas
-bort; att bära ett fält som inte gör något är en felkälla när resultat ska
-tolkas.
+Finns redan: `education_level` ur SCB:s utbildningsnivåer, koderna 1–7.
+Fältet **används ingenstans** i dag. Det kopplas in i steg 4 i
+individmodellens byggordning. Nyckeln SUN ↔ Job Zone är öppen.
 
 ---
 
-## Designfrågor som måste avgöras
+## Designfrågor
 
-**Hur förhåller sig nivå till χ?** Antingen är nivån en oberoende restriktion
-ovanpå geometrin, eller så är den en observerbar konsekvens av χ. Det första
-riskerar dubbelräkning, det andra gör nivån överflödig. En medelväg: nivån
-begränsar bara *rörelser* (vilka omskolningar som är möjliga), inte
-matchningen, som får fortsätta styras av geometrin. Då tillför nivån något utan
-att konkurrera med χ.
+**Hård eller mjuk spärr?** Mjuk — avgjort. En straffaktor per nivå under
+kravet, med lutning som beror på marknadstryck.
 
-**Ska utbildning kunna misslyckas?** Nej — beslutat. Onödig detaljeringsgrad.
+**Ska utbildning kunna misslyckas?** Nej — avgjort. Onödig detaljeringsgrad.
 
-**Kostar en nivåhöjning tid eller pengar?** Tid finns redan i modellen
-(varaktighet). Pengar skulle kräva en förmögenhetsdimension som modellen inte
-har, och som skulle behöva införas konsekvent även på andra ställen.
+**Kostar en nivåhöjning tid eller pengar?** Tid finns i modellen. Pengar
+skulle kräva en förmögenhetsdimension som inte finns.
 
-**Flytt kontra pendling till studier.** Modellen har i dag ingen flytt: individens
-bostad är fast. Att införa flytt är en stor förändring som påverkar
-pendlingsstatistiken, kommuntillhörigheten och populationens fördelning. En
-mindre variant är att låta utbildning pendlas till med en högre
-avståndskostnad än arbete, vilket fångar merparten av effekten utan att
-införa migration.
+**Flytt kontra pendling till studier.** Modellen har ingen flytt. En mindre
+variant är att låta utbildning pendlas till med högre avståndskostnad än
+arbete, vilket fångar merparten utan att införa migration.
 
-**Vad händer med den som studerar och blir erbjuden jobb?** Avgjort i den
-förenklade mekanismen nedan: utbildning utesluter anställning under studietiden.
+**Vad händer med den som studerar och blir erbjuden jobb?** Avgjort:
+utbildning utesluter anställning under studietiden. Den som börjar studera
+släpper sitt utlovade jobb tillbaka till marknaden.
+
+**Ska formell utbildning också exponera?** Troligen ja, med en position som
+motsvarar utbildningens innehåll. En läkarexamen är inte bara en nivå utan
+också tre års exponering för medicinskt innehåll. Öppet hur vikten sätts.
 
 ---
 
@@ -179,11 +220,8 @@ skiljer sig i den ena dimensionen men inte den andra.
 ## Vad som måste loggas redan nu
 
 Om systemet ska införas senare måste körningar som görs dessförinnan vara
-jämförbara. Simuleringen bör därför redan i dag logga, för varje utbildning:
-individens position före och efter, förflyttningens längd, varaktigheten, och
-kommunen. Utan det går vinterns körningar inte att ställa mot de senare.
-
-Detta är infört i den förenklade mekanismen.
+jämförbara. Simuleringen loggar därför för varje utbildning: position före och
+efter, förflyttningens längd, varaktigheten, och kommunen. Detta är infört.
 
 ---
 
@@ -192,25 +230,25 @@ Detta är infört i den förenklade mekanismen.
 Bygger enbart på befintliga delar: geometrin, vakanserna och pendlingskostnaden.
 Ingen ny data, inga nivåer, ingen förkunskapskedja.
 
-**Riktad omorientering.** Den som ger upp på sin position riktar sin omskolning
-mot där de nåbara vakanserna faktiskt finns: målpunkten är en
+**Riktad omskolning.** Den som ger upp på sin position riktar sin omskolning
+mot där de nåbara, välbetalda vakanserna finns: målpunkten är en
 överskottsviktad tyngdpunkt av tillgängliga positioner, och arbetaren flyttar
-en bestämd andel av vägen dit.
+en bestämd andel av vägen dit. I en tät kommun ligger tyngdpunkten nära; i en
+gles ligger den långt bort, eller saknas — och då sker ingen omskolning.
 
-Detta ger tunnhetsmekanismen utan ny data. I en tät kommun ligger tyngdpunkten
-nära, omskolningen blir kort. I en gles ligger den långt bort, eller saknas
-helt — och då sker ingen omskolning, vilket i sig är resultatet.
+**Varaktighet efter avstånd.** Omställningstiden blir ett utfall i stället för
+en konstant, och längre i tunna marknader.
 
-**Varaktighet efter avstånd.** Att flytta en kort sträcka i planet är en kurs;
-att flytta långt är en utbildning. Omställningstiden blir därmed ett utfall i
-stället för en konstant, och längre i tunna marknader.
+**Kompetensen uppdateras vid slutet**, inte vid inskrivningen.
 
-**Kompetensen uppdateras vid slutet**, inte vid inskrivningen. Under studietiden
-står arbetaren kvar på sin gamla position.
-
-**Utbildning utesluter anställning.** Den som börjar studera släpper sitt
-utlovade jobb tillbaka till marknaden.
+**Utbildning utesluter anställning.**
 
 Vad mekanismen medvetet inte innehåller: nivåer, förkunskaper, utbildningsutbud
-per kommun, kostnader, avhopp. Allt detta hör till designen ovan och kräver
-data som ännu inte finns.
+per kommun, kostnader, avhopp.
+
+**Vad som ändras när individmodellen är byggd.** Den förenklade mekanismen
+flyttar i dag en fri punkt. När historiksummeringen finns (steg 1) blir
+omskolningen i stället en exponering: kursens position läggs till historiken
+med vikt lika med studietiden, och (ξ̄, χ̄, R) följer. Riktningen mot
+vakansernas tyngdpunkt behålls; effekten blir principiell i stället för en
+godtycklig andel av vägen. Formell utbildning tillkommer i steg 4.
