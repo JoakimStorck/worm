@@ -446,3 +446,38 @@ def test_bargaining_closes_the_floor_exploit(individuals, jobs):
         far_bargain += (pos is not None and pos > 0)
     assert far_no_bargain > 100, "utan förhandling ska golvet exploateras (annars testar vi inget)"
     assert far_bargain == 0, f"förhandlingen stänger inte golvet: {far_bargain} avlägsna val"
+
+
+def test_start_job_uses_negotiated_wage_as_reservation():
+    """REGRESSION: förhandlingen påverkade valet men inte lönen efter
+    anställning -- reservationslönen sattes till effective_wage, alltså
+    fältlönen. Följden var att w_field och w_neg aldrig loggades och att
+    lönespridningen inte gick att mäta."""
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from conftest import make_world
+    from core.event_handlers import handle_start_job
+
+    w = make_world(n_employers=3, size=2)
+    w.individuals = pd.DataFrame([{
+        "individual_id": "i0", "status": "unemployed", "job_id": None,
+        "w_res": 0.30, "w_neg": np.nan, "chi": 0.3, "xi": 0.3, "r_i": 0.0,
+        "x_occ": 0.3, "y_occ": 0.1, "x": 0.0, "y": 0.0,
+        "onet_code": "A", "last_onet_code": "A", "r_o_home": 0.27,
+        "tenure_years": 3.0, "education_level": 3, "municipal_code": "2062",
+        "propensity_start_education": 0.0, "propensity_internal_training": 0.0,
+        "propensity_quit_job": 0.0, "propensity_internal_job_change": 0.0,
+    }]).astype({"job_id": object})
+    w.init_competence()
+    w.jobs.loc[w.jobs.index[2], "wage"] = 1.20
+    jid = w.jobs.at[2, "job_id"]
+
+    try:
+        handle_start_job({"time": 1.0, "agent_id": 0, "event_type": "start_job",
+                          "params": {"job_id": jid, "w_neg": 0.72, "q_hire": 0.9}}, w)
+    except KeyError:
+        pass
+    logged = [e[1] for e in w.event_logger.events if e[0] == "start_job"][-1]
+    assert logged["w_field"] == pytest.approx(1.20)
+    assert logged["w_neg"] == pytest.approx(0.72)
+    assert w.individuals.at[0, "w_res"] == pytest.approx(0.72), "fältlön i stället för förhandlad"

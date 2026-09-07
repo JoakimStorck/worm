@@ -209,12 +209,30 @@ def handle_start_job(event, world):
     except (KeyError, TypeError, ValueError):
         pass
 
-    # Reservationslön = faktisk lön i det nya jobbet: ett byte måste förbättra.
+    # Reservationslön = FÖRHANDLAD lön i det nya jobbet: ett byte måste
+    # förbättra. Den förhandlade lönen följer med i händelsens parametrar från
+    # matchningen; saknas den (äldre händelser) används fältlönen.
+    # Båda loggas så att gapet mellan fält och förhandling är synligt.
     if 'w_res' in individuals.columns and 'wage' in jobs.columns:
-        sg = world.cfg_reader.config.get('simulation', {}).get('sigma_gamma', 1.0)
-        w_eff = effective_wage(individuals.loc[idx], job_row, sigma_gamma=sg)
+        w_field = float(job_row.get('wage', 1.0))
+        w_par = event['params'].get('w_neg')
+        try:
+            w_eff = float(w_par)
+            if not np.isfinite(w_eff):
+                w_eff = w_field
+        except (TypeError, ValueError):
+            w_eff = w_field
         individuals.at[idx, 'w_res'] = w_eff
-        extra['wage_eff'] = round(w_eff, 4)
+        if 'w_neg' in individuals.columns:
+            individuals.at[idx, 'w_neg'] = w_eff
+        extra['w_field'] = round(w_field, 4)
+        extra['w_neg'] = round(w_eff, 4)
+        q_par = event['params'].get('q_hire')
+        if q_par is not None:
+            try:
+                extra['q_hire'] = round(float(q_par), 4)
+            except (TypeError, ValueError):
+                pass
     world.event_logger.log_event(world, event, extra=extra)
     n_employees = job_row['employer_size']
     prop_training = individuals.at[idx, 'propensity_internal_training']
