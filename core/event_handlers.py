@@ -325,7 +325,8 @@ def handle_start_job_search(event, world):
                                                                world.competence_params()))
             if hasattr(world, 'circles') else None),
         bargaining=({"beta": float(brg.get("beta", 0.5)),
-                     "kappa": float(brg.get("kappa", 0.10))}
+                     "kappa": float(brg.get("kappa", 0.10)),
+                     "labour_share": float(brg.get("labour_share", 0.57))}
                     if brg.get("enabled", True) else None),
     )
 

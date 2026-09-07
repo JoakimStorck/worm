@@ -47,7 +47,7 @@ def _fmt(v, nd=2):
     return "—" if v is None or (isinstance(v, float) and not np.isfinite(v)) else f"{v:.{nd}f}"
 
 
-def write_report(df, grouped, out, run_dirs, figdir=None):
+def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
     lines = []
     A = lines.append
     A("# Analys av WORM-körningar\n")
@@ -111,18 +111,51 @@ def write_report(df, grouped, out, run_dirs, figdir=None):
         A(f"| {key} | {_fmt(float(x.median()))} | {spread} | {ref} | {src} |")
     A("")
 
-    if len(df) > 2 and "coverage_0.25" in df.columns:
+    # Korrelationen mellan täckning och utfall är bara meningsfull ÖVER
+    # scenarier. Med flera frön av samma scenario varierar täckningen bara med
+    # slumpen, och en korrelation mäter då brus. En körning gav -0.37 och -0.60
+    # på sex frön av samma kommun, vilket såg ut som stöd för hypotesen.
+    n_scen = df["scenario"].nunique() if "scenario" in df.columns else 1
+    if "coverage_0.25" in df.columns:
         A("## Täckning mot utfall\n")
-        A("Hypotesen förutsäger negativ korrelation: ett tjockare uppgiftsrum "
-          "ger lägre arbetslöshet och kortare omställningar.\n")
-        A("| Utfall | Spearman mot C(0.25) | n |")
-        A("|---|---|---|")
-        for col in ("u_pct", "median_u_R", "tightness"):
-            if col not in df.columns:
+        if n_scen < 3:
+            A(f"Utelämnas: {n_scen} scenario i materialet. Sambandet mellan "
+              f"uppgiftsrummets täckning och utfall kan bara mätas ÖVER "
+              f"scenarier. Med flera frön av samma scenario varierar täckningen "
+              f"bara med slumpen, och en korrelation mäter brus.\n")
+        else:
+            A("Hypotesen förutsäger negativ korrelation: ett tjockare "
+              "uppgiftsrum ger lägre arbetslöshet och kortare omställningar. "
+              "Korrelationen beräknas på scenariomedianer, så att spridning "
+              "mellan frön inte räknas som observationer.\n")
+            med = grouped.set_index(by)
+            A("| Utfall | Spearman mot C(0.25) | n scenarier |")
+            A("|---|---|---|")
+            for col in ("u_pct", "median_u_R", "tightness"):
+                c1, c2 = "coverage_0.25_median", f"{col}_median"
+                if c1 not in med.columns or c2 not in med.columns:
+                    continue
+                sub = med[[c1, c2]].apply(pd.to_numeric, errors="coerce").dropna()
+                if len(sub) >= 3:
+                    r = sub.corr(method="spearman").iloc[0, 1]
+                    A(f"| {col} | {('%+.2f' % r) if np.isfinite(r) else '—'} "
+                      f"| {len(sub)} |")
+        A("")
+
+    if "seed" in df.columns and df["seed"].nunique() > 1:
+        A("## Spridning över frön\n")
+        A("Skillnaden mellan frön är den tröskel en modelländring måste "
+          "överstiga för att räknas som en effekt och inte som brus.\n")
+        A("| Storhet | Median | Min | Max | Spann |")
+        A("|---|---|---|---|---|")
+        for key in ("median_u_R", "u_pct", "v_pct", "median_wage_ratio",
+                    "tightness"):
+            if key not in df.columns:
                 continue
-            sub = df[["coverage_0.25", col]].apply(pd.to_numeric, errors="coerce").dropna()
-            if len(sub) >= 3:
-                A(f"| {col} | {sub.corr(method='spearman').iloc[0,1]:+.2f} | {len(sub)} |")
+            x = pd.to_numeric(df[key], errors="coerce").dropna()
+            if len(x) > 1:
+                A(f"| {key} | {x.median():.3f} | {x.min():.3f} | {x.max():.3f} "
+                  f"| {x.max()-x.min():.3f} |")
         A("")
 
     if figdir:
@@ -199,7 +232,7 @@ def main():
         F.fig_tenure(figdir)
         F.fig_wages(runs, figdir)
 
-    write_report(df, grouped, a.out, runs, figdir)
+    write_report(df, grouped, a.out, runs, figdir, by=by)
 
 
 if __name__ == "__main__":

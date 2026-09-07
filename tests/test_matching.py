@@ -402,17 +402,35 @@ def test_thin_market_gives_longer_retraining():
 def test_negotiated_wage_properties():
     from core.occupations.utils import negotiated_wage
     Pi, w_res = 1.0, 0.4
-    # Full passform: mellan reservation och värde
-    w = float(negotiated_wage(1.0, Pi, w_res, beta=0.5, kappa=0.1))
-    assert w_res < w < Pi
-    assert w == pytest.approx(0.4 + 0.5 * (1.0 - 0.4 - 0.1))
-    # Monoton i q
+    # Full passform ska ge ungefär fältlönen: det är vad prisfältet påstår,
+    # och det är produktionsskalans hela syfte.
+    w = float(negotiated_wage(1.0, Pi, w_res, beta=0.5, kappa=0.1, labour_share=0.57))
+    assert w == pytest.approx(Pi, abs=0.05), f"full passform ger {w:.2f} av fältlönen"
+    # Monoton i q, och sämre passform betalar mindre
     ws = [float(negotiated_wage(q, Pi, w_res)) for q in (0.6, 0.8, 1.0)]
     assert ws[0] < ws[1] < ws[2]
+    assert ws[0] < Pi
     # Dålig passform: ingen överenskommelse
-    assert np.isnan(negotiated_wage(0.05, Pi, w_res))
-    # beta=1: hela överskottet till arbetaren, aldrig över värdet
-    assert float(negotiated_wage(1.0, Pi, w_res, beta=1.0, kappa=0.0)) == pytest.approx(Pi)
+    assert np.isnan(negotiated_wage(0.02, Pi, w_res))
+    # Lönen kan aldrig överstiga matchens produktion
+    assert float(negotiated_wage(1.0, Pi, w_res, beta=1.0, kappa=0.0,
+                                 labour_share=0.57)) <= Pi / 0.57 + 1e-9
+
+
+def test_labour_share_anchors_the_wage_level():
+    """REGRESSION i design: utan produktionsskala fick en fullt kvalificerad
+    arbetare 0.65 av fältlönen, och medianen i en körning blev 0.575.
+    Prisfältet är estimerat på faktiska löner, så Pi ÄR lönen; att sätta den
+    som matchens produktion gav arbetaren bara en andel av sin egen lön."""
+    from core.occupations.utils import negotiated_wage
+    Pi, w_res = 1.0, 0.4
+    utan = float(negotiated_wage(1.0, Pi, w_res, labour_share=1.0))
+    med = float(negotiated_wage(1.0, Pi, w_res, labour_share=0.57))
+    assert utan == pytest.approx(0.65, abs=0.01)
+    assert med > utan and med == pytest.approx(1.0, abs=0.05)
+    # Lägre arbetskraftsandel -> högre produktion -> högre lön
+    assert (float(negotiated_wage(1.0, Pi, w_res, labour_share=0.50))
+            > float(negotiated_wage(1.0, Pi, w_res, labour_share=0.65)))
 
 
 def test_bargaining_closes_the_floor_exploit(individuals, jobs):

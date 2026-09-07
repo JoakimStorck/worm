@@ -62,8 +62,14 @@ simulation:
   # arbetsgivarens alternativ tillkommer i steg 3; tills dess kappa*Pi.
   bargaining:
     enabled: true
-    beta: 0.5       # arbetarens förhandlingsstyrka
-    kappa: 0.10     # arbetsgivarens vakanskostnad som andel av fältlönen
+    beta: 0.5           # arbetarens förhandlingsstyrka
+    kappa: 0.10         # arbetsgivarens vakanskostnad, andel av produktionen
+    # Matchens produktion är Pi/labour_share. Prisfältet är estimerat på
+    # faktiska löner, så Pi ÄR lönen; utan skalan får arbetaren bara sin andel
+    # av något som redan är hennes lön, och en fullt kvalificerad arbetare får
+    # 0.65*Pi. Arbetskraftens andel av förädlingsvärdet är omkring 0.57 i
+    # Sverige, vilket ger w ungefär Pi vid full passform.
+    labour_share: 0.57
 
   # --- Omskolning: riktad mot där arbete finns, inte ett fast delta_xi ---
   retraining_share: 0.5          # andel av vägen mot vakansernas tyngdpunkt

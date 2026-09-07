@@ -7,5 +7,5 @@ shapely
 pyyaml
 scikit-learn
 matplotlib
-
+tabulate
 pytest

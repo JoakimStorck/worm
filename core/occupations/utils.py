@@ -401,27 +401,33 @@ def retraining_target(ind, jobs_df, cand_idx, arrays=None,
 # ---------------------------------------------------------------------------
 # Förhandlad lön (docs/individmodell.md, avsnitt 5)
 # ---------------------------------------------------------------------------
-def negotiated_wage(q, w_field, w_res, beta=0.5, kappa=0.10, k_vacancy=None):
+def negotiated_wage(q, w_field, w_res, beta=0.5, kappa=0.10, k_vacancy=None,
+                    labour_share=0.57):
     """Nash-förhandling med fältet som grund.
 
-        w = w_res + beta * (q*Pi - w_res - k_vakans)
+        y = q * Pi / labour_share            matchens produktion
+        w = w_res + beta * (y - w_res - k)   arbetarens andel av överskottet
 
-    q*Pi är arbetarens värde i jobbet: fältets lön gånger hennes
-    konkurrenskraft. w_res är hennes alternativ. k_vakans är arbetsgivarens
-    alternativ -- fortsatt vakans -- här som andelen kappa av fältlönen tills
-    lokalt marknadstryck införs (steg 3 i byggordningen).
+    PRODUKTIONSSKALAN är nödvändig och inte en fri parameter. Prisfältet Pi är
+    estimerat på faktiska löner: det ÄR lönen. Att sätta Pi som matchens
+    produktion i Nash-delningen gav arbetaren bara sin andel av något som redan
+    var hennes lön, och en fullt kvalificerad arbetare fick 0.65*Pi. I en
+    körning blev medianen 0.575, alltså knappt 58 procent av yrkets lön.
 
-    Utan detta exploaterades grundskolegolvet: en sökande hade q ~ 0.05 mot
-    alla vakanser, överskottet var oberoende av q, och logiten valde det
-    högst betalda av tio avlägsna "träffar". Med förhandlad lön betalar en
-    dålig passform nära reservationslönen och väljs inte.
+    Matchens produktion är i stället y = Pi / s, där s är arbetskraftens andel
+    av förädlingsvärdet, omkring 0.57 i Sverige. Då ger delningen w ungefär Pi
+    för en välmatchad arbetare, vilket är vad prisfältet påstår, och lägre för
+    en sämre matchad. Ankaret är observerbart och ersätter godtycket.
 
-    Returnerar den förhandlade lönen; NaN där ingen överenskommelse är möjlig
-    (q*Pi - k_vakans < w_res). Vektoriserat över jobb.
+    k_vakans är arbetsgivarens alternativ -- fortsatt vakans -- här som andelen
+    kappa av produktionen tills lokalt marknadstryck införs (steg 3).
+
+    Returnerar den förhandlade lönen; NaN där ingen överenskommelse är möjlig.
+    Vektoriserat över jobb.
     """
     q = np.asarray(q, dtype=float); w_field = np.asarray(w_field, dtype=float)
-    kv = kappa * w_field if k_vacancy is None else np.asarray(k_vacancy, dtype=float)
-    value = q * w_field
+    value = q * w_field / max(float(labour_share), 1e-6)     # matchens produktion
+    kv = kappa * value if k_vacancy is None else np.asarray(k_vacancy, dtype=float)
     surplus = value - w_res - kv
     w = w_res + beta * surplus
     w = np.where(surplus > 0, np.minimum(w, value), np.nan)
