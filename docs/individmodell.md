@@ -312,19 +312,43 @@ Representationen är en teori, inte en design, om den kan vara fel. Den är
 validerad om simulerade individer reproducerar **papper 2:s fyra stiliserade
 fakta utan att de kodats in**:
 
-| Faktum | Värde | Väntad mekanism |
-|---|---|---|
-| Rörligheten är lokal | median 1,03 task-radier, >80 % inom två | passformens kärna, kalibrerad |
-| Två delsystem | 73 % inom, 27 % över | geometri och prisfält |
-| Centripetala fält | flöden böjer mot delsystemens kärnor | vakansernas täthet: folk rör sig dit jobben är många |
-| Asymmetri | 35 % fysiskt → kognitivt, 20 % omvänt | anställda som byter uppför fältet; m₅ = 0,89 |
+| Faktum | Värde | Väntad mekanism | Status |
+|---|---|---|---|
+| Rörligheten är lokal | inom delsystem median ~0,7; globalt 1,03 | passformens kärna, kalibrerad | primärt mål |
+| Två delsystem | 73 % inom, 27 % över | geometri och prisfält | prövas utan chefsyrken |
+| Centripetala fält | flöden böjer mot delsystemens kärnor | vakansernas täthet: folk rör sig dit jobben är många | prövas utan chefsyrken |
+| Asymmetri | 35 % fysiskt → kognitivt, 20 % omvänt | **befordran** — se nedan | utanför modellen |
+
+**Om tvärövergångarna.** De 27 procent som korsar delsystemgränsen i CPS är
+nästan uteslutande övergångar till eller från chefsyrken. Chefsyrken för alla
+branscher klustrar på den kognitiv-mänskliga sidan, medan de som får
+uppdragen kommer från alla yrken. Tvärflödet och dess asymmetri är därmed i
+första hand **befordran** — en intern karriärstege i Doeringer–Piores mening —
+inte uppgiftsbaserad rörlighet. Det är den interna arbetsmarknadens signatur;
+geometrin fångar den externa.
+
+Modellen har ingen befordran och ska inte bedömas på det fjärde faktumet.
+Valideringen utesluter övergångar där käll- eller målyrke är chefsyrke
+(SOC 11-xxxx) och jämför mot inom-delsystem-värdet 0,70, som är målet för den
+uppgiftsbaserade matchningen. Chefsövergångarna rapporteras separat.
+
+Skulle befordran införas senare finns en billig form: en vakant chefsposition
+tillsätts inifrån, av den med längst tjänstgöring hos arbetsgivaren,
+oberoende av geometri. Det skulle reproducera tvärflödet av rätt skäl med en
+enda regel. Det är inte prioriterat: det är ett eget lager, och det är inte
+centralt för glesbygdsfrågan.
+
+Målet 1,03 är en blandning av inom- och tvärövergångar. En gles kommun med få
+kognitiva jobb bör ha få tvärövergångar och därmed en lägre global median. Att
+jaga 1,03 vore att kalibrera bort den skillnad som ska mätas. Kompletterande
+empiri visar dessutom att de flesta övergångar är kortare än det globala
+måttet antyder.
 
 Därtill: bokföringen sluten, och vakansstocken enligt Littles lag mot svensk
 vakansgrad.
 
-Det sista faktumet är det skarpaste testet. Asymmetrin ska följa av att
-anställda söker selektivt, och den finns inte i modellen förrän den
-mekanismen finns.
+De två första faktumen är de skarpa testen för den uppgiftsbaserade
+matchningen. Det tredje prövas när sökning från anställning finns.
 
 ---
 

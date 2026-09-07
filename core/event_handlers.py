@@ -202,6 +202,10 @@ def handle_start_job(event, world):
                 d_occ = float(np.hypot(g['x_occ'] - job_row['x_occ'], g['y_occ'] - job_row['y_occ']))
                 extra['u_R_occ'] = round(d_occ / float(g['r_o']), 4)
                 extra['from_onet'] = prev
+                extra['to_onet'] = job_row.get('onet_code')
+                # CPS räknar bara yrkesBYTEN. Återgång till eget yrke är ett
+                # eget mått: hur ofta den arbetslösa hittar tillbaka.
+                extra['occ_change'] = int(str(prev) != str(job_row.get('onet_code')))
     except (KeyError, TypeError, ValueError):
         pass
 

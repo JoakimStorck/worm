@@ -26,8 +26,13 @@ import sys
 
 import numpy as np
 
+# OBS: 1.03 är CPS globala median och en blandning: inom delsystem ~0.7 (73 %
+# av övergångarna), över delsystemgräns 1.93 (27 %). En gles kommun med få
+# tvärövergångar bör ligga under 1.03. Jämför mot 0.7 om marknaden är tunn.
 REFERENCE = {
     "median_uR": 1.03,
+    "median_uR_within": 0.70,
+    "median_uR_cross": 1.93,
     "within": [(1 / 3, 0.10), (0.5, 0.20), (1.0, 0.50), (2.0, 0.80)],
     "median_abs": 0.28,
 }
@@ -69,7 +74,7 @@ def collect(run_dir):
     path = os.path.join(run_dir, "eventlog.csv")
     if not os.path.isfile(path):
         raise SystemExit(f"Saknar {path}")
-    uR, uR_occ, d_abs = [], [], []
+    uR, uR_occ, d_abs, changed, mgmt = [], [], [], [], []
     for line in open(path, "r", encoding="utf-8", errors="replace"):
         if "u_R" not in line and "d_task" not in line:
             continue
@@ -79,6 +84,13 @@ def collect(run_dir):
         try:
             if "u_R_occ" in rec:
                 uR_occ.append(float(rec["u_R_occ"]))
+                changed.append(int(rec.get("occ_change", "1")))
+                # Chefsyrken (SOC 11-xxxx). Tvärövergångarna i CPS är nästan
+                # uteslutande befordran till eller från chefsuppdrag -- en
+                # intern karriärstege, inte uppgiftsbaserad rörlighet. Modellen
+                # har ingen befordran och ska inte bedömas på dem.
+                f, t = str(rec.get("from_onet", "")), str(rec.get("to_onet", ""))
+                mgmt.append(f.startswith("11-") or t.startswith("11-"))
             if "u_R" in rec:
                 uR.append(float(rec["u_R"]))
             if "d_task" in rec:
@@ -86,10 +98,24 @@ def collect(run_dir):
         except ValueError:
             continue
     # u_R_occ är mätt som CPS: yrke till yrke, normerat med källans radie.
-    # Finns den används den; annars faller vi tillbaka på individpositionen.
+    # CPS räknar dessutom bara yrkesBYTEN, så samma-yrke-tillträden utesluts
+    # ur jämförelsen och rapporteras separat.
     if len(uR_occ) >= 0.5 * max(len(uR), 1) and uR_occ:
-        print("(u_R mätt från senaste yrkes centroid, som CPS)\n")
-        return np.array(uR_occ), np.array(d_abs)
+        uR_occ = np.array(uR_occ); changed = np.array(changed, dtype=bool)
+        mgmt = np.array(mgmt, dtype=bool)
+        n_same = int((~changed).sum())
+        n_mgmt = int((changed & mgmt).sum())
+        keep = changed & ~mgmt
+        print("(u_R mätt från senaste yrkes centroid, som CPS)")
+        print(f"(tillträden totalt {uR_occ.size}: återgång till eget yrke {n_same} "
+              f"= {100*n_same/max(uR_occ.size,1):.1f} % utesluts som i CPS; "
+              f"chefsövergångar {n_mgmt} = {100*n_mgmt/max(uR_occ.size,1):.1f} % utesluts "
+              f"eftersom de är befordran, inte uppgiftsbaserad rörlighet)")
+        if n_mgmt:
+            print(f"(median u_R för chefsövergångarna separat: "
+                  f"{np.median(uR_occ[changed & mgmt]):.2f}, jfr CPS tvär 1.93)")
+        print()
+        return uR_occ[keep], np.array(d_abs)
     return np.array(uR), np.array(d_abs)
 
 
@@ -105,7 +131,9 @@ def report(run_dir):
     print("-" * 62)
     m = float(np.median(uR))
     print(f"{'median u_R':26} {m:10.2f} {REFERENCE['median_uR']:10.2f}   "
-          f"{m - REFERENCE['median_uR']:+.2f}")
+          f"{m - REFERENCE['median_uR']:+.2f}   (global CPS)")
+    print(f"{'':26} {'':10} {REFERENCE['median_uR_within']:10.2f}   "
+          f"{m - REFERENCE['median_uR_within']:+.2f}   (inom delsystem, 73 %)")
     if d_abs.size:
         ma = float(np.median(d_abs))
         print(f"{'median absolut avstånd':26} {ma:10.3f} {REFERENCE['median_abs']:10.3f}   "
