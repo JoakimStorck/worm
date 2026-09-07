@@ -180,3 +180,44 @@ def test_world_integration_circles_follow_career():
         w.evolve_competence(1 / 12)
     q_faded = float(w.circles.competitiveness(0, [-0.5], [0.2], [0.3], p)[0])
     assert 0.0 < q_faded < q_new_after, "diffusionen verkade inte efter uppsägning"
+
+
+def test_u_R_occ_measures_from_source_occupation():
+    """REGRESSION: last_onet_code skrevs över med det nya jobbets yrke innan
+    u_R_occ räknades, så avståndet blev noll för varje övergång i en hel
+    femårskörning."""
+    import os, sys
+    import pandas as pd
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from conftest import make_world
+    from core.event_handlers import handle_start_job
+
+    w = make_world(n_employers=3, size=2)
+    w.individuals = pd.DataFrame([{
+        "individual_id": "i0", "status": "unemployed", "job_id": None,
+        "w_res": 0.5, "chi": 0.3, "xi": 0.3, "r_i": 0.0,
+        "x_occ": 0.3, "y_occ": 0.1, "x": 0.0, "y": 0.0,
+        "onet_code": "A", "last_onet_code": "A",
+        "r_o_home": 0.27, "tenure_years": 3.0, "education_level": 3,
+        "municipal_code": "2062", "propensity_start_education": 0.0,
+        "propensity_internal_training": 0.0, "propensity_quit_job": 0.0,
+        "propensity_internal_job_change": 0.0}]).astype({"job_id": object})
+    w.init_competence()
+    # Geometriuppslag utan databas: A vid (0.3, 0.1), B vid (-0.5, 0.2)
+    geom = {"A": {"x_occ": 0.3, "y_occ": 0.1, "r_o": 0.27},
+            "B": {"x_occ": -0.5, "y_occ": 0.2, "r_o": 0.30}}
+    w._geom_lookup = lambda code: geom.get(code)
+    w.jobs.loc[w.jobs.index[4], ["onet_code", "x_occ", "y_occ", "r_o"]] = ["B", -0.5, 0.2, 0.30]
+    w._ja_n = None
+
+    try:
+        handle_start_job({"time": 1.0, "agent_id": 0, "event_type": "start_job",
+                          "params": {"job_id": w.jobs.at[4, "job_id"]}}, w)
+    except KeyError:
+        pass
+    logged = [e[1] for e in w.event_logger.events if e[0] == "start_job"]
+    assert logged and "u_R_occ" in logged[-1]
+    # d(A -> B) = hypot(0.8, 0.1) ≈ 0.806, normerat med KÄLLANS r_o = 0.27
+    assert logged[-1]["u_R_occ"] == pytest.approx(0.806 / 0.27, abs=0.05)
+    assert logged[-1]["from_onet"] == "A"
+    assert w.individuals.at[0, "last_onet_code"] == "B"

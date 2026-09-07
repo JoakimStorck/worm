@@ -159,10 +159,14 @@ def handle_start_job(event, world):
             jobs.iat[prev_pos, jobs.columns.get_loc('individual_id')] = np.nan
             world.set_job_filled(prev, False)
 
+    # Källyrket läses INNAN det skrivs över: u_R_occ mäts från det yrke hon
+    # kom från. Att uppdatera först gav u_R_occ = 0 för varje övergång.
+    prev_onet = (individuals.at[idx, 'last_onet_code']
+                 if 'last_onet_code' in individuals.columns else None)
+
     individuals.at[idx, 'status'] = 'employed'
     individuals.at[idx, 'job_id'] = job_id
-    # Kompetens: jobbets yrke blir den aktiva cirkeln. last_onet_code behövs
-    # för u_R mätt från senaste yrkes centroid, som CPS gör.
+    # Kompetens: jobbets yrke blir den aktiva cirkeln.
     _jr = jobs.iloc[pos] if pos is not None else None
     if _jr is not None and 'onet_code' in jobs.columns:
         world.set_active_occupation(idx, _jr['onet_code'], _jr['x_occ'], _jr['y_occ'],
@@ -191,8 +195,7 @@ def handle_start_job(event, world):
             extra['u_R'] = round(d_task / r_o, 4)
         # u_R som CPS mäter det: från senaste yrkes centroid, normerat med
         # KÄLLANS radie. Det är detta som ska jämföras med 1.03.
-        prev = (individuals.at[idx, 'last_onet_code']
-                if 'last_onet_code' in individuals.columns else None)
+        prev = prev_onet
         if prev is not None and not (isinstance(prev, float) and np.isnan(prev)):
             g = world._geom_lookup(prev)
             if g is not None and g.get('r_o', 0) > 0:
