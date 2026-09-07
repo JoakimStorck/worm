@@ -11,6 +11,7 @@ data/
 onet_data/
 output/
 html/
+figures/
 *.csv
 *.sqlite3
 *.sqlite3.bak

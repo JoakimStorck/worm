@@ -15,6 +15,9 @@ Figurer:
   competence  Kompetenscirklarna för tre arbetare: nybörjare, mogen, och
               mogen efter tjugo års uppehåll. Individmodellens huvudfigur.
   coverage    Kommunens jobb som täthet över skivan -- tunnhet gjord synlig.
+  tenure      Konkurrenskraften q som funktion av tid: inlärning, mättnad,
+              glömska. Motiverar lambda, D och tau_s visuellt.
+  wages       Lönespridning: fältlön mot förhandlad lön, totalt och inom yrke.
 """
 import argparse
 import math
@@ -235,6 +238,144 @@ def fig_coverage(run_dirs, out, s=0.25):
 
 
 # ---------------------------------------------------------------------------
+def fig_tenure(out):
+    """Konkurrenskraften över tid: inlärning, mättnad, glömska.
+
+    De tre parametrarna lambda, D och tau_s är svåra att försvara i text utan
+    bild. Här syns deras tidsskalor direkt."""
+    from core.occupations.competence import Circles, CompetenceParams, seed_circles, EMPTY
+
+    p = CompetenceParams()
+    ro, cx, cy = 0.27, 0.42, 0.14
+    months = 40 * 12
+
+    def trace(years_work, then_away):
+        c = Circles(1, 12)
+        seed_circles(c, 0, "A", cx, cy, ro, 0.01, 3, p)
+        k = c.code("A")
+        qs, ms, rs = [], [], []
+        for m in range(months):
+            active = np.array([k if m < years_work * 12 else EMPTY])
+            c.evolve(1 / 12, active, p)
+            qs.append(float(c.competitiveness(0, [cx], [cy], [ro], p)[0]))
+            j = np.flatnonzero(c.key[0] == k)
+            ms.append(float(c.mass[0, j[0]]) if j.size else 0.0)
+            rs.append(float(np.sqrt(c.rho2[0, j[0]])) if j.size else np.nan)
+        return np.array(qs), np.array(ms), np.array(rs)
+
+    t = np.arange(months) / 12.0
+    fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.0), dpi=ps.DPI)
+
+    ax = ps.cartesian_axes(axes[0])
+    for yrs, col in ((40, "#1f77b4"), (10, "#ff7f0e"), (3, "#2ca02c")):
+        q, _, _ = trace(yrs, True)
+        ax.plot(t, q, lw=1.8, color=col, label=f"{yrs} år i yrket")
+        if yrs < 40:
+            ax.axvline(yrs, ls=":", lw=0.9, color=col, alpha=0.7)
+    ax.set_xlabel("År", fontsize=9); ax.set_ylabel("Konkurrenskraft $q$", fontsize=9)
+    ax.set_ylim(0, 1.05); ax.set_xlim(0, 40)
+    ax.legend(fontsize=7.5, loc="lower left", framealpha=0.9)
+    ps.title(ax, "Inlärning och glömska", pad=10)
+
+    ax = ps.cartesian_axes(axes[1])
+    q40, m40, r40 = trace(40, False)
+    m_sat = p.a / p.lam
+    ax.plot(t, m40, lw=1.8, color="#1f77b4")
+    ax.axhline(m_sat, ls="--", lw=1.0, color="#7f7f7f")
+    ax.text(1.0, m_sat * 1.02, f"mättnad $a/\\lambda$ = {m_sat:.1f}", fontsize=8, color="#555555")
+    ax.set_xlabel("År i yrket", fontsize=9); ax.set_ylabel("Massa", fontsize=9)
+    ax.set_xlim(0, 40)
+    ps.title(ax, "Massan mättas: läckaget sätter taket", pad=10)
+
+    ax = ps.cartesian_axes(axes[2])
+    q10, _, r10 = trace(10, True)
+    ax.plot(t, r10, lw=1.8, color="#ff7f0e", label="cirkelns radie $\\rho$")
+    ax.axhline(ro, ls="--", lw=1.0, color="#7f7f7f")
+    ax.text(25, ro * 1.06, "yrkets radie $r_o$", fontsize=8, color="#555555")
+    ax.axvline(10, ls=":", lw=0.9, color="#ff7f0e", alpha=0.7)
+    ax.text(10.6, 0.80, "slutar arbeta", fontsize=8, color="#555555")
+    ax.set_xlabel("År", fontsize=9); ax.set_ylabel("Radie", fontsize=9)
+    ax.set_xlim(0, 40)
+    ps.title(ax, "Diffusionen breddar cirkeln", pad=10)
+
+    ps.footnote(fig, f"Läckage med halveringstid {np.log(2)/p.lam:.0f} år, diffusion "
+                     f"D = {p.D}, skärpning {p.tau_months:.0f} månader. Massan bevaras inte "
+                     f"helt men avtar långsamt; radien växer som $\\rho^2 = \\rho_0^2 + 2Dt$, "
+                     f"så spetsen faller brant först och flackt sedan, aldrig till noll.",
+                y=-0.06)
+    ps.save(fig, os.path.join(out, "competence_over_tenure.pdf"))
+
+
+# ---------------------------------------------------------------------------
+def fig_wages(run_dir, out):
+    """Lönespridning: fältet ger yrkets nivå, individen förhandlar sin avvikelse."""
+    rows = []
+    path = os.path.join(run_dir, "eventlog.csv")
+    for line in open(path, encoding="utf-8", errors="replace"):
+        if "w_neg" not in line:
+            continue
+        r = _parse(line)
+        if r is None:
+            continue
+        try:
+            if "w_field" in r and "w_neg" in r:
+                rows.append({"w_field": float(r["w_field"]), "w_neg": float(r["w_neg"]),
+                             "onet": str(r.get("to_onet", r.get("job_id", "?")))})
+        except ValueError:
+            continue
+    df = pd.DataFrame(rows)
+    if df.empty:
+        print("wages: inga w_field/w_neg i loggen (kräver körning efter förhandlingen)")
+        return
+    df["ratio"] = df["w_neg"] / df["w_field"].replace(0, np.nan)
+
+    fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.0), dpi=ps.DPI)
+
+    ax = ps.cartesian_axes(axes[0])
+    ax.scatter(df["w_field"], df["w_neg"], s=5, alpha=0.25, color="#1f77b4",
+               edgecolors="none")
+    lim = [0, max(df["w_field"].max(), df["w_neg"].max()) * 1.05]
+    ax.plot(lim, lim, ls="--", lw=1.0, color="#7f7f7f")
+    ax.text(lim[1] * 0.62, lim[1] * 0.97, "full fältlön", fontsize=8, color="#555555")
+    ax.set_xlim(lim); ax.set_ylim(lim)
+    ax.set_xlabel("Fältlön $\\Pi$ (löneandelar)", fontsize=9)
+    ax.set_ylabel("Förhandlad lön $w$", fontsize=9)
+    ps.title(ax, "Fältet ger nivån, individen förhandlar", pad=10)
+
+    ax = ps.cartesian_axes(axes[1])
+    ax.hist(df["ratio"].dropna(), bins=40, color="#1f77b4", alpha=0.8)
+    ax.axvline(1.0, ls="--", lw=1.0, color="#7f7f7f")
+    ax.axvline(float(df["ratio"].median()), ls="-", lw=1.4, color="#d62728")
+    ax.set_xlabel("Förhandlad lön / fältlön", fontsize=9); ax.set_ylabel("Antal", fontsize=9)
+    ps.title(ax, f"Andel av fältlönen (median {df['ratio'].median():.2f})", pad=10)
+
+    # Spridning inom yrke: de tio vanligaste
+    ax = ps.cartesian_axes(axes[2])
+    top = df["onet"].value_counts().head(10).index.tolist()
+    data = [df.loc[df["onet"] == o, "w_neg"].to_numpy() for o in top]
+    if data and max(len(d) for d in data) > 3:
+        bp = ax.boxplot(data, vert=True, widths=0.6, patch_artist=True,
+                        flierprops=dict(marker=".", markersize=2, alpha=0.4))
+        for b in bp["boxes"]:
+            b.set(facecolor="#1f77b4", alpha=0.55, linewidth=0.8)
+        for o, i in zip(top, range(1, len(top) + 1)):
+            pi = df.loc[df["onet"] == o, "w_field"].median()
+            ax.plot([i], [pi], marker="D", ms=4, color="#d62728", zorder=4)
+        ax.set_xticks(range(1, len(top) + 1))
+        ax.set_xticklabels([o[:7] for o in top], rotation=60, fontsize=6.5)
+        ax.set_ylabel("Förhandlad lön", fontsize=9)
+        ax.legend(handles=[Line2D([], [], marker="D", ls="", ms=5, color="#d62728",
+                                  label="fältlön $\\Pi$")], fontsize=7.5, framealpha=0.9)
+    ps.title(ax, "Spridning inom yrke", pad=10)
+
+    ps.footnote(fig, "Nash-förhandling: $w = w_{res} + \\beta(q\\Pi - w_{res} - \\kappa\\Pi)$. "
+                     "Samma position betalar olika beroende på arbetarens konkurrenskraft och "
+                     "hennes alternativ, vilket ger lönespridning inom yrke som fältet ensamt "
+                     "inte kan ge.", y=-0.10)
+    ps.save(fig, os.path.join(out, "wage_dispersion.pdf"))
+
+
+# ---------------------------------------------------------------------------
 def latest_run():
     outdir = os.path.join(ROOT, "output")
     c = [os.path.join(outdir, d) for d in os.listdir(outdir)
@@ -248,7 +389,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("runs", nargs="*", help="körningskataloger (default: senaste)")
     ap.add_argument("--out", default=os.path.join(ROOT, "figures"))
-    ap.add_argument("--only", choices=["mobility", "competence", "coverage"])
+    ap.add_argument("--only", choices=["mobility", "competence", "coverage",
+                                       "tenure", "wages"])
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     runs = a.runs or [latest_run()]
@@ -261,6 +403,10 @@ def main():
         fig_competence(a.out)
     if a.only in (None, "coverage"):
         fig_coverage(runs, a.out)
+    if a.only in (None, "tenure"):
+        fig_tenure(a.out)
+    if a.only in (None, "wages"):
+        fig_wages(runs[0], a.out)
 
 
 if __name__ == "__main__":
