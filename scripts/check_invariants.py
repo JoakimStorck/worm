@@ -36,6 +36,8 @@ def find_repo_root(start):
 
 
 ROOT = find_repo_root(os.path.dirname(__file__))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
 
 def report(run_dir):

@@ -43,67 +43,31 @@ def find_repo_root(start):
 
 
 ROOT = find_repo_root(os.path.dirname(__file__))
-
-
-def _parse_line(line):
-    """
-    Eventloggen är trots filändelsen INTE en CSV. EventLogger._write_log skriver
-    rader på formen:
-
-        0.00, new_month, agent_type system, agent_id None, ..., employed 6530, ...
-
-    dvs. kommaseparerade fält där det första är tid, det andra eventtypen och
-    resten är "nyckel värde"-par (värdet kan innehålla mellanslag).
-    """
-    parts = [p.strip() for p in line.rstrip("\n").split(",")]
-    if len(parts) < 2:
-        return None
-    rec = {}
-    try:
-        rec["time"] = float(parts[0])
-    except ValueError:
-        return None
-    rec["event"] = parts[1]
-    for f in parts[2:]:
-        if not f:
-            continue
-        k, _, v = f.partition(" ")
-        rec[k] = v.strip()
-    return rec
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
 
 def series_from_run(run_dir):
-    """Månadsserie (u, v) ur en körnings eventlog."""
-    path = os.path.join(run_dir, "eventlog.csv")
-    if not os.path.isfile(path):
+    """Månadsserie (u, v) ur den exporterade tabellen.
+
+    Vakansgraden räknades tidigare som vac/(emp+vac), en approximation från
+    tiden före jobbflödena, då den aktiva jobbstocken inte fanns. Nu används
+    v = vac/J, som är definitionen.
+    """
+    from core.analysis.eventlog import load_tables
+
+    try:
+        ts = load_tables(run_dir)["timeseries"]
+    except (FileNotFoundError, OSError):
         print(f"  saknar eventlog.csv: {run_dir}")
         return None
-
-    rows = []
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        for line in f:
-            if "new_month" not in line and "new_year" not in line:
-                continue                      # snabbfilter före parsning
-            rec = _parse_line(line)
-            if rec is None or rec.get("event") != "new_month":
-                continue
-            try:
-                emp = float(rec["employed"])
-                unemp = float(rec["unemployed"])
-                vac = float(rec["unmatched_jobs"])
-            except (KeyError, ValueError):
-                continue
-            total_jobs = emp + vac
-            if (emp + unemp) <= 0 or total_jobs <= 0:
-                continue
-            rows.append({"time": rec["time"],
-                         "u": unemp / (emp + unemp),
-                         "v": vac / total_jobs})
-
-    if not rows:
+    if ts.empty:
         print(f"  inga användbara new_month-rader i {os.path.basename(run_dir)}")
         return None
-    return pd.DataFrame(rows).reset_index(drop=True)
+    df = ts[["time", "u", "v"]].dropna().copy()
+    df["u"] = df["u"] / 100.0
+    df["v"] = df["v"] / 100.0
+    return df.reset_index(drop=True)
 
 
 def plot(runs, outfile):

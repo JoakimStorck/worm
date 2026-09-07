@@ -42,41 +42,18 @@ from core.visualization import paperstyle as ps
 REF_WITHIN, REF_GLOBAL, REF_CROSS = 0.70, 1.03, 1.93
 
 
-def _parse(line):
-    parts = [p.strip() for p in line.rstrip("\n").split(",")]
-    if len(parts) < 2:
-        return None
-    rec = {}
-    try:
-        rec["time"] = float(parts[0])
-    except ValueError:
-        return None
-    rec["event"] = parts[1]
-    for f in parts[2:]:
-        if f:
-            k, _, v = f.partition(" ")
-            rec[k] = v.strip()
-    return rec
-
-
 def read_transitions(run_dir):
-    """Övergångar ur eventloggen, uppdelade som valideringen gör."""
-    rows = []
-    path = os.path.join(run_dir, "eventlog.csv")
-    for line in open(path, encoding="utf-8", errors="replace"):
-        if "u_R_occ" not in line:
-            continue
-        r = _parse(line)
-        if r is None:
-            continue
-        try:
-            f, t = str(r.get("from_onet", "")), str(r.get("to_onet", ""))
-            rows.append({"u_R": float(r["u_R_occ"]),
-                         "changed": bool(int(r.get("occ_change", "1"))),
-                         "mgmt": f.startswith("11-") or t.startswith("11-")})
-        except (ValueError, KeyError):
-            continue
-    return pd.DataFrame(rows)
+    """Övergångar ur den exporterade tabellen."""
+    from core.analysis.eventlog import load_tables
+
+    tr = load_tables(run_dir)["transitions"]
+    if tr.empty or "u_R_occ" not in tr.columns:
+        return pd.DataFrame(columns=["u_R", "changed", "mgmt"])
+    return pd.DataFrame({
+        "u_R": tr["u_R_occ"],
+        "changed": tr["occ_change"].fillna(True).astype(bool),
+        "mgmt": tr["is_mgmt"].fillna(False).astype(bool),
+    }).dropna(subset=["u_R"])
 
 
 # ---------------------------------------------------------------------------
@@ -309,24 +286,17 @@ def fig_tenure(out):
 # ---------------------------------------------------------------------------
 def fig_wages(run_dir, out):
     """Lönespridning: fältet ger yrkets nivå, individen förhandlar sin avvikelse."""
-    rows = []
-    path = os.path.join(run_dir, "eventlog.csv")
-    for line in open(path, encoding="utf-8", errors="replace"):
-        if "w_neg" not in line:
-            continue
-        r = _parse(line)
-        if r is None:
-            continue
-        try:
-            if "w_field" in r and "w_neg" in r:
-                rows.append({"w_field": float(r["w_field"]), "w_neg": float(r["w_neg"]),
-                             "onet": str(r.get("to_onet", r.get("job_id", "?")))})
-        except ValueError:
-            continue
-    df = pd.DataFrame(rows)
+    from core.analysis.eventlog import load_tables
+
+    tr = load_tables(run_dir)["transitions"]
+    df = pd.DataFrame()
+    if not tr.empty and {"w_field", "w_neg"} <= set(tr.columns):
+        df = tr[["w_field", "w_neg", "to_onet"]].dropna(
+            subset=["w_field", "w_neg"]).rename(columns={"to_onet": "onet"})
     if df.empty:
         print("wages: inga w_field/w_neg i loggen (kräver körning efter förhandlingen)")
         return
+    df = df.copy()
     df["ratio"] = df["w_neg"] / df["w_field"].replace(0, np.nan)
 
     fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.0), dpi=ps.DPI)
@@ -354,7 +324,7 @@ def fig_wages(run_dir, out):
     top = df["onet"].value_counts().head(10).index.tolist()
     data = [df.loc[df["onet"] == o, "w_neg"].to_numpy() for o in top]
     if data and max(len(d) for d in data) > 3:
-        bp = ax.boxplot(data, vert=True, widths=0.6, patch_artist=True,
+        bp = ax.boxplot(data, widths=0.6, patch_artist=True,
                         flierprops=dict(marker=".", markersize=2, alpha=0.4))
         for b in bp["boxes"]:
             b.set(facecolor="#1f77b4", alpha=0.55, linewidth=0.8)

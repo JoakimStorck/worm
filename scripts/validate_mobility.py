@@ -50,73 +50,38 @@ def find_repo_root(start):
 
 
 ROOT = find_repo_root(os.path.dirname(__file__))
-
-
-def _parse(line):
-    """Eventloggen är inte CSV utan 'tid, händelse, nyckel värde, ...'."""
-    parts = [p.strip() for p in line.rstrip("\n").split(",")]
-    if len(parts) < 2:
-        return None
-    rec = {}
-    try:
-        rec["time"] = float(parts[0])
-    except ValueError:
-        return None
-    rec["event"] = parts[1]
-    for f in parts[2:]:
-        if f:
-            k, _, v = f.partition(" ")
-            rec[k] = v.strip()
-    return rec
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
 
 def collect(run_dir):
-    path = os.path.join(run_dir, "eventlog.csv")
-    if not os.path.isfile(path):
-        raise SystemExit(f"Saknar {path}")
-    uR, uR_occ, d_abs, changed, mgmt = [], [], [], [], []
-    for line in open(path, "r", encoding="utf-8", errors="replace"):
-        if "u_R" not in line and "d_task" not in line:
-            continue
-        rec = _parse(line)
-        if rec is None:
-            continue
-        try:
-            if "u_R_occ" in rec:
-                uR_occ.append(float(rec["u_R_occ"]))
-                changed.append(int(rec.get("occ_change", "1")))
-                # Chefsyrken (SOC 11-xxxx). Tvärövergångarna i CPS är nästan
-                # uteslutande befordran till eller från chefsuppdrag -- en
-                # intern karriärstege, inte uppgiftsbaserad rörlighet. Modellen
-                # har ingen befordran och ska inte bedömas på dem.
-                f, t = str(rec.get("from_onet", "")), str(rec.get("to_onet", ""))
-                mgmt.append(f.startswith("11-") or t.startswith("11-"))
-            if "u_R" in rec:
-                uR.append(float(rec["u_R"]))
-            if "d_task" in rec:
-                d_abs.append(float(rec["d_task"]))
-        except ValueError:
-            continue
-    # u_R_occ är mätt som CPS: yrke till yrke, normerat med källans radie.
-    # CPS räknar dessutom bara yrkesBYTEN, så samma-yrke-tillträden utesluts
-    # ur jämförelsen och rapporteras separat.
-    if len(uR_occ) >= 0.5 * max(len(uR), 1) and uR_occ:
-        uR_occ = np.array(uR_occ); changed = np.array(changed, dtype=bool)
-        mgmt = np.array(mgmt, dtype=bool)
-        n_same = int((~changed).sum())
-        n_mgmt = int((changed & mgmt).sum())
-        keep = changed & ~mgmt
-        print("(u_R mätt från senaste yrkes centroid, som CPS)")
-        print(f"(tillträden totalt {uR_occ.size}: återgång till eget yrke {n_same} "
-              f"= {100*n_same/max(uR_occ.size,1):.1f} % utesluts som i CPS; "
-              f"chefsövergångar {n_mgmt} = {100*n_mgmt/max(uR_occ.size,1):.1f} % utesluts "
-              f"eftersom de är befordran, inte uppgiftsbaserad rörlighet)")
-        if n_mgmt:
-            print(f"(median u_R för chefsövergångarna separat: "
-                  f"{np.median(uR_occ[changed & mgmt]):.2f}, jfr CPS tvär 1.93)")
-        print()
-        return uR_occ[keep], np.array(d_abs)
-    return np.array(uR), np.array(d_abs)
+    """Övergångar ur den exporterade tabellen. Parsningen görs en gång, i
+    core/analysis/eventlog.py, i stället för i varje skript."""
+    from core.analysis.eventlog import load_tables
+
+    tr = load_tables(run_dir)["transitions"]
+    if tr.empty or "u_R_occ" not in tr.columns:
+        raise SystemExit(
+            "Inga övergångar med u_R_occ.\n"
+            "Kör en simulering efter att u_R-loggningen införts.")
+    n = len(tr)
+    n_same = int((~tr["occ_change"].fillna(True).astype(bool)).sum())
+    n_mgmt = int((tr["occ_change"].fillna(False).astype(bool)
+                  & tr["is_mgmt"].fillna(False).astype(bool)).sum())
+    cps = tr[tr["in_cps_sample"].fillna(False).astype(bool)]
+
+    print("(u_R mätt från senaste yrkes centroid, som CPS)")
+    print(f"(tillträden totalt {n}: återgång till eget yrke {n_same} "
+          f"= {100*n_same/max(n,1):.1f} % utesluts som i CPS; "
+          f"chefsövergångar {n_mgmt} = {100*n_mgmt/max(n,1):.1f} % utesluts "
+          f"eftersom de är befordran, inte uppgiftsbaserad rörlighet)")
+    if n_mgmt:
+        m = tr[tr["occ_change"].fillna(False).astype(bool)
+               & tr["is_mgmt"].fillna(False).astype(bool)]["u_R_occ"].median()
+        print(f"(median u_R för chefsövergångarna separat: {m:.2f}, jfr CPS tvär 1.93)")
+    print()
+    return (cps["u_R_occ"].dropna().to_numpy(),
+            cps["d_task"].dropna().to_numpy())
 
 
 def report(run_dir):
@@ -153,15 +118,17 @@ def report(run_dir):
     sigma_implied = m / np.sqrt(2 * np.log(2))
     print(f"\nImplicerad sigma_gamma ur modellens median: {sigma_implied:.3f}"
           f"  (empirin ger 0.875)")
-    if m > REFERENCE["median_uR"] * 1.15:
-        print("\n  Övergångarna är LÄNGRE än i den nationella empirin. Referensvärdet")
+    target = REFERENCE["median_uR_within"]     # inom delsystem: modellens mål
+    if m > target * 1.15:
+        print("\n  Övergångarna är LÄNGRE än inom-delsystem-värdet 0.70. Det globala")
         print("  1.03 gäller en tjock marknad (CPS, hela USA). Är vakanspoolen tunn")
         print("  sätts avståndet av knapphet snarare än av kärnbredden: man tar det")
         print("  som finns. Kontrollera marknadstrycket med diagnose_mismatch innan")
         print("  sigma_gamma justeras -- i en gles kommun är längre övergångar en")
         print("  PREDIKTION, inte ett kalibreringsfel.")
-    elif m < REFERENCE["median_uR"] * 0.85:
-        print("\n  Övergångarna är KORTARE än i empirin. Det tyder på att kravet för")
+    elif m < target * 0.85:
+        print("\n  Övergångarna är KORTARE än inom-delsystem-värdet 0.70. Det tyder på")
+        print("  att kravet för")
         print("  acceptans binder (reservationslön eller pendlingskostnad), eller att")
         print("  tilldelningen väljer närmaste jobb i stället för högsta överskott.")
 

@@ -42,84 +42,31 @@ def find_repo_root(start):
 
 
 ROOT = find_repo_root(os.path.dirname(__file__))
-
-
-def coverage(jobs, s, n_grid=200):
-    """Andel av enhetsskivan inom avståndet s från något aktivt jobb."""
-    if "x_occ" not in jobs.columns or "y_occ" not in jobs.columns:
-        return np.nan                     # körning från före geometrin
-    if "active" in jobs.columns:
-        jobs = jobs[jobs["active"].astype(bool)]
-    x = jobs["x_occ"].dropna().to_numpy()
-    y = jobs["y_occ"].dropna().to_numpy()
-    if x.size == 0:
-        return np.nan
-    g = np.linspace(-1, 1, n_grid)
-    gx, gy = np.meshgrid(g, g)
-    inside = gx ** 2 + gy ** 2 <= 1.0
-    px, py = gx[inside], gy[inside]
-    covered = np.zeros(px.size, dtype=bool)
-    for st in range(0, x.size, 500):                 # blockvis för minnet
-        bx, by = x[st:st + 500], y[st:st + 500]
-        d2 = (px[:, None] - bx[None, :]) ** 2 + (py[:, None] - by[None, :]) ** 2
-        covered |= (d2 <= s * s).any(axis=1)
-        if covered.all():
-            break
-    return float(covered.mean())
-
-
-def _parse(line):
-    parts = [p.strip() for p in line.rstrip("\n").split(",")]
-    if len(parts) < 2:
-        return None
-    rec = {}
-    try:
-        rec["time"] = float(parts[0])
-    except ValueError:
-        return None
-    rec["event"] = parts[1]
-    for f in parts[2:]:
-        if f:
-            k, _, v = f.partition(" ")
-            rec[k] = v.strip()
-    return rec
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
 
 def metrics(run_dir):
-    ind = pd.read_csv(os.path.join(run_dir, "final_state_individuals.csv"))
-    jobs = pd.read_csv(os.path.join(run_dir, "final_state_jobs.csv"))
-    if "status" not in ind.columns or "individual_id" not in jobs.columns:
-        return {"körning": os.path.basename(run_dir.rstrip("/")), "jobb": len(jobs)}
-    act = jobs["active"].astype(bool) if "active" in jobs.columns else pd.Series(True, index=jobs.index)
+    """Nyckeltal ur den exporterade summary-tabellen.
 
-    unemp = int((ind["status"] == "unemployed").sum())
-    emp = int((ind["status"] == "employed").sum())
-    vac = int((jobs["individual_id"].isna() & act).sum())
+    Täckning, arbetslöshet, vakansgrad, marknadstryck och median u_R räknas
+    på ett ställe, i core/analysis/eventlog.py, i stället för med egen logik
+    per skript."""
+    from core.analysis.eventlog import load_tables
 
-    uR = []
-    path = os.path.join(run_dir, "eventlog.csv")
-    if os.path.isfile(path):
-        for line in open(path, encoding="utf-8", errors="replace"):
-            if "u_R" not in line:
-                continue
-            rec = _parse(line)
-            if rec and "u_R" in rec:
-                try:
-                    uR.append(float(rec["u_R"]))
-                except ValueError:
-                    pass
-    uR = np.array(uR)
-
+    s = load_tables(run_dir)["summary"]
     return {
-        "körning": os.path.basename(run_dir.rstrip("/")),
-        "jobb": int(act.sum()),
-        "C(0.15)": coverage(jobs, 0.15),
-        "C(0.25)": coverage(jobs, 0.25),
-        "u %": 100 * unemp / max(emp + unemp, 1),
-        "v %": 100 * vac / max(int(act.sum()), 1),
-        "tryck": vac / max(unemp, 1),
-        "median u_R": float(np.median(uR)) if uR.size else np.nan,
-        "övergångar": int(uR.size),
+        "körning": s.get("run", os.path.basename(run_dir.rstrip("/"))),
+        "jobb": s.get("active_jobs", np.nan),
+        "C(0.15)": s.get("coverage_0.15", np.nan),
+        "C(0.25)": s.get("coverage_0.25", np.nan),
+        "u %": s.get("u_pct", np.nan),
+        "v %": s.get("v_pct", np.nan),
+        "tryck": s.get("tightness", np.nan),
+        "median u_R": s.get("median_u_R", np.nan),
+        "övergångar": s.get("n_cps_sample", 0),
+        "lönekvot": s.get("median_wage_ratio", np.nan),
+        "residual": s.get("identity_residual_max", np.nan),
     }
 
 
@@ -138,7 +85,7 @@ def main(dirs):
 
     print("\nSamband med täckning (Spearman, parvis kompletta rader):")
     any_shown = False
-    for col in ("u %", "median u_R", "tryck"):
+    for col in ("u %", "median u_R", "tryck", "lönekvot"):
         if col not in df.columns:
             continue
         sub = df[["C(0.25)", col]].dropna()

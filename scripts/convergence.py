@@ -42,43 +42,22 @@ def find_repo_root(start):
 
 
 ROOT = find_repo_root(os.path.dirname(__file__))
-
-
-def _parse(line):
-    parts = [p.strip() for p in line.rstrip("\n").split(",")]
-    if len(parts) < 2:
-        return None
-    rec = {}
-    try:
-        rec["time"] = float(parts[0])
-    except ValueError:
-        return None
-    rec["event"] = parts[1]
-    for f in parts[2:]:
-        if f:
-            k, _, v = f.partition(" ")
-            rec[k] = v.strip()
-    return rec
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
 
 def series(run_dir):
-    rows = []
-    path = os.path.join(run_dir, "eventlog.csv")
-    for line in open(path, encoding="utf-8", errors="replace"):
-        if "new_month" not in line:
-            continue
-        r = _parse(line)
-        if r is None or r.get("event") != "new_month":
-            continue
-        try:
-            rows.append({k: float(r[k]) for k in
-                         ("time", "employed", "unemployed", "unmatched_jobs")}
-                        | {"active_jobs": float(r.get("active_jobs", "nan"))})
-        except (KeyError, ValueError):
-            continue
-    if not rows:
-        raise SystemExit("Inga användbara new_month-rader.")
-    return {k: np.array([r[k] for r in rows]) for k in rows[0]}
+    """Månadsserien ur den exporterade tabellen."""
+    from core.analysis.eventlog import load_tables
+
+    ts = load_tables(run_dir)["timeseries"]
+    if ts.empty:
+        raise SystemExit("Inga månadsrader i körningen.")
+    return {"time": ts["time"].to_numpy(),
+            "employed": ts["employed"].to_numpy(),
+            "unemployed": ts["unemployed"].to_numpy(),
+            "unmatched_jobs": ts["vacancies"].to_numpy(),
+            "active_jobs": ts["active_jobs"].to_numpy()}
 
 
 def fit_exponential(t, y, lower=None, upper=None):
