@@ -162,7 +162,10 @@ För varje par (individ, jobb) ställs två frågor.
 
 ### Kan hon få det — arbetsgivarens fråga
 
-    P(anställning) = q_ij^α(zon) · p_nivå(ℓ − zon, tryck)
+    möte:       med sannolikhet q_ij                          (passform)
+    värde:      p_ij = q_ij^(k·r_j)                            (produktivitet)
+    affär:      p_ij·Π_j ≥ max(w_res, φΠ_j)                    (deltagande)
+    nivåspärr:  p_nivå(ℓ − zon, tryck)                         (steg 4)
 
 **Passformen** är konkurrenskraften q_ij ur avsnitt 2: summan av hennes
 cirklars bidrag vid jobbet. För en mogen arbetare med en cirkel reduceras
@@ -200,42 +203,53 @@ det nya måste överstiga för att vara värt besväret. Friktionens storlek är
 
 ---
 
-## 5. Lönen: fältet som grund, individen förhandlar
+## 5. Lönen: förankrad i fältet, individen förhandlar
 
-Fältet Π ger yrkets prisnivå. Den individuella lönen förhandlas fram enligt
-Nash, standard i sökteorin sedan Mortensen och Pissarides:
+Fältet Π är den observerade genomsnittslönen i yrket. Den individuella lönen
+förhandlas fram enligt Nash, men med ett villkor som binder nivån:
 
-    w = w_res + β · (q·Π − w_res − k_vakans)
+    w / Π = (1 − β) · max(w_res, φΠ)/Π + β · p        affär om p·Π ≥ max(w_res, φΠ)
 
-**Arbetarens värde i jobbet** är q·Π: fältet gånger konkurrenskraft. Den
-växer med tenure eftersom q gör det, vilket ger löneprofiler över karriären
-ur modellen. Den erfarna
-diskaren och advokaten som diskar har olika p och därmed olika värde.
-**Hennes alternativ** är w_res. **Arbetsgivarens alternativ** är fortsatt
-vakans, vars kostnad k_vakans beror på lokalt tryck inom räckhåll: många
-sökande ger arbetsgivaren styrka, få ger arbetaren styrka. β är
-förhandlingsstyrkan, i litteraturen ofta kring 0,5.
+**Ankaret.** Referensarbetaren — fullt produktiv, p = 1, med reservationslön
+lika med yrkets egen lön — måste få exakt Π. Annars är Π inte vad vi säger att
+det är. Löser man Nash-formeln för det villkoret försvinner både
+produktionsskalan och vakanskostnaden, och kvar blir ett viktat medel av vad
+hon kräver och vad hon är värd. I jämvikt, när reservationslönen är den egna
+lönen, konvergerar w mot p·Π: lönen anpassar sig till produktiviteten, och
+full produktivitet ger fältlönen.
 
-Tre saker följer som modellen inte kunde uttrycka förut. Löner varierar inom
-yrke. Tunnhet får en löneeffekt: få sökande per vakans stärker arbetaren,
-vilket delvis kompenserar färre jobb, och det är mätbart i
-lönestrukturstatistiken per kommun. Och nedåtgående rörlighet får ett pris:
-advokaten som diskar får mindre än fältlönen, eftersom hennes p är låg, men
-tar det om hennes w_res fallit nog.
+*Varför det behövdes.* Utan ankaret drev lönerna åt båda hållen samtidigt:
+23 procent av yrkena fick sin median exakt på avtalsgolvet och 37 procent låg
+över fältlönen, lagerarbetare på 1,28 gånger. En global produktionsskala kan
+inte respektera att Π är ett genomsnitt.
+
+**Produktiviteten** p är inte konkurrenskraften q utan q^(k·r_j), där r_j är
+jobbets kravintensitet ur kapabilitetsfältet (Technology fields). Samma q ger
+motsatta produktiviteter: den okvalificerade producerar 0,007 av en läkare
+och fullt som diskare. Se avsnitt 4.
+
+**Golvet är en fallback, inte ett klipp.** Avtalslönen φΠ är vad arbetaren
+vet att hon minst kan få, så hennes effektiva reservation är max(w_res, φΠ).
+Utfallet ligger *över* golvet och varierar med p; ingen massa hamnar exakt
+på det. Arbetsgivarens deltagande, p·Π ≥ effektiv reservation, är hennes
+vinstvillkor: kan arbetaren inte producera tarifens värde finns ingen affär.
+**Kompetenströskeln följer av att avtalslön möter produktivitet**,
+q^(k·r) ≥ φ, och är strängare ju mer jobbet kräver — kirurgen kräver q ≥ 0,81,
+diskaren ingenting.
+
+**Två roller för passformen.** q styr *om mötet leder någonstans*:
+arbetsgivaren föredrar den erfarna diskaren fast vem som helst kan diska, och
+arbetaren söker sig till det hon känner till. Det är vad Rayleigh-kalibreringen
+mot 0,70 task-radier bygger på. p styr *vad hon är värd*. Att låta p styra
+mötet tog bort lokaliteten för halva marknaden och gav median u_R 1,20.
+
+Två parametrar: β och φ. Arbetsgivarens alternativ som funktion av lokalt
+tryck tillkommer i steg 3, som en justering av β snarare än som en egen term.
 
 Utbildning ger **ingen egen löneeffekt**. Nivån öppnar jobb; att de betalar
-mer är fältets sak. Det tar bort en parameter och gör grindvaktsfrågan i
-utbildningsdokumentet skarpare.
-
-Öppet: om k_vakans ska bero på tunnhet i uppgiftsrummet, inte bara på antal
-sökande. En arbetsgivare i en tunn marknad har svårt att tillsätta även om
-arbetslösheten är hög, eftersom de arbetslösa finns i fel riktning. Det vore
-två slags tryck — hur många som söker, och hur många av dem som passar — och
-det andra ger tunnheten en direkt löneeffekt.
+mer är fältets sak.
 
 Inga motbud från befintlig arbetsgivare i denna version.
-
----
 
 ## 6. Sökning: två populationer
 

@@ -399,125 +399,6 @@ def test_thin_market_gives_longer_retraining():
     assert duration(0.7) > duration(-0.2), "avlägset mål gav inte längre omskolning"
 
 
-def test_negotiated_wage_properties():
-    from core.occupations.utils import negotiated_wage
-    Pi, w_res = 1.0, 0.4
-    # Full passform ska ge ungefär fältlönen: det är vad prisfältet påstår,
-    # och det är produktionsskalans hela syfte.
-    w = float(negotiated_wage(1.0, Pi, w_res, beta=0.5, kappa=0.1, labour_share=0.57))
-    assert w == pytest.approx(Pi, abs=0.05), f"full passform ger {w:.2f} av fältlönen"
-    # Monoton i q, och sämre passform betalar mindre
-    ws = [float(negotiated_wage(q, Pi, w_res)) for q in (0.6, 0.8, 1.0)]
-    assert ws[0] < ws[1] < ws[2]
-    assert ws[0] < Pi
-    # Dålig passform: ingen överenskommelse
-    assert np.isnan(negotiated_wage(0.02, Pi, w_res))
-    # Lönen kan aldrig överstiga matchens produktion
-    assert float(negotiated_wage(1.0, Pi, w_res, beta=1.0, kappa=0.0,
-                                 labour_share=0.57)) <= Pi / 0.57 + 1e-9
-
-
-def test_labour_share_anchors_the_wage_level():
-    """REGRESSION i design: utan produktionsskala fick en fullt kvalificerad
-    arbetare 0.65 av fältlönen, och medianen i en körning blev 0.575.
-    Prisfältet är estimerat på faktiska löner, så Pi ÄR lönen; att sätta den
-    som matchens produktion gav arbetaren bara en andel av sin egen lön."""
-    from core.occupations.utils import negotiated_wage
-    Pi, w_res = 1.0, 0.4
-    utan = float(negotiated_wage(1.0, Pi, w_res, labour_share=1.0))
-    med = float(negotiated_wage(1.0, Pi, w_res, labour_share=0.57))
-    assert utan == pytest.approx(0.65, abs=0.01)
-    assert med > utan and med == pytest.approx(1.0, abs=0.05)
-    # Lägre arbetskraftsandel -> högre produktion -> högre lön
-    assert (float(negotiated_wage(1.0, Pi, w_res, labour_share=0.50))
-            > float(negotiated_wage(1.0, Pi, w_res, labour_share=0.65)))
-
-
-def test_bargaining_closes_the_floor_exploit(individuals, jobs):
-    """REGRESSION i design: grundskolegolvet gav q ~ 0.05 mot alla vakanser,
-    och med ett överskott oberoende av q valde logiten det högst betalda av
-    tio avlägsna träffar. Diskaren tog kirurgjobbet.
-
-    Två oberoende spärrar stänger det: förhandlingen (dålig passform betalar
-    nära reservationslönen) och kravexponenten (dålig passform producerar
-    nästan inget i ett krävande jobb). Testet visar var och en för sig."""
-    from core.occupations.utils import search_once, vacant_job_indices, build_job_arrays
-
-    rng = np.random.default_rng(1)
-    n = 11
-    jbs = pd.DataFrame({
-        "job_id": np.arange(n),
-        "x_occ": [0.30] + [-0.7] * 10, "y_occ": [0.10] + list(rng.uniform(-0.3, 0.3, 10)),
-        "r_o": 0.27, "wage": [0.8] + [1.8] * 10, "r_req": 1.0,
-        "x": 0.0, "y": 0.0, "individual_id": np.nan, "active": True})
-    A = build_job_arrays(jbs); cand = vacant_job_indices(jbs)
-    ind = pd.Series({"x_occ": 0.3, "y_occ": 0.1, "r_i": 0.0, "x": 0.0, "y": 0.0, "w_res": 0.4})
-    q = lambda jx, jy, jro: np.where(np.asarray(jx) > 0, 1.0, 0.05)
-
-    def far_hits(**kw):
-        return sum(1 for _ in range(300)
-                   if (search_once(ind, jbs, cand, sigma_gamma=0.875, choice_scale=0.05,
-                                   rng=rng, arrays=A, competitiveness=q, **kw)[0] or 0) > 0)
-
-    # Utan någon spärr: q som produktivitet (k=0 -> p=q^0? nej: k=1, r=1 -> p=q)
-    assert far_hits(bargaining=None, requirement_k=1.0) > 100, \
-        "utan spärrar ska golvet exploateras (annars testar vi inget)"
-    # Förhandlingen ensam stänger det
-    assert far_hits(bargaining={"beta": 0.5, "kappa": 0.1}, requirement_k=1.0) == 0
-    # Kravexponenten ensam stänger det nästan helt: p = 0.05^2 per avlägset
-    # jobb, tio jobb, trehundra försök -> väntat ~7 träffar mot >100 utan.
-    assert far_hits(bargaining=None, requirement_k=2.0) < 25
-
-
-def test_requirement_lets_the_lawyer_wash_dishes():
-    """Advokaten kan diska. Kravet är noll, så hennes produktivitet är full
-    oavsett hur långt bort juridiken ligger; det enda som håller henne borta
-    är att hon inte vill (reservationslönen), vilket är trögheten."""
-    from core.occupations.utils import search_once, vacant_job_indices, build_job_arrays
-
-    rng = np.random.default_rng(2)
-    dish = pd.DataFrame({"job_id": [0], "x_occ": [-0.45], "y_occ": [-0.30], "r_o": [0.27],
-                         "wage": [0.49], "r_req": [0.0], "x": [0.0], "y": [0.0],
-                         "individual_id": [np.nan], "active": [True]})
-    A = build_job_arrays(dish); cand = vacant_job_indices(dish)
-    lawyer_q = lambda jx, jy, jro: np.array([0.08])          # långt från juridiken
-
-    picky = pd.Series({"x_occ": 0.39, "y_occ": 0.03, "r_i": 0.0, "x": 0.0, "y": 0.0, "w_res": 1.1})
-    desperate = picky.copy(); desperate["w_res"] = 0.30
-
-    def hired(ind):
-        return sum(1 for _ in range(100)
-                   if search_once(ind, dish, cand, sigma_gamma=0.875, rng=rng, arrays=A,
-                                  competitiveness=lawyer_q, requirement_k=2.0,
-                                  bargaining={"beta": 0.5, "kappa": 0.1,
-                                              "labour_share": 0.57,
-                                              "wage_floor_share": 0.7})[0] is not None)
-
-    assert hired(picky) == 0, "tog diskjobbet trots hög reservationslön"
-    assert hired(desperate) > 90, "kunde inte diska trots att kravet är noll"
-
-
-def test_requirement_blocks_the_unqualified_surgeon():
-    """Kirurgjobbet: kravet är högt, så q = 0.05 ger nästan ingen
-    produktivitet, och värdet räcker varken till reservationslön eller
-    avtalslön. Ingen anställning oavsett hur lite hon begär."""
-    from core.occupations.utils import search_once, vacant_job_indices, build_job_arrays
-
-    rng = np.random.default_rng(3)
-    surg = pd.DataFrame({"job_id": [0], "x_occ": [0.42], "y_occ": [0.03], "r_o": [0.27],
-                         "wage": [1.8], "r_req": [0.84], "x": [0.0], "y": [0.0],
-                         "individual_id": [np.nan], "active": [True]})
-    A = build_job_arrays(surg); cand = vacant_job_indices(surg)
-    ind = pd.Series({"x_occ": -0.4, "y_occ": -0.3, "r_i": 0.0, "x": 0.0, "y": 0.0, "w_res": 0.10})
-    n = sum(1 for _ in range(300)
-            if search_once(ind, surg, cand, sigma_gamma=0.875, rng=rng, arrays=A,
-                           competitiveness=lambda jx, jy, jro: np.array([0.05]),
-                           requirement_k=2.0,
-                           bargaining={"beta": 0.5, "kappa": 0.1, "labour_share": 0.57,
-                                       "wage_floor_share": 0.7})[0] is not None)
-    assert n == 0, f"okvalificerad anställd som kirurg {n} gånger"
-
-
 def test_start_job_uses_negotiated_wage_as_reservation():
     """REGRESSION: förhandlingen påverkade valet men inte lönen efter
     anställning -- reservationslönen sattes till effective_wage, alltså
@@ -553,10 +434,137 @@ def test_start_job_uses_negotiated_wage_as_reservation():
     assert w.individuals.at[0, "w_res"] == pytest.approx(0.72), "fältlön i stället för förhandlad"
 
 
-def test_wage_floor_lifts_low_offers_to_the_floor():
-    """Är matchen möjlig men den förhandlade lönen låg, höjs den till golvet."""
+
+# ---------------------------------------------------------------------------
+# Förhandlad lön: förankrad i fältet, golv som fallback
+# ---------------------------------------------------------------------------
+def test_reference_worker_earns_exactly_the_field_wage():
+    """ANKARET. Prisfältet är den observerade genomsnittslönen. Referens-
+    arbetaren -- fullt produktiv, med reservationslön lika med yrkets egen
+    lön -- måste få exakt Pi, annars är Pi inte vad vi säger att det är."""
+    from core.occupations.utils import negotiated_wage
+    for Pi in (0.5, 1.0, 1.8):
+        w = float(negotiated_wage(1.0, Pi, Pi, beta=0.5, wage_floor_share=0.7))
+        assert w == pytest.approx(Pi)
+
+
+def test_wage_converges_to_productivity_times_field():
+    """I jämvikt, när reservationslönen är den egna lönen, konvergerar w mot
+    p*Pi. Full produktivitet ger fältlönen; sämre ger proportionellt mindre."""
     from core.occupations.utils import negotiated_wage
     Pi = 1.0
-    free = float(negotiated_wage(0.55, Pi, 0.15, wage_floor_share=0.0))
-    bound = float(negotiated_wage(0.55, Pi, 0.15, wage_floor_share=0.60))
-    assert free < 0.60 * Pi <= bound
+    for p in (0.75, 0.9, 1.0):
+        w = 0.72                       # startvärde över golvet
+        for _ in range(60):
+            w = float(negotiated_wage(p, Pi, w, beta=0.5, wage_floor_share=0.7))
+        assert w == pytest.approx(p * Pi, abs=1e-3)
+
+
+def test_floor_is_a_fallback_not_a_clip():
+    """REGRESSION: ett klipp lade 23 procent av yrkenas median exakt på golvet
+    och tog bort all spridning i 19 procent. Golvet ska vara arbetarens
+    fallback: utfallet ligger ÖVER det och varierar med produktiviteten."""
+    from core.occupations.utils import negotiated_wage
+    Pi, phi = 1.0, 0.7
+    ws = [float(negotiated_wage(p, Pi, 0.30, beta=0.5, wage_floor_share=phi))
+          for p in (0.72, 0.80, 0.90, 1.00)]
+    assert all(w > phi * Pi for w in ws), "utfall på eller under golvet"
+    assert ws == sorted(ws) and len(set(round(w, 6) for w in ws)) == 4, "ingen spridning"
+    # Reservationen under golvet spelar ingen roll: fallbacken är golvet
+    assert float(negotiated_wage(0.9, Pi, 0.30, beta=0.5, wage_floor_share=phi)) == \
+        pytest.approx(float(negotiated_wage(0.9, Pi, 0.60, beta=0.5, wage_floor_share=phi)))
+
+
+def test_wages_never_exceed_the_field_at_full_productivity():
+    """REGRESSION: 37 procent av yrkena låg ÖVER fältlönen, lagerarbetare på
+    1.28 gånger, eftersom en global produktionsskala inte respekterade att Pi
+    är ett genomsnitt. Med p <= 1 kan lönen aldrig överstiga Pi."""
+    from core.occupations.utils import negotiated_wage
+    Pi = 0.6
+    for p in (0.8, 1.0):
+        for wres in (0.3, 0.55, 0.6):
+            w = negotiated_wage(p, Pi, wres, beta=0.5, wage_floor_share=0.7)
+            if not np.isnan(w):
+                assert float(w) <= Pi + 1e-9
+
+
+def test_employer_participation_is_the_productivity_threshold():
+    """Arbetsgivaren deltar om p*Pi >= max(w_res, phi*Pi). Kombinerat med
+    p = q ** (k*r) ger det en kompetenströskel som är strängare ju mer
+    jobbet kräver -- utan att någon regel skrivits för det."""
+    from core.occupations.utils import negotiated_wage
+    from core.occupations.requirement import productivity
+    Pi, phi = 1.8, 0.7
+    # Kirurg, r = 0.84: grundskolegolvet q = 0.05 ger p ~ 0.007 -> ingen affär
+    assert np.isnan(negotiated_wage(float(productivity(0.05, 0.84)), Pi, 0.10,
+                                    wage_floor_share=phi))
+    # ... och q = 0.85 räcker
+    assert not np.isnan(negotiated_wage(float(productivity(0.85, 0.84)), Pi, 0.10,
+                                        wage_floor_share=phi))
+    # Diskare, r = 0: samma q = 0.05 ger p = 1 -> affär till fullt värde
+    assert float(negotiated_wage(float(productivity(0.05, 0.0)), 0.49, 0.30,
+                                 wage_floor_share=phi)) == pytest.approx(0.49 * 0.85, abs=0.01)
+
+
+def test_lawyer_can_wash_dishes_but_only_if_she_wants_to(individuals, jobs):
+    """Advokaten kan diska: kravet är noll, så produktiviteten är full oavsett
+    hur långt bort juridiken ligger. Det enda som håller henne borta är
+    reservationslönen -- trögheten -- och mötet, som q styr."""
+    from core.occupations.utils import search_once, vacant_job_indices, build_job_arrays
+    rng = np.random.default_rng(2)
+    dish = pd.DataFrame({"job_id": [0], "x_occ": [-0.45], "y_occ": [-0.30], "r_o": [0.27],
+                         "wage": [0.49], "r_req": [0.0], "x": [0.0], "y": [0.0],
+                         "individual_id": [np.nan], "active": [True]})
+    A = build_job_arrays(dish); cand = vacant_job_indices(dish)
+    q_far = lambda jx, jy, jro: np.array([0.30])
+    picky = pd.Series({"x_occ": 0.39, "y_occ": 0.03, "r_i": 0.0, "x": 0.0, "y": 0.0, "w_res": 1.1})
+    willing = picky.copy(); willing["w_res"] = 0.30
+    def hired(ind):
+        return sum(1 for _ in range(300)
+                   if search_once(ind, dish, cand, sigma_gamma=0.875, rng=rng, arrays=A,
+                                  competitiveness=q_far, requirement_k=2.0,
+                                  bargaining={"beta": 0.5, "wage_floor_share": 0.7})[0]
+                   is not None)
+    assert hired(picky) == 0
+    n = hired(willing)
+    assert 40 < n < 140, f"möten med q = 0.3 bör lyckas i ~30 % av fallen, fick {n}/300"
+
+
+def test_unqualified_never_becomes_surgeon():
+    from core.occupations.utils import search_once, vacant_job_indices, build_job_arrays
+    rng = np.random.default_rng(3)
+    surg = pd.DataFrame({"job_id": [0], "x_occ": [0.42], "y_occ": [0.03], "r_o": [0.27],
+                         "wage": [1.8], "r_req": [0.84], "x": [0.0], "y": [0.0],
+                         "individual_id": [np.nan], "active": [True]})
+    A = build_job_arrays(surg); cand = vacant_job_indices(surg)
+    ind = pd.Series({"x_occ": -0.4, "y_occ": -0.3, "r_i": 0.0, "x": 0.0, "y": 0.0, "w_res": 0.10})
+    n = sum(1 for _ in range(300)
+            if search_once(ind, surg, cand, sigma_gamma=0.875, rng=rng, arrays=A,
+                           competitiveness=lambda jx, jy, jro: np.array([0.30]),
+                           requirement_k=2.0,
+                           bargaining={"beta": 0.5, "wage_floor_share": 0.7})[0] is not None)
+    assert n == 0
+
+
+def test_meeting_is_governed_by_fit_not_productivity(individuals, jobs):
+    """REGRESSION: att låta produktiviteten styra mötet tog bort lokaliteten
+    för alla jobb med lågt krav -- halva marknaden -- och gav median u_R 1.20
+    mot 0.70. q styr mötet, p styr värdet."""
+    from core.occupations.utils import search_once, vacant_job_indices, build_job_arrays
+    rng = np.random.default_rng(4)
+    n = 400
+    x = rng.uniform(-0.9, 0.9, n); y = rng.uniform(-0.9, 0.9, n)
+    jbs = pd.DataFrame({"job_id": np.arange(n), "x_occ": x, "y_occ": y, "r_o": 0.272,
+                        "wage": 0.7, "r_req": 0.0,                   # inga krav alls
+                        "x": 0.0, "y": 0.0, "individual_id": np.nan, "active": True})
+    A = build_job_arrays(jbs); cand = vacant_job_indices(jbs)
+    ind = pd.Series({"x_occ": 0.3, "y_occ": 0.1, "r_i": 0.0, "x": 0.0, "y": 0.0, "w_res": 0.30})
+    d_hits = []
+    for _ in range(400):
+        pos, *_ = search_once(ind, jbs, cand, sigma_gamma=0.875, rng=rng, arrays=A,
+                              requirement_k=2.0,
+                              bargaining={"beta": 0.5, "wage_floor_share": 0.7})
+        if pos is not None:
+            d_hits.append(np.hypot(x[pos] - 0.3, y[pos] - 0.1) / 0.272)
+    assert len(d_hits) > 100
+    assert np.median(d_hits) < 1.3, f"lokaliteten försvann: median u_R {np.median(d_hits):.2f}"

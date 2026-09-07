@@ -67,24 +67,17 @@ simulation:
   requirement_k: 2.0
 
   # --- Förhandlad lön (docs/individmodell.md, avsnitt 5) ---
-  # w = w_res + beta*(q*Pi - w_res - kappa*Pi). Fältet är grunden, individen
-  # förhandlar sin avvikelse efter konkurrenskraft. Lokalt marknadstryck som
-  # arbetsgivarens alternativ tillkommer i steg 3; tills dess kappa*Pi.
+  # w/Pi = (1 - beta) * max(w_res, phi*Pi)/Pi + beta * p, affär om p*Pi >= max(...).
+  # Förankrad i fältet: referensarbetaren (p = 1, reservation = egen lön) får
+  # exakt Pi, och i jämvikt konvergerar w mot p*Pi. Produktionsskala och
+  # vakanskostnad utgår -- de följde av ankaret. Golvet phi*Pi är arbetarens
+  # fallback (avtalslönen), inte ett klipp: utfallet ligger över det och
+  # varierar med p. Arbetsgivaren deltar om p >= phi, vilket ger
+  # kompetenströskeln q ** (k*r) >= phi, strängare ju mer jobbet kräver.
   bargaining:
     enabled: true
-    beta: 0.5           # arbetarens förhandlingsstyrka
-    kappa: 0.10         # arbetsgivarens vakanskostnad, andel av produktionen
-    # Matchens produktion är Pi/labour_share. Prisfältet är estimerat på
-    # faktiska löner, så Pi ÄR lönen; utan skalan får arbetaren bara sin andel
-    # av något som redan är hennes lön, och en fullt kvalificerad arbetare får
-    # 0.65*Pi. Arbetskraftens andel av förädlingsvärdet är omkring 0.57 i
-    # Sverige, vilket ger w ungefär Pi vid full passform.
-    labour_share: 0.57
-    # Kollektivavtalens minimilön som andel av yrkets fältlön. Lyfter låga bud
-    # till avtalsnivån. Tillsammans med kravet spärrar den kirurgjobbet för den
-    # okvalificerade (värdet räcker inte till golvet) utan att spärra
-    # diskjobbet för advokaten (kravet är noll, så värdet är fullt).
-    wage_floor_share: 0.70
+    beta: 0.5             # arbetarens förhandlingsstyrka
+    wage_floor_share: 0.70  # avtalslön som andel av yrkets fältlön
 
   # --- Omskolning: riktad mot där arbete finns, inte ett fast delta_xi ---
   retraining_share: 0.5          # andel av vägen mot vakansernas tyngdpunkt

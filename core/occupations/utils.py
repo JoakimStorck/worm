@@ -332,29 +332,31 @@ def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
 
     jx = A["x_occ"][cand_idx]; jy = A["y_occ"][cand_idx]
     if competitiveness is not None:
-        # Konkurrenskraft ur kompetenscirklarna (docs/individmodell.md, avsnitt 2),
-        # översatt till PRODUKTIVITET via jobbets krav: p = q ** (k * r_req).
-        # r_req = 0 gör alla fullt produktiva (diskaren), r_req = 1 gör
-        # produktiviteten q**k (kirurgen). Se core/occupations/requirement.py.
-        from core.occupations.requirement import productivity
+        # Konkurrenskraft q ur kompetenscirklarna (docs/individmodell.md, avsnitt 2).
         q = competitiveness(jx, jy, A["r_o"][cand_idx])
-        p = productivity(q, A["r_req"][cand_idx], k=requirement_k)
     else:
         d2 = (jx - ix) ** 2 + (jy - iy) ** 2
         sigma2 = np.maximum((sigma_gamma ** 2) * (A["r_o"][cand_idx] ** 2 + ri ** 2), 1e-9)
-        p = np.exp(-0.5 * d2 / sigma2)
+        q = np.exp(-0.5 * d2 / sigma2)
+    # Två roller för passformen. q styr OM mötet leder någonstans -- arbets-
+    # givaren föredrar den erfarna diskaren fast vem som helst kan diska, och
+    # arbetaren söker sig till det hon känner till. Det är vad Rayleigh-
+    # kalibreringen mot 0.70 task-radier bygger på. PRODUKTIVITETEN
+    # p = q ** (k * r_req) styr vad hon är värd: lön och arbetsgivarens
+    # deltagande. Att låta p styra mötet tog bort lokaliteten för halva
+    # marknaden och gav median u_R 1.20.
+    from core.occupations.requirement import productivity
+    p = productivity(q, A["r_req"][cand_idx], k=requirement_k)
 
     km = np.hypot(A["x"][cand_idx] - gx, A["y"][cand_idx] - gy) / 1000.0
     w_field = A["wage"][cand_idx]
     if bargaining is not None:
-        # Förhandlad lön: värdet q*Pi delas mellan parterna. En dålig passform
-        # betalar nära reservationslönen och väljs därför inte.
         w_off = negotiated_wage(p, w_field, w_res, **bargaining)
     else:
         w_off = w_field
     S = np.where(np.isnan(w_off), -np.inf, w_off - commute_cost_per_km * km - w_res)
 
-    live = (S > min_surplus) & (rng.random(S.size) < p)
+    live = (S > min_surplus) & (rng.random(S.size) < q)
     if not live.any():
         return None, None, None, None
 
@@ -366,7 +368,7 @@ def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
         pick = k[int(rng.choice(w.size, p=w / w.sum()))]
     else:
         pick = k[int(np.argmax(Sk))]
-    return int(cand_idx[pick]), float(S[pick]), float(w_off[pick]), float(p[pick])
+    return int(cand_idx[pick]), float(S[pick]), float(w_off[pick]), float(q[pick])
 
 
 def retraining_target(ind, jobs_df, cand_idx, arrays=None,
@@ -412,44 +414,44 @@ def retraining_target(ind, jobs_df, cand_idx, arrays=None,
 # ---------------------------------------------------------------------------
 # Förhandlad lön (docs/individmodell.md, avsnitt 5)
 # ---------------------------------------------------------------------------
-def negotiated_wage(q, w_field, w_res, beta=0.5, kappa=0.10, k_vacancy=None,
-                    labour_share=0.57, wage_floor_share=0.0):
-    """Nash-förhandling med fältet som grund.
+def negotiated_wage(p, w_field, w_res, beta=0.5, wage_floor_share=0.0, **_ignored):
+    """Nash-förhandling förankrad i fältet.
 
-        y = q * Pi / labour_share            matchens produktion
-        w = w_res + beta * (y - w_res - k)   arbetarens andel av överskottet
+        w / Pi = (1 - beta) * max(w_res, phi*Pi)/Pi + beta * p
 
-    PRODUKTIONSSKALAN är nödvändig och inte en fri parameter. Prisfältet Pi är
-    estimerat på faktiska löner: det ÄR lönen. Att sätta Pi som matchens
-    produktion i Nash-delningen gav arbetaren bara sin andel av något som redan
-    var hennes lön, och en fullt kvalificerad arbetare fick 0.65*Pi. I en
-    körning blev medianen 0.575, alltså knappt 58 procent av yrkets lön.
+    med affär om och endast om p*Pi >= max(w_res, phi*Pi).
 
-    Matchens produktion är i stället y = Pi / s, där s är arbetskraftens andel
-    av förädlingsvärdet, omkring 0.57 i Sverige. Då ger delningen w ungefär Pi
-    för en välmatchad arbetare, vilket är vad prisfältet påstår, och lägre för
-    en sämre matchad. Ankaret är observerbart och ersätter godtycket.
+    ANKARET. Prisfältet Pi är den observerade genomsnittslönen i yrket. Sätt
+    referensarbetaren: fullt produktiv, p = 1, med reservationslön lika med
+    yrkets egen lön. Hennes förhandlade lön MÅSTE vara Pi -- annars är Pi inte
+    vad vi säger att det är. Löser man Nash-formeln för det villkoret
+    försvinner både produktionsskalan (labour_share) och vakanskostnaden
+    (kappa), och kvar blir ett viktat medel av vad hon kräver och vad hon är
+    värd. I jämvikt, när reservationslönen är den egna lönen, konvergerar w
+    mot p*Pi: lönen anpassar sig till produktiviteten, och full produktivitet
+    ger fältlönen.
 
-    LÖNEGOLVET är kollektivavtalens minimilön, wage_floor_share * Pi. Det
-    lyfter låga bud till avtalsnivån. Ligger arbetsgivarens värde under golvet
-    blir tjänsten obesatt -- och värdet är produktivitet via jobbets krav, så
-    det spärrar kirurgjobbet för den okvalificerade utan att spärra diskjobbet
-    för advokaten. Utan golv kunde en arbetare med grundskolegolvets
-    konkurrenskraft tillträda ett kirurgjobb för sju procent av yrkeslönen.
+    Utan ankaret drev lönerna åt båda hållen: 23 procent av yrkena fick sin
+    median exakt på avtalsgolvet och 37 procent låg ÖVER fältlönen, lager-
+    arbetare på 1.28 gånger, eftersom en global produktionsskala inte kan
+    respektera att Pi är ett genomsnitt.
 
-    k_vakans är arbetsgivarens alternativ -- fortsatt vakans -- här som andelen
-    kappa av produktionen tills lokalt marknadstryck införs (steg 3).
+    GOLVET är en fallback, inte ett klipp. Avtalslönen phi*Pi är vad arbetaren
+    vet att hon minst kan få, så hennes effektiva reservation är
+    max(w_res, phi*Pi). Utfallet ligger ÖVER golvet och varierar med p, i
+    stället för att en massa hamnar exakt på det. Arbetsgivarens deltagande,
+    p*Pi >= effektiv reservation, är hennes vinstvillkor: kan arbetaren inte
+    producera tarifens värde finns ingen affär. Kompetenströskeln följer av
+    att avtalslön möter produktivitet -- q ** (k*r) >= phi -- och blir
+    strängare ju mer jobbet kräver.
 
-    Returnerar den förhandlade lönen; NaN där ingen överenskommelse är möjlig.
-    Vektoriserat över jobb.
+    p är PRODUKTIVITET, q ** (k * r_req), inte konkurrenskraften q. Se
+    core/occupations/requirement.py. Vektoriserat över jobb; NaN utan affär.
     """
-    q = np.asarray(q, dtype=float); w_field = np.asarray(w_field, dtype=float)
-    value = q * w_field / max(float(labour_share), 1e-6)     # matchens produktion
-    kv = kappa * value if k_vacancy is None else np.asarray(k_vacancy, dtype=float)
-    surplus = value - w_res - kv
-    w = w_res + beta * surplus
-    w = np.where(surplus > 0, np.minimum(w, value), np.nan)
-    if wage_floor_share:
-        floor = float(wage_floor_share) * w_field
-        w = np.where(value < floor, np.nan, np.maximum(w, floor))
-    return w
+    p = np.asarray(p, dtype=float); w_field = np.asarray(w_field, dtype=float)
+    value = p * w_field
+    eff = np.maximum(w_res, float(wage_floor_share) * w_field) if wage_floor_share else \
+        np.full_like(value, float(w_res))
+    w = (1.0 - beta) * eff + beta * value
+    return np.where(value >= eff, w, np.nan)
+
