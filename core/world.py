@@ -40,6 +40,20 @@ class World:
         self.n_matched_in_month = 0
         self.simulation_end_time = self._get_simulation_end_time()
 
+    @property
+    def conn(self):
+        """Lat sqlite-anslutning. Saknades helt sedan jobbflödena infördes:
+        _geom_lookup och _draw_occupation_for_employer föll tyst i try/except
+        och u_R_occ kunde aldrig beräknas."""
+        if getattr(self, "_conn", None) is None and getattr(self, "db_path", None):
+            import sqlite3
+            self._conn = sqlite3.connect(self.db_path)
+        return getattr(self, "_conn", None)
+
+    @conn.setter
+    def conn(self, value):
+        self._conn = value
+
     def _get_simulation_end_time(self):
         config = self.cfg_reader.config
         n_years = config.get('n_years') or config.get('simulation', {}).get('n_years', 1)
@@ -461,10 +475,16 @@ class World:
         return self._vm
 
     def set_job_filled(self, job_id, filled):
-        """Håller vakansmasken i synk när en position tillsätts eller frigörs."""
+        """Håller vakansmasken i synk när en position tillsätts eller frigörs.
+
+        Går via vacant_mask(), som bygger om masken när tabellen ändrat längd.
+        Direkt åtkomst till _vm gav IndexError när en nypostad position
+        förstördes innan någon sökning hunnit utlösa ombyggnaden."""
         pos = self.job_index().get(job_id)
-        if pos is not None and getattr(self, "_vm", None) is not None:
-            self._vm[pos] = not filled
+        if pos is not None:
+            vm = self.vacant_mask()
+            if pos < vm.size:
+                vm[pos] = not filled
         if pos is not None and "pending" in self.jobs.columns:
             # Rensas i båda riktningarna: rekryteringen är avslutad antingen
             # genom tillträde eller genom att positionen frigjorts.
@@ -478,13 +498,16 @@ class World:
             return
         if "pending" in self.jobs.columns:
             self.jobs.iat[pos, self.jobs.columns.get_loc("pending")] = True
-        if getattr(self, "_vm", None) is not None:
-            self._vm[pos] = False
+        vm = self.vacant_mask()
+        if pos < vm.size:
+            vm[pos] = False
 
     def set_job_inactive(self, job_id):
         pos = self.job_index().get(job_id)
-        if pos is not None and getattr(self, "_vm", None) is not None:
-            self._vm[pos] = False
+        if pos is not None:
+            vm = self.vacant_mask()
+            if pos < vm.size:
+                vm[pos] = False
 
     def job_arrays(self):
         """Cachad numpy-vy av jobbtabellen, byggs om när tabellen ändrar längd

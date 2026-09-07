@@ -56,6 +56,15 @@ simulation:
     tasks_per_occupation_default: 20   # k för r_o/sqrt(k) om n_tasks saknas
     retraining_radius2: 0.25      # omskolningscirkelns radie^2 (bred)
 
+  # --- Förhandlad lön (docs/individmodell.md, avsnitt 5) ---
+  # w = w_res + beta*(q*Pi - w_res - kappa*Pi). Fältet är grunden, individen
+  # förhandlar sin avvikelse efter konkurrenskraft. Lokalt marknadstryck som
+  # arbetsgivarens alternativ tillkommer i steg 3; tills dess kappa*Pi.
+  bargaining:
+    enabled: true
+    beta: 0.5       # arbetarens förhandlingsstyrka
+    kappa: 0.10     # arbetsgivarens vakanskostnad som andel av fältlönen
+
   # --- Omskolning: riktad mot där arbete finns, inte ett fast delta_xi ---
   retraining_share: 0.5          # andel av vägen mot vakansernas tyngdpunkt
   retraining_target_k: 50        # antal bästa vakanser som bestämmer riktningen

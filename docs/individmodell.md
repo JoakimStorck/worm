@@ -340,8 +340,9 @@ Varje steg med tester och invariantkontroll från början.
 2. **Sökning från anställning.** Puckelformad intensitet per jobb,
    bytesfriktion, uppsägningstid. Ersätter `quit_job` och de interna
    händelserna. Rättar kalibreringens population.
-3. **Förhandlad lön.** Nash med lokalt tryck. Behöver steg 2 för anställdas
-   reservation.
+3. **Lokalt marknadstryck i förhandlingen.** Förhandlingen finns sedan
+   steg 1; här tillkommer k_vakans som funktion av sökande per vakans inom
+   räckhåll. Behöver steg 2 för anställdas reservation.
 4. **Nivån.** Job Zone-inläsning, SUN-nyckel, mjuk spärr med tryckberoende,
    exponent efter krav. Förutsätter att grindvaktsfrågan är mätt.
 5. **Utbildningen** på de nya primitiverna.

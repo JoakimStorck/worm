@@ -286,7 +286,8 @@ def handle_start_job_search(event, world):
     idx = event['agent_id']
     sim = world.cfg_reader.config.get('simulation', {})
 
-    job_pos, surplus = search_once(
+    brg = sim.get('bargaining', {}) or {}
+    job_pos, surplus, w_neg, q_hire = search_once(
         world.individuals.loc[idx], world.jobs,
         np.flatnonzero(world.vacant_mask()),
         sigma_gamma=sim.get('sigma_gamma', 1.0),
@@ -298,10 +299,16 @@ def handle_start_job_search(event, world):
             (lambda jx, jy, jro: world.circles.competitiveness(idx, jx, jy, jro,
                                                                world.competence_params()))
             if hasattr(world, 'circles') else None),
+        bargaining=({"beta": float(brg.get("beta", 0.5)),
+                     "kappa": float(brg.get("kappa", 0.10))}
+                    if brg.get("enabled", True) else None),
     )
 
     if job_pos is not None:
         job_id = world.jobs.iloc[job_pos]['job_id']
+        # Den förhandlade lönen följer med till tillträdet.
+        if 'w_neg' in world.individuals.columns:
+            world.individuals.at[idx, 'w_neg'] = w_neg
         # Rekryteringstid: positionen är utlovad men tillträds först senare.
         # Utan fördröjning fylls en vakans i samma ögonblick den matchas, och
         # vakansvaraktigheten blir omkring 13 dagar mot faktiska 30-60. Det är
@@ -315,11 +322,12 @@ def handle_start_job_search(event, world):
             "time": float(event['time'] + lag),
             "agent_id": idx,
             "event_type": "start_job",
-            "params": {"job_id": job_id},
+            "params": {"job_id": job_id, "w_neg": w_neg, "q_hire": q_hire},
         })
         world.event_logger.log_event(world, event, extra={
             'event_detail': 'match_completed', 'job_id': job_id,
-            'surplus': round(surplus, 4)})
+            'surplus': round(surplus, 4), 'w_neg': round(w_neg, 4),
+            'q_hire': round(q_hire, 4)})
         world.n_matched_in_month += 1
     else:
         current_prop = world.individuals.at[idx, 'propensity_start_education']

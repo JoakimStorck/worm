@@ -262,7 +262,7 @@ def _search_market(n_jobs, seed=0, **kw):
                      "x": 15000.0, "y": 15000.0, "w_res": kw.pop("w_res", 0.40)})
     uR, km, hits, N = [], [], 0, 600
     for _ in range(N):
-        jp, _ = search_once(ind, jbs, cand, sigma_gamma=0.875,
+        jp, _, _, _ = search_once(ind, jbs, cand, sigma_gamma=0.875,
                             commute_cost_per_km=0.005, rng=rng, arrays=A, **kw)
         if jp is not None:
             hits += 1
@@ -397,3 +397,52 @@ def test_thin_market_gives_longer_retraining():
         return w.event_queue.pop()["time"]
 
     assert duration(0.7) > duration(-0.2), "avlägset mål gav inte längre omskolning"
+
+
+def test_negotiated_wage_properties():
+    from core.occupations.utils import negotiated_wage
+    Pi, w_res = 1.0, 0.4
+    # Full passform: mellan reservation och värde
+    w = float(negotiated_wage(1.0, Pi, w_res, beta=0.5, kappa=0.1))
+    assert w_res < w < Pi
+    assert w == pytest.approx(0.4 + 0.5 * (1.0 - 0.4 - 0.1))
+    # Monoton i q
+    ws = [float(negotiated_wage(q, Pi, w_res)) for q in (0.6, 0.8, 1.0)]
+    assert ws[0] < ws[1] < ws[2]
+    # Dålig passform: ingen överenskommelse
+    assert np.isnan(negotiated_wage(0.05, Pi, w_res))
+    # beta=1: hela överskottet till arbetaren, aldrig över värdet
+    assert float(negotiated_wage(1.0, Pi, w_res, beta=1.0, kappa=0.0)) == pytest.approx(Pi)
+
+
+def test_bargaining_closes_the_floor_exploit(individuals, jobs):
+    """REGRESSION i design: grundskolegolvet gav q ~ 0.05 mot alla vakanser,
+    och med ett överskott oberoende av q valde logiten det högst betalda av
+    tio avlägsna träffar. Diskaren tog kirurgjobbet. Med förhandlad lön betalar
+    dålig passform nära reservationslönen och väljs inte."""
+    from core.occupations.utils import search_once, vacant_job_indices, build_job_arrays
+
+    rng = np.random.default_rng(1)
+    # Ett nära, måttligt betalt jobb och tio avlägsna, högt betalda
+    n = 11
+    jbs = pd.DataFrame({
+        "job_id": np.arange(n),
+        "x_occ": [0.30] + [-0.7] * 10, "y_occ": [0.10] + list(rng.uniform(-0.3, 0.3, 10)),
+        "r_o": 0.27, "wage": [0.8] + [1.8] * 10,
+        "x": 0.0, "y": 0.0, "individual_id": np.nan, "active": True})
+    A = build_job_arrays(jbs); cand = vacant_job_indices(jbs)
+    ind = pd.Series({"x_occ": 0.3, "y_occ": 0.1, "r_i": 0.0, "x": 0.0, "y": 0.0, "w_res": 0.4})
+    # Konkurrenskraft: 1 vid det nära, golv 0.05 vid de avlägsna
+    q = lambda jx, jy, jro: np.where(np.asarray(jx) > 0, 1.0, 0.05)
+
+    far_no_bargain = far_bargain = 0
+    for _ in range(300):
+        pos, *_ = search_once(ind, jbs, cand, sigma_gamma=0.875, choice_scale=0.05,
+                              rng=rng, arrays=A, competitiveness=q, bargaining=None)
+        far_no_bargain += (pos is not None and pos > 0)
+        pos, *_ = search_once(ind, jbs, cand, sigma_gamma=0.875, choice_scale=0.05,
+                              rng=rng, arrays=A, competitiveness=q,
+                              bargaining={"beta": 0.5, "kappa": 0.1})
+        far_bargain += (pos is not None and pos > 0)
+    assert far_no_bargain > 100, "utan förhandling ska golvet exploateras (annars testar vi inget)"
+    assert far_bargain == 0, f"förhandlingen stänger inte golvet: {far_bargain} avlägsna val"

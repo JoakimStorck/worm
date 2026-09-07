@@ -286,7 +286,7 @@ def vacant_job_indices(jobs_df):
 def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
                 commute_cost_per_km=0.005, min_surplus=0.0,
                 choice_scale=0.05, rng=None, arrays=None,
-                competitiveness=None):
+                competitiveness=None, bargaining=None):
     """En sökomgång. Två steg, i linje med hur jobbsökning faktiskt går till.
 
     1. RELEVANSMÄNGD. Den sökande överväger de positioner hon rimligen kan
@@ -316,7 +316,7 @@ def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
     """
     rng = rng if rng is not None else np.random
     if cand_idx.size == 0:
-        return None, None
+        return None, None, None, None
     A = arrays if arrays is not None else build_job_arrays(jobs_df)
 
     ix = float(ind["x_occ"]); iy = float(ind["y_occ"])
@@ -334,11 +334,18 @@ def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
         p = np.exp(-0.5 * d2 / sigma2)
 
     km = np.hypot(A["x"][cand_idx] - gx, A["y"][cand_idx] - gy) / 1000.0
-    S = A["wage"][cand_idx] - commute_cost_per_km * km - w_res
+    w_field = A["wage"][cand_idx]
+    if bargaining is not None:
+        # Förhandlad lön: värdet q*Pi delas mellan parterna. En dålig passform
+        # betalar nära reservationslönen och väljs därför inte.
+        w_off = negotiated_wage(p, w_field, w_res, **bargaining)
+    else:
+        w_off = w_field
+    S = np.where(np.isnan(w_off), -np.inf, w_off - commute_cost_per_km * km - w_res)
 
     live = (S > min_surplus) & (rng.random(S.size) < p)
     if not live.any():
-        return None, None
+        return None, None, None, None
 
     k = np.flatnonzero(live)
     Sk = S[k]
@@ -348,7 +355,7 @@ def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
         pick = k[int(rng.choice(w.size, p=w / w.sum()))]
     else:
         pick = k[int(np.argmax(Sk))]
-    return int(cand_idx[pick]), float(S[pick])
+    return int(cand_idx[pick]), float(S[pick]), float(w_off[pick]), float(p[pick])
 
 
 def retraining_target(ind, jobs_df, cand_idx, arrays=None,
@@ -389,3 +396,33 @@ def retraining_target(ind, jobs_df, cand_idx, arrays=None,
         idx, val = idx[keep], val[keep]
     w = val / val.sum()
     return float((w * A["x_occ"][idx]).sum()), float((w * A["y_occ"][idx]).sum())
+
+
+# ---------------------------------------------------------------------------
+# Förhandlad lön (docs/individmodell.md, avsnitt 5)
+# ---------------------------------------------------------------------------
+def negotiated_wage(q, w_field, w_res, beta=0.5, kappa=0.10, k_vacancy=None):
+    """Nash-förhandling med fältet som grund.
+
+        w = w_res + beta * (q*Pi - w_res - k_vakans)
+
+    q*Pi är arbetarens värde i jobbet: fältets lön gånger hennes
+    konkurrenskraft. w_res är hennes alternativ. k_vakans är arbetsgivarens
+    alternativ -- fortsatt vakans -- här som andelen kappa av fältlönen tills
+    lokalt marknadstryck införs (steg 3 i byggordningen).
+
+    Utan detta exploaterades grundskolegolvet: en sökande hade q ~ 0.05 mot
+    alla vakanser, överskottet var oberoende av q, och logiten valde det
+    högst betalda av tio avlägsna "träffar". Med förhandlad lön betalar en
+    dålig passform nära reservationslönen och väljs inte.
+
+    Returnerar den förhandlade lönen; NaN där ingen överenskommelse är möjlig
+    (q*Pi - k_vakans < w_res). Vektoriserat över jobb.
+    """
+    q = np.asarray(q, dtype=float); w_field = np.asarray(w_field, dtype=float)
+    kv = kappa * w_field if k_vacancy is None else np.asarray(k_vacancy, dtype=float)
+    value = q * w_field
+    surplus = value - w_res - kv
+    w = w_res + beta * surplus
+    w = np.where(surplus > 0, np.minimum(w, value), np.nan)
+    return w
