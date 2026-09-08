@@ -906,3 +906,29 @@ def test_vacancy_with_no_eligible_applicants_stays_open():
     assert not [e for e in w._pushed if e["event_type"] == "start_job"]
     pos = w.job_index()[jid]
     assert pd.isna(w.jobs.at[pos, "individual_id"])
+
+
+def test_applicant_count_reaches_the_transitions_table():
+    """REGRESSION: n_applicants lades i händelsen och i loggen men glömdes i
+    transitions_table, så måttet fanns i eventlog.csv och nådde aldrig
+    analysen. Utan det går "ingen sökte" inte att skilja från "urvalet var
+    svagt", och de två kräver motsatta åtgärder."""
+    from core.analysis.eventlog import transitions_table
+
+    ev = [{"event": "start_job", "time": 100.0, "agent_id": 7, "job_id": "J1",
+           "from_onet": "11-1011.00", "to_onet": "35-9021.00",
+           "u_R": 0.8, "u_R_occ": 0.8, "w_field": 1.0, "w_neg": 0.85,
+           "q_hire": 0.9, "r_req": 0.3, "commute_km": 12.0,
+           "n_applicants": 3, "occ_change": 1},
+          {"event": "start_job", "time": 200.0, "agent_id": 8, "job_id": "J2",
+           "from_onet": "11-1011.00", "to_onet": "35-9021.00",
+           "u_R": 1.9, "u_R_occ": 1.9, "w_field": 0.6, "w_neg": 0.51,
+           "q_hire": 0.2, "r_req": 0.0, "commute_km": 4.0,
+           "n_applicants": 1, "occ_change": 1}]
+    tr = transitions_table(ev)
+
+    assert "n_applicants" in tr.columns
+    assert tr["n_applicants"].tolist() == [3.0, 1.0]
+    # Den obestridda vakansen är den med lågt krav: där söker ingen, så
+    # urvalet uteblir och avståndet blir långt.
+    assert tr.loc[tr["n_applicants"] == 1, "r_req"].iloc[0] == 0.0

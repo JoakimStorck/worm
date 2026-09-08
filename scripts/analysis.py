@@ -139,6 +139,22 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
                     "att pröva, eftersom de högst betalda arbetsgivarna ligger "
                     "centralt.\n")
 
+    # Konkurrensen om vakansen. Utan den gar det inte att skilja "ingen sokte"
+    # fran "urvalet var svagt", och det avgor helt olika atgarder.
+    if "mean_applicants" in df.columns:
+        ma = pd.to_numeric(df["mean_applicants"], errors="coerce").dropna()
+        un = pd.to_numeric(df.get("share_uncontested"), errors="coerce").dropna()
+        if len(ma):
+            A("## Konkurrens om vakansen\n")
+            A(f"Sökande per tillsatt vakans: **{ma.median():.2f}** i medel"
+              + (f", och {100*un.median():.0f} % av tillsättningarna hade bara "
+                 f"en sökande" if len(un) else "") + ".\n")
+            A("Urvalet doserar konkurrenskraften en andra gång, så det "
+              "accepterade avståndet blir Rayleigh med skala $\\sigma/\\sqrt{n}$: "
+              "väntad median $u_R = 1{,}03/\\sqrt{n}$ task-radier. En vakans med "
+              "en enda sökande har inget urval alls, och den lokaliteten "
+              "uteblir därför just där ingen söker.\n")
+
     A("## Mot referensvärden\n")
     A("| Storhet | Modell (median) | Spridning över frön | Referens | Källa |")
     A("|---|---|---|---|---|")

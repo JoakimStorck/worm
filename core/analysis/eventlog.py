@@ -93,6 +93,7 @@ def transitions_table(events):
             "w_neg": _f(r, "w_neg"),
             "q_hire": _f(r, "q_hire"),
             "commute_km": _f(r, "commute_km"),
+            "n_applicants": _f(r, "n_applicants"),
             "r_req": _f(r, "r_req"),
             "occ_change": bool(int(r.get("occ_change", 1))) if "occ_change" in r else np.nan,
             "is_mgmt": (src.startswith(MGMT_PREFIX) or tgt.startswith(MGMT_PREFIX))
@@ -228,6 +229,13 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                 row["p10_q_hire"] = round(float(q.quantile(0.10)), 4)
                 row["share_q_below_0.4"] = round(float((q < 0.40).mean()), 4)
                 row["min_q_hire"] = round(float(q.min()), 4)
+            na = (tr["n_applicants"].dropna() if "n_applicants" in tr.columns
+                  else pd.Series(dtype=float))
+            if len(na):
+                row["median_applicants"] = round(float(na.median()), 2)
+                row["mean_applicants"] = round(float(na.mean()), 3)
+                row["share_uncontested"] = round(float((na <= 1).mean()), 4)
+
             km = tr["commute_km"].dropna() if "commute_km" in tr.columns else pd.Series(dtype=float)
             if len(km):
                 row["median_commute_km"] = round(float(km.median()), 2)

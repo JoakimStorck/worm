@@ -505,7 +505,11 @@ def fig_commute(run_dirs, out):
                  va="bottom")
         ax3.set_ylabel("Median $u_R$ (task-radier)", fontsize=9, color="#d62728")
         ax3.tick_params(axis="y", labelcolor="#d62728")
+        napp = (tr.groupby(q, observed=True)["n_applicants"].mean().to_numpy()
+                if "n_applicants" in tr.columns and tr["n_applicants"].notna().any()
+                else np.full(len(mids), np.nan))
         rows = [{"r_req_mid": m, "median_commute_km": float(k),
+                 "mean_applicants": float(napp[i]) if i < len(napp) else np.nan,
                  "median_u_R": float(u) if i < len(urm) else np.nan}
                 for i, (m, k, u) in enumerate(zip(mids, kmm,
                                                   list(urm) + [np.nan]*len(mids)))]
