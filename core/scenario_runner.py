@@ -46,16 +46,43 @@ def _git_commit():
         return "unknown"
 
 
-def _git_dirty():
+def _repo_dir():
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _git_dirty(cwd=None):
+    """Skiljer ändrad kod från skrapfiler i trädet.
+
+    'git status --porcelain' rakt av räknar även otrackade filer (??). En
+    otrackad fil kan inte ändra beteendet hos spårad kod, men under arbete
+    ligger det nästan alltid något i trädet -- ett körskript, en nedladdad
+    tabell, en editorbackup -- och flaggan slog därför på i stort sett varje
+    körning. En flagga som alltid är sann bär ingen information, och
+    rapporten skrev ut 'går inte att återskapa' för körningar som mycket väl
+    gick att återskapa. -uno mäter det som faktiskt kan påverka utfallet.
+    """
+    return _git_status_counts(cwd)[0]
+
+
+def _git_untracked(cwd=None):
+    """Antal otrackade filer. Informationen försvinner inte, den flyttas."""
+    return _git_status_counts(cwd)[1]
+
+
+def _git_status_counts(cwd=None):
     import subprocess
+    cwd = cwd or _repo_dir()
     try:
-        out = subprocess.check_output(
-            ["git", "status", "--porcelain"],
-            cwd=os.path.dirname(os.path.abspath(__file__)),
+        tracked = subprocess.check_output(
+            ["git", "status", "--porcelain", "-uno"], cwd=cwd,
             stderr=subprocess.DEVNULL, text=True)
-        return bool(out.strip())
+        allfiles = subprocess.check_output(
+            ["git", "status", "--porcelain"], cwd=cwd,
+            stderr=subprocess.DEVNULL, text=True)
     except Exception:
-        return False
+        return False, 0
+    n_untracked = sum(1 for ln in allfiles.splitlines() if ln.startswith("??"))
+    return bool(tracked.strip()), n_untracked
 
 
 def _resolve_seed(config):
@@ -117,6 +144,7 @@ def run_and_log_scenario(config_path):
             "seed": seed,
             "git_commit": _git_commit(),
             "git_dirty": _git_dirty(),
+            "git_untracked": _git_untracked(),
             "started": datetime.datetime.now().isoformat(timespec="seconds"),
             "municipalities": config.get("municipalities"),
             "n_years": config.get("n_years") or config.get("simulation", {}).get("n_years"),

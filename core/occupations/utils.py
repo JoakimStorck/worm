@@ -329,11 +329,16 @@ def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
     beror på avståndet i planet: therefore median 1.1774*sigma, vilket är den
     empiriskt kalibrerade formen.
 
-    Returnerar (job_index, surplus) eller (None, None).
+    Returnerar (job_index, surplus, w_off, q, km) eller (None,)*5. km är
+    pendlingsavstandet till det valda jobbet: det beraknas har anda, och
+    utan att returneras kan ingen efterat se hur langt nagon pendlar. Med
+    flera kommuner i scenariot ar det matt som avgor om pendlingen ar
+    selektiv -- om lakaren pendlar men inte diskaren -- och det ar ocksa
+    den enda kalibreringen av commute_cost_per_km mot tabellen commuting.
     """
     rng = rng if rng is not None else np.random
     if cand_idx.size == 0:
-        return None, None, None, None
+        return None, None, None, None, None
     A = arrays if arrays is not None else build_job_arrays(jobs_df)
 
     ix = float(ind["x_occ"]); iy = float(ind["y_occ"])
@@ -369,7 +374,7 @@ def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
 
     live = (S > min_surplus) & (rng.random(S.size) < q)
     if not live.any():
-        return None, None, None, None
+        return None, None, None, None, None
 
     k = np.flatnonzero(live)
     Sk = S[k]
@@ -379,7 +384,8 @@ def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
         pick = k[int(rng.choice(w.size, p=w / w.sum()))]
     else:
         pick = k[int(np.argmax(Sk))]
-    return int(cand_idx[pick]), float(S[pick]), float(w_off[pick]), float(q[pick])
+    return (int(cand_idx[pick]), float(S[pick]), float(w_off[pick]),
+            float(q[pick]), float(km[pick]))
 
 
 def retraining_target(ind, jobs_df, cand_idx, arrays=None,

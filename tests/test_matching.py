@@ -262,7 +262,7 @@ def _search_market(n_jobs, seed=0, **kw):
                      "x": 15000.0, "y": 15000.0, "w_res": kw.pop("w_res", 0.40)})
     uR, km, hits, N = [], [], 0, 600
     for _ in range(N):
-        jp, _, _, _ = search_once(ind, jbs, cand, sigma_gamma=0.875,
+        jp, _, _, _, _ = search_once(ind, jbs, cand, sigma_gamma=0.875,
                             commute_cost_per_km=0.005, rng=rng, arrays=A, **kw)
         if jp is not None:
             hits += 1

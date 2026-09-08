@@ -92,6 +92,7 @@ def transitions_table(events):
             "w_field": _f(r, "w_field"),
             "w_neg": _f(r, "w_neg"),
             "q_hire": _f(r, "q_hire"),
+            "commute_km": _f(r, "commute_km"),
             "r_req": _f(r, "r_req"),
             "occ_change": bool(int(r.get("occ_change", 1))) if "occ_change" in r else np.nan,
             "is_mgmt": (src.startswith(MGMT_PREFIX) or tgt.startswith(MGMT_PREFIX))

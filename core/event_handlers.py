@@ -227,6 +227,12 @@ def handle_start_job(event, world):
             individuals.at[idx, 'w_neg'] = w_eff
         extra['w_field'] = round(w_field, 4)
         extra['w_neg'] = round(w_eff, 4)
+        km_par = event['params'].get('commute_km')
+        if km_par is not None:
+            try:
+                extra['commute_km'] = round(float(km_par), 3)
+            except (TypeError, ValueError):
+                pass
         q_par = event['params'].get('q_hire')
         if q_par is not None:
             try:
@@ -317,7 +323,7 @@ def handle_start_job_search(event, world):
     sim = world.cfg_reader.config.get('simulation', {})
 
     brg = sim.get('bargaining', {}) or {}
-    job_pos, surplus, w_neg, q_hire = search_once(
+    job_pos, surplus, w_neg, q_hire, commute_km = search_once(
         world.individuals.loc[idx], world.jobs,
         np.flatnonzero(world.vacant_mask()),
         sigma_gamma=sim.get('sigma_gamma', 1.0),
@@ -353,12 +359,13 @@ def handle_start_job_search(event, world):
             "time": float(event['time'] + lag),
             "agent_id": idx,
             "event_type": "start_job",
-            "params": {"job_id": job_id, "w_neg": w_neg, "q_hire": q_hire},
+            "params": {"job_id": job_id, "w_neg": w_neg, "q_hire": q_hire,
+                       "commute_km": commute_km},
         })
         world.event_logger.log_event(world, event, extra={
             'event_detail': 'match_completed', 'job_id': job_id,
             'surplus': round(surplus, 4), 'w_neg': round(w_neg, 4),
-            'q_hire': round(q_hire, 4)})
+            'q_hire': round(q_hire, 4), 'commute_km': round(commute_km, 3)})
         world.n_matched_in_month += 1
     else:
         current_prop = world.individuals.at[idx, 'propensity_start_education']

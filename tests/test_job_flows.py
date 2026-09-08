@@ -1,4 +1,5 @@
 """Jobbflöden: förstörelse, återfyllnad, och de två buggar som fanns."""
+import os
 import numpy as np
 import pandas as pd
 import pytest
@@ -632,3 +633,62 @@ def test_missing_requirement_is_not_treated_as_maximum(jobs):
     partial.loc[partial.index[:3], "r_req"] = np.nan
     with pytest.raises(ValueError, match="r_req saknas för 3"):
         build_job_arrays(partial)
+
+
+# ---------------------------------------------------------------------------
+# Pendlingsavstånd och smutsflagga (0052)
+# ---------------------------------------------------------------------------
+
+def test_search_once_returns_commute_distance():
+    """REGRESSION: km beräknades i search_once och kastades, så ingen kunde
+    efteråt se hur långt någon pendlar."""
+    import numpy as np
+    from core.occupations.utils import search_once, build_job_arrays
+
+    jobs = pd.DataFrame({
+        "job_id": ["A"], "x_occ": [0.3], "y_occ": [0.1], "r_o": [0.27],
+        "wage": [1.0], "r_req": [0.0],
+        "x": [30_000.0], "y": [40_000.0],          # 50 km från origo
+        "individual_id": [np.nan], "active": [True],
+    })
+    ind = pd.Series({"x_occ": 0.3, "y_occ": 0.1, "r_i": 0.0,
+                     "x": 0.0, "y": 0.0, "w_res": 0.0})
+    A = build_job_arrays(jobs)
+
+    out = search_once(ind, jobs, np.arange(1), sigma_gamma=0.875,
+                      commute_cost_per_km=0.0, rng=np.random.default_rng(0),
+                      arrays=A, competitiveness=lambda jx, jy, jro: np.array([1.0]))
+    assert len(out) == 5
+    assert out[0] == 0
+    assert out[4] == pytest.approx(50.0)
+
+    # Tom kandidatmängd ska ha samma aritet, annars fallerar uppackningen
+    assert search_once(ind, jobs, np.array([], dtype=int), arrays=A) == (None,) * 5
+
+
+def test_dirty_flag_ignores_untracked_files(tmp_path):
+    """REGRESSION: git_dirty räknade otrackade filer, så en skrapfil i trädet
+    gjorde varje körning omöjlig att återskapa enligt rapporten."""
+    import subprocess
+    from core import scenario_runner as sr
+
+    repo = tmp_path / "r"
+    repo.mkdir()
+    run = lambda *a: subprocess.run(a, cwd=repo, check=True,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    run("git", "init", "-q")
+    run("git", "config", "user.email", "t@t")
+    run("git", "config", "user.name", "t")
+    (repo / "sparad.py").write_text("x = 1\n")
+    run("git", "add", "-A")
+    run("git", "commit", "-qm", "init")
+
+    assert sr._git_dirty(repo) is False
+    assert sr._git_untracked(repo) == 0
+
+    (repo / "kor.sh").write_text("echo hej\n")          # skrapfil, otrackad
+    assert sr._git_dirty(repo) is False, "otrackad fil ska inte räknas som smuts"
+    assert sr._git_untracked(repo) == 1
+
+    (repo / "sparad.py").write_text("x = 2\n")          # riktig ändring
+    assert sr._git_dirty(repo) is True
