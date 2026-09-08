@@ -263,20 +263,37 @@ class World:
         return str(np.random.choice(codes, p=p))
 
     def _geom_lookup(self, onet_code):
+        """Yrkets geometri, pris OCH kravintensitet.
+
+        r_req måste vara med. Ett nytt jobb får ett nytt yrke ur
+        _draw_occupation_for_employer men byggs ur en mall med
+        row = base.to_dict(); saknas r_req här behåller jobbet MALLENS krav
+        medan position, radie och lön kommer från det nya yrket. Position och
+        pris ur ett yrke, krav ur ett annat, utan NaN och utan varning. Felet
+        ärvs dessutom vidare, eftersom mallen är den sist tillagda raden per
+        arbetsgivare, och växer därför under körningen.
+
+        Det tidigare 'except Exception: _geom_df = None' dolde samma sak en
+        gång till: en trasig eller gammal tabell gav tyst noll geometri åt
+        alla nya jobb. En värld utan databas (syntetiska tester) är ett
+        legitimt fall och behandlas för sig; ett SQL-fel är det inte.
+        """
         if not hasattr(self, "_geom_df"):
-            try:
-                self._geom_df = pd.read_sql(
-                    "SELECT onet_code, chi, xi, x_occ, y_occ, r_o, w_rel, geom_source "
-                    "FROM onet_occupation_space", self.conn).set_index("onet_code")
-            except Exception:
+            if self.conn is None:
                 self._geom_df = None
+            else:
+                self._geom_df = pd.read_sql(
+                    "SELECT onet_code, chi, xi, x_occ, y_occ, r_o, w_rel, r_req, "
+                    "geom_source FROM onet_occupation_space",
+                    self.conn).set_index("onet_code")
         if self._geom_df is None or onet_code not in self._geom_df.index:
             return None
         r = self._geom_df.loc[onet_code]
         return {"chi": float(r["chi"]), "xi": float(r["xi"]),
                 "x_occ": float(r["x_occ"]), "y_occ": float(r["y_occ"]),
                 "r_o": float(r["r_o"]), "geom_source": str(r["geom_source"]),
-                "wage": float(r["w_rel"]) if pd.notna(r["w_rel"]) else 1.0}
+                "wage": float(r["w_rel"]) if pd.notna(r["w_rel"]) else 1.0,
+                "r_req": float(r["r_req"]) if pd.notna(r["r_req"]) else np.nan}
 
     def _init_events(self):
         self._init_job_flows()

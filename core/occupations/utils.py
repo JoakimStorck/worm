@@ -273,11 +273,22 @@ def build_job_arrays(jobs_df):
     if "wage" not in jobs_df.columns:
         out["wage"] = np.ones(len(jobs_df))
     if "r_req" not in jobs_df.columns:
-        # Utan kravintensitet behandlas konkurrenskraft som produktivitet
-        # för alla jobb (r = 1), dvs. det gamla beteendet.
-        out["r_req"] = np.ones(len(jobs_df))
-    else:
-        out["r_req"] = np.nan_to_num(out["r_req"], nan=1.0)
+        # Ingen kravmodell alls (minimala ramar i test): jobbet ställer inga
+        # särskilda krav, p = q**0 = 1. Fallbacken var tidigare r = 1, det
+        # STRÄNGASTE tänkbara kravet, vilket gör varje jobb till ett kirurgjobb
+        # med grinden q >= sqrt(phi) = 0.837. En okänd storhet ska inte gissas
+        # åt det håll som gör mest skada.
+        out["r_req"] = np.zeros(len(jobs_df))
+    elif not np.isfinite(out["r_req"]).all():
+        # Kolumnen finns men är delvis tom. Kravintensiteten kommer ur ett
+        # analytiskt fält som täcker varje position, så NaN betyder att
+        # kapabilitetsfältet saknas eller att geometrin är inkonsekvent. Då
+        # ska körningen stanna: både 0 och 1 ger tysta, motsatta fel.
+        n_bad = int((~np.isfinite(out["r_req"])).sum())
+        raise ValueError(
+            f"r_req saknas för {n_bad} av {len(jobs_df)} jobb. Kravintensiteten "
+            "kommer ur data/geometry/capability_field_coefficients.csv via "
+            "scripts/load_task_geometry.py; kör om inläsningen.")
     return out
 
 

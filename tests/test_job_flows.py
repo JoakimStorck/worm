@@ -562,3 +562,73 @@ def test_become_unemployed_always_frees_the_job():
     assert pd.isna(w.individuals.at[0, "job_id"])
     assert pd.isna(w.jobs.at[0, "individual_id"])
     assert bool(w.vacant_mask()[0])
+
+
+# ---------------------------------------------------------------------------
+# Kravintensiteten hos nypostade jobb (0051)
+# ---------------------------------------------------------------------------
+
+def _world_with_geometry():
+    """Värld med en liten yrkestabell i minnet.
+
+    Mallyrket A är krävande (r = 0.84), det yrke nya jobb faktiskt får är B
+    och kravlöst (r = 0.00). Ärvs kravet från mallen blir varje nypostat
+    diskjobb ett kirurgjobb.
+    """
+    import sqlite3
+    w = make_world(n_employers=1, size=4, simulation={"vacancy_fill_rate": 1.0})
+    w.jobs["onet_code"] = "A"
+    w.jobs["r_req"] = 0.84
+    w.conn = sqlite3.connect(":memory:")
+    pd.DataFrame({
+        "onet_code": ["A", "B"],
+        "chi": [0.30, 0.55], "xi": [0.3, 2.1],
+        "x_occ": [0.30, -0.20], "y_occ": [0.10, 0.40],
+        "r_o": [0.27, 0.31], "w_rel": [1.80, 0.49],
+        "r_req": [0.84, 0.00], "geom_source": ["occupation", "occupation"],
+    }).to_sql("onet_occupation_space", w.conn, index=False)
+    pd.DataFrame({"municipal_code": ["2062"], "onet_code": ["B"],
+                  "weight": [1.0]}).to_sql(
+        "occupation_weights_by_municipality", w.conn, index=False)
+    return w
+
+
+def test_new_job_gets_requirement_from_its_own_occupation():
+    """REGRESSION: _geom_lookup hämtade inte r_req, så ett nypostat jobb fick
+    position och lön ur sitt eget yrke men KRAVET ur mallen."""
+    w = _world_with_geometry()
+    w.jobs["active"] = False                      # underskott 4 hos arbetsgivaren
+    assert w.post_vacancies_batch(30.0) == 4
+
+    new = w.jobs[w.jobs["job_id"].str.startswith("N")]
+    assert len(new) == 4
+    assert (new["onet_code"] == "B").all()
+    assert (new["r_req"] == 0.00).all(), "kravet ärvdes från mallens yrke"
+    assert (new["wage"] == 0.49).all()            # lönen följde redan yrket
+
+
+def test_requirement_does_not_drift_across_generations():
+    """Mallen är den sist tillagda raden per arbetsgivare, så ett ärvt fel
+    ärvs vidare och växer under körningen."""
+    w = _world_with_geometry()
+    for m in range(1, 6):
+        w.jobs["active"] = False
+        w.post_vacancies_batch(30.0 * m)
+    born = w.jobs[w.jobs["job_id"].str.startswith("N")]
+    assert len(born) >= 8
+    assert (born["r_req"] == 0.00).all()
+
+
+def test_missing_requirement_is_not_treated_as_maximum(jobs):
+    """REGRESSION: fallbacken var r = 1, det strängaste kravet, vilket gör
+    varje jobb otillsättbart under q = 0.837 utan att synas i utfallet."""
+    from core.occupations.utils import build_job_arrays
+
+    A = build_job_arrays(jobs)                    # ramen saknar r_req helt
+    assert (A["r_req"] == 0.0).all()
+
+    partial = jobs.copy()
+    partial["r_req"] = 0.3
+    partial.loc[partial.index[:3], "r_req"] = np.nan
+    with pytest.raises(ValueError, match="r_req saknas för 3"):
+        build_job_arrays(partial)
