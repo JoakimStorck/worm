@@ -239,26 +239,98 @@ class World:
         self._schedule_destruction(new_ids, t_now)
         return len(rows)
 
+    def _occupation_source(self):
+        return str(self.cfg_reader.config.get("simulation", {})
+                   .get("occupation_source", "sni")).lower()
+
+    def _table_exists(self, name):
+        cur = self.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,))
+        return cur.fetchone() is not None
+
+    def _occupation_profile(self, municipal_code):
+        """Yrkesfordelning for en kommun, samma kalla som scenariobyggaren.
+
+        Tidigare fragade den har vagen ALLTID registertabellen
+        occupation_weights_by_municipality, oavsett occupation_source, och
+        svalde felet med except Exception. Med den forvalda kallan 'sni'
+        finns den tabellen inte, sa varje nytt jobb foll tillbaka pa mallens
+        yrkeskod. Eftersom mallen ar arbetsgivarens sist tillagda rad blev
+        varje nytt jobb en kopia av det forra, och arbetsgivaren drev mot
+        monokultur i uppgiftsrummet: med tio procents destruktion per ar ar
+        ungefar en tredjedel av bestandet efter fem ar kopior av ETT yrke per
+        arbetsgivare. Det urholkar arbetsgivarens centroid och tackningen av
+        uppgiftsrummet, alltsa glesbygdspapprets oberoende variabel.
+
+        SNI-vagen ar samma rakning som ScenarioBuilder._sni_occupational_profile:
+        kommunens SNI-andel gonger yrkesfordelningen inom varje SNI,
+        normaliserad. Koder utan geometri slapps har i stallet for att tyst
+        falla igenom _geom_lookup.
+        """
+        if self.conn is None:
+            return None
+        src = self._occupation_source()
+        krav = (["occupation_weights_by_municipality"] if src == "register"
+                else ["employment_municipality_sni", "sni_onet_link"])
+        saknas = [t for t in krav + ["onet_occupation_space"]
+                  if not self._table_exists(t)]
+        if saknas:
+            raise ValueError(
+                f"occupation_source='{src}' kraver tabellerna {krav} plus "
+                f"onet_occupation_space, men {saknas} saknas i databasen. "
+                "Registerkallan fylls av scripts/load_occupation_weights.py, "
+                "SNI-kallan av scripts/create_database.py och "
+                "scripts/load_task_geometry.py. Utan dem skulle nya jobb arva "
+                "mallens yrke och arbetsgivaren driva mot monokultur.")
+        if src == "register":
+            df = pd.read_sql(
+                "SELECT w.onet_code, SUM(w.weight) AS weight "
+                "  FROM occupation_weights_by_municipality w "
+                "  JOIN onet_occupation_space g ON g.onet_code = w.onet_code "
+                " WHERE w.municipal_code = ? GROUP BY w.onet_code",
+                self.conn, params=(str(municipal_code),))
+        else:
+            df = pd.read_sql(
+                "WITH sni AS ("
+                "  SELECT sni_code, CAST(employed AS REAL) AS emp"
+                "    FROM employment_municipality_sni"
+                "   WHERE municipal_code = ? AND employed > 0"
+                "     AND year = (SELECT MAX(year) FROM employment_municipality_sni"
+                "                  WHERE municipal_code = ?)),"
+                " lsum AS (SELECT sni_code, SUM(CAST(freq AS REAL)) AS s"
+                "            FROM sni_onet_link GROUP BY sni_code)"
+                " SELECT l.onet_code,"
+                "        SUM((s.emp / (SELECT SUM(emp) FROM sni))"
+                "            * (CAST(l.freq AS REAL) / ls.s)) AS weight"
+                "   FROM sni s"
+                "   JOIN sni_onet_link l ON l.sni_code = s.sni_code"
+                "   JOIN lsum ls        ON ls.sni_code = s.sni_code"
+                "   JOIN onet_occupation_space g ON g.onet_code = l.onet_code"
+                "  WHERE ls.s > 0"
+                "  GROUP BY l.onet_code",
+                self.conn, params=(str(municipal_code), str(municipal_code)))
+        df = df[df["weight"] > 0]
+        if df.empty:
+            raise ValueError(
+                f"occupation_source='{src}' gav ingen yrkesfordelning for kommun "
+                f"{municipal_code}. Registerkallan kraver "
+                "occupation_weights_by_municipality (scripts/load_occupation_weights.py); "
+                "SNI-kallan kraver employment_municipality_sni och sni_onet_link "
+                "(scripts/create_database.py). Nya jobb skulle annars arva mallens "
+                "yrke och arbetsgivaren driva mot monokultur.")
+        p = df["weight"].to_numpy(dtype=float)
+        return df["onet_code"].to_numpy(), p / p.sum()
+
     def _draw_occupation_for_employer(self, base_row):
-        """Yrkeskod för ett nytt jobb: samma fördelning som scenariobyggaren använde."""
+        """Yrkeskod for ett nytt jobb: samma fordelning som scenariobyggaren."""
         if not hasattr(self, "_occ_draw_cache"):
             self._occ_draw_cache = {}
         key = base_row.get("municipal_code")
         if key not in self._occ_draw_cache:
-            try:
-                df = pd.read_sql(
-                    "SELECT onet_code, weight FROM occupation_weights_by_municipality "
-                    "WHERE municipal_code = ?", self.conn, params=(str(key),))
-            except Exception:
-                df = pd.DataFrame()
-            if df.empty:
-                self._occ_draw_cache[key] = None
-            else:
-                p = df["weight"].to_numpy(dtype=float); p = p / p.sum()
-                self._occ_draw_cache[key] = (df["onet_code"].to_numpy(), p)
+            self._occ_draw_cache[key] = self._occupation_profile(key)
         drawn = self._occ_draw_cache[key]
-        if drawn is None:
-            return base_row.get("onet_code")      # behåll arbetsgivarens yrkesmix
+        if drawn is None:                       # syntetisk varld utan databas
+            return base_row.get("onet_code")
         codes, p = drawn
         return str(np.random.choice(codes, p=p))
 

@@ -320,10 +320,19 @@ def load_employment_deso_sni(csv_file, db_path="data/worm.sqlite3", year=2023):
     # Ta bort dubletter
     df_out = df_out.drop_duplicates(subset=["deso_code", "year", "sni_code"])
 
-    # Skriv till SQLite
+    # Skriv till SQLite. append mot en tabell med primarnyckel
+    # (deso_code, year, sni_code) gjorde en andra korning av
+    # create_database.py till ett UNIQUE-fel som avbrot hela bygget mitt i:
+    # allt efter anropet -- O*NET, occupation space, utbildningsnivaer,
+    # sni_onet_link -- laddades aldrig, medan de forsta tabellerna redan var
+    # omskrivna. Ett byggskript maste ga att kora tva ganger.
     conn = sqlite3.connect(db_path)
+    conn.execute("DELETE FROM employment_deso_sni WHERE year = ?", (int(year),))
+    conn.commit()
     df_out.to_sql("employment_deso_sni", conn, if_exists="append", index=False)
+    conn.commit()
     conn.close()
+    print(f"Laddade {len(df_out)} rader till employment_deso_sni for {year}.")
 
 def load_employment_municipality_sni(csv_file, db_path="data/worm.sqlite3", year=2020):
     df = pd.read_csv(csv_file, encoding="utf-8")
