@@ -932,3 +932,51 @@ def test_applicant_count_reaches_the_transitions_table():
     # Den obestridda vakansen är den med lågt krav: där söker ingen, så
     # urvalet uteblir och avståndet blir långt.
     assert tr.loc[tr["n_applicants"] == 1, "r_req"].iloc[0] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Kön i överskottet (0057)
+# ---------------------------------------------------------------------------
+
+def test_queue_makes_a_crowded_vacancy_less_attractive():
+    """REGRESSION: logiten valde på ANNONSERAD lön. Med choice_scale 0.05 mot
+    ett lönespann 0.49-1.81 blev valet nästan deterministiskt: 806 ansökningar
+    på ETT jobb, tio procent av jobben tog 73 procent av ansökningarna, och
+    9 099 av 15 554 positioner sågs aldrig av någon under fem år."""
+    from core.occupations.utils import search_once, build_job_arrays
+
+    # Två jobb på samma plats i uppgiftsrummet. Det trängda betalar MER.
+    jobs = pd.DataFrame({
+        "job_id": ["TRANGT", "TOMT"],
+        "x_occ": [0.3, 0.3], "y_occ": [0.1, 0.1], "r_o": [0.27, 0.27],
+        "wage": [1.60, 1.00], "r_req": [0.0, 0.0],
+        "x": [0.0, 0.0], "y": [0.0, 0.0],
+        "individual_id": [np.nan, np.nan], "active": [True, True],
+    })
+    ind = pd.Series({"x_occ": 0.3, "y_occ": 0.1, "r_i": 0.0,
+                     "x": 0.0, "y": 0.0, "w_res": 0.0})
+    A = build_job_arrays(jobs)
+    kw = dict(sigma_gamma=0.875, commute_cost_per_km=0.0, choice_scale=0.05,
+              arrays=A, competitiveness=lambda jx, jy, jro: np.ones(len(jx)))
+
+    def valt(queue, n=200):
+        rng = np.random.default_rng(4)
+        picks = [search_once(ind, jobs, np.arange(2), queue=queue, rng=rng, **kw)[0]
+                 for _ in range(n)]
+        return sum(1 for p in picks if p == 0) / n     # andel som valde TRANGT
+
+    # Utan kö vinner den högre lönen nästan alltid
+    assert valt(None) > 0.95
+    assert valt(np.array([0.0, 0.0])) > 0.95
+    # Med tjugo liggande ansökningar är förväntat utfall 1.60/21 << 1.00
+    assert valt(np.array([20.0, 0.0])) < 0.05
+
+
+def test_queue_counts_come_from_the_application_lists():
+    w, jid = _world_with_applicants([0.4, 0.6, 0.5])
+    n = w.applicant_counts()
+    pos = w.job_index()[jid]
+    assert n[pos] == 3.0
+    assert n.sum() == 3.0
+    w.close_application_window(jid)
+    assert w.applicant_counts().sum() == 0.0

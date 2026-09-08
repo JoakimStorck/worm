@@ -602,6 +602,25 @@ class World:
                               "event_type": "close_vacancy",
                               "params": {"job_id": job_id}})
 
+    def applicant_counts(self):
+        """Antal liggande ansökningar per jobbposition, som numpy-array.
+
+        Byggs ur ansökningslistorna, alltså O(antal öppna annonser) och inte
+        O(jobb). Behövs i sökningen: utan kön i överskottet väljer logiten på
+        annonserad lön och 806 sökande kan hamna på samma jobb medan nio tusen
+        positioner aldrig ses av någon.
+        """
+        n = np.zeros(len(self.jobs), dtype=float)
+        apps = getattr(self, "applications", None)
+        if not apps:
+            return n
+        pos_of = self.job_index()
+        for jid, kö in apps.items():
+            pos = pos_of.get(jid)
+            if pos is not None and pos < n.size:
+                n[pos] = len(kö)
+        return n
+
     def close_application_window(self, job_id):
         if not hasattr(self, "applications"):
             self.applications = {}

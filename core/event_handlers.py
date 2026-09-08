@@ -329,6 +329,8 @@ def handle_start_job_search(event, world):
     job_pos, surplus, w_neg, q_hire, commute_km = search_once(
         world.individuals.loc[idx], world.jobs,
         np.flatnonzero(world.vacant_mask()),
+        queue=(world.applicant_counts()
+               if hasattr(world, 'applicant_counts') else None),
         sigma_gamma=sim.get('sigma_gamma', 1.0),
         commute_cost_per_km=sim.get('commute_cost_per_km', 0.005),
         min_surplus=sim.get('min_surplus', 0.0),

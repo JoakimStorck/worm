@@ -300,7 +300,7 @@ def vacant_job_indices(jobs_df):
     return np.flatnonzero(vac)
 
 
-def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
+def search_once(ind, jobs_df, cand_idx, queue=None, sigma_gamma=1.0,
                 commute_cost_per_km=0.005, min_surplus=0.0,
                 choice_scale=0.05, rng=None, arrays=None,
                 competitiveness=None, bargaining=None, requirement_k=2.0):
@@ -371,6 +371,17 @@ def search_once(ind, jobs_df, cand_idx, sigma_gamma=1.0,
     else:
         w_off = w_field
     S = np.where(np.isnan(w_off), -np.inf, w_off - commute_cost_per_km * km - w_res)
+
+    # KÖN I ÖVERSKOTTET. Ett jobb med n liggande ansökningar ger henne
+    # platsen med ungefär 1/(n+1), så det den är värt att söka är S/(n+1) --
+    # forvantat utfall, inte annonserat. Utan detta valde logiten på
+    # annonserad lön allena, och med choice_scale 0.05 mot ett lönespann
+    # 0.49-1.81 blir valet nästan deterministiskt: 806 ansökningar hamnade på
+    # ETT jobb, tio procent av jobben tog 73 procent av ansökningarna, och
+    # 9 099 av 15 554 positioner sågs aldrig av någon under fem år. Det är
+    # riktad sökning i Moens mening, och den kostar ingen ny parameter.
+    if queue is not None:
+        S = S / (1.0 + np.asarray(queue, float)[cand_idx])
 
     live = (S > min_surplus) & (rng.random(S.size) < q)
     if not live.any():
