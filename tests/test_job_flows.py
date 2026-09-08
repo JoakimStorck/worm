@@ -814,3 +814,95 @@ def test_summary_reports_commute_and_vacancy_duration(tmp_path):
     assert row["p90_commute_km"] == pytest.approx(20.0)
     # Little: 100 vakanser / 600 per år = 0.1667 år = 60.9 dagar
     assert row["vacancy_days"] == pytest.approx(60.9, abs=0.5)
+
+
+# ---------------------------------------------------------------------------
+# Annonsering, konkurrens och urval (0055)
+# ---------------------------------------------------------------------------
+
+def _world_with_applicants(qs, window=40.0):
+    """Värld där tre arbetslösa har ansökt om samma jobb med olika q."""
+    w = make_world(n_employers=1, size=4, simulation={
+        "application_window_days": window,
+        "event_timings": {"recruitment_lag": {"dist": "fixed", "mean": 30.0},
+                          "start_job_search": {"dist": "fixed", "mean": 28.0}}})
+    # Fångar schemalagda händelser: kön exponerar ingen läsvy.
+    w._pushed = []
+    orig = w._push_event
+    def spy(ev, _o=orig, _w=w):
+        _w._pushed.append(ev)
+        return _o(ev)
+    w._push_event = spy
+
+    n = len(qs)
+    w.individuals = pd.DataFrame({
+        "individual_id": np.arange(n, dtype=float),
+        "status": ["unemployed"] * n, "job_id": [np.nan] * n,
+        "w_res": [0.5] * n, "chi": 0.3, "xi": 0.3, "r_i": 0.0,
+        "x_occ": 0.1, "y_occ": 0.1,
+    }, index=range(n))
+
+    jid = w.jobs.iloc[0]["job_id"]
+    for i, q in enumerate(qs):
+        w.file_application(jid, i, 0.0, q=q, w_neg=0.8, surplus=0.1,
+                           commute_km=5.0)
+    return w, jid
+
+
+def test_employer_picks_the_most_qualified_applicant():
+    """REGRESSION: först till kvarn. Utan urval doseras q en enda gång, som
+    mötessannolikhet, och avståndsfördelningen blir en ren Rayleigh med
+    kärnans median."""
+    from core.event_handlers import handle_close_vacancy
+
+    w, jid = _world_with_applicants([0.31, 0.92, 0.55])
+    assert len(w.applications[jid]) == 3
+
+    handle_close_vacancy({"time": 40.0, "agent_id": 0, "event_type": "close_vacancy",
+                          "params": {"job_id": jid}}, w)
+
+    # Vinnaren är den med högst q, och bara hon
+    pushed = [e for e in w._pushed if e["event_type"] == "start_job"]
+    assert len(pushed) == 1
+    assert pushed[0]["agent_id"] == 1
+    assert pushed[0]["params"]["q_hire"] == pytest.approx(0.92)
+    assert pushed[0]["params"]["n_applicants"] == 3
+    # Förlorarna åter i sökandet, ingen av dem anställd
+    again = sorted(e["agent_id"] for e in w._pushed
+                   if e["event_type"] == "start_job_search")
+    assert again == [0, 2]
+    assert jid not in w.applications
+
+
+def test_application_window_leaves_the_identity_untouched():
+    """Under fönstret är arbetaren arbetslös och positionen ledig. Byter något
+    tillstånd där går U = L - J + V sönder."""
+    w, jid = _world_with_applicants([0.4, 0.6])
+    pos = w.job_index()[jid]
+    assert bool(w.vacant_mask()[pos]), "annonserad position ska vara ledig"
+    assert pd.isna(w.jobs.at[pos, "individual_id"])
+    assert (w.individuals.loc[[0, 1], "status"] == "unemployed").all()
+    assert w.n_open_applications() == 2
+
+
+def test_window_opens_once_per_vacancy():
+    """En close_vacancy per annons, schemalagd vid första ansökan."""
+    w, jid = _world_with_applicants([0.4, 0.6, 0.5])
+    closes = [e for e in w._pushed if e["event_type"] == "close_vacancy"]
+    assert len(closes) == 1
+    assert closes[0]["time"] == pytest.approx(40.0)
+    assert closes[0]["params"]["job_id"] == jid
+
+
+def test_vacancy_with_no_eligible_applicants_stays_open():
+    """Hann någon annan bli anställd under fönstret får ingen jobbet, och de
+    sökande går tillbaka till marknaden i stället för att fastna."""
+    from core.event_handlers import handle_close_vacancy
+
+    w, jid = _world_with_applicants([0.4, 0.9])
+    w.individuals["status"] = "employed"                  # båda hann få annat
+    handle_close_vacancy({"time": 40.0, "agent_id": 0, "event_type": "close_vacancy",
+                          "params": {"job_id": jid}}, w)
+    assert not [e for e in w._pushed if e["event_type"] == "start_job"]
+    pos = w.job_index()[jid]
+    assert pd.isna(w.jobs.at[pos, "individual_id"])

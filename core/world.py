@@ -579,6 +579,37 @@ class World:
             # genom tillträde eller genom att positionen frigjorts.
             self.jobs.iat[pos, self.jobs.columns.get_loc("pending")] = False
 
+    # ---- ansökningar ------------------------------------------------------
+    def file_application(self, job_id, idx, t_now, **bud):
+        """Lägger en ansökan och öppnar annonsen om den inte redan är öppen.
+
+        Fönstret schemalägger EN close_vacancy per annons, vid första
+        ansökan. En vakans utan sökande får därför ingen händelse alls, vilket
+        är både billigt och rätt: den står kvar och kan hittas igen.
+
+        Under fönstret byter ingenting tillstånd -- arbetaren är arbetslös och
+        positionen ledig -- så bokföringsidentiteten U = L - J + V är oberörd.
+        """
+        if not hasattr(self, "applications"):
+            self.applications = {}
+        first = job_id not in self.applications
+        self.applications.setdefault(job_id, []).append(
+            dict(idx=idx, t=float(t_now), **bud))
+        if first:
+            days = float(self.cfg_reader.config.get("simulation", {})
+                         .get("application_window_days", 40.0))
+            self._push_event({"time": float(t_now) + days, "agent_id": idx,
+                              "event_type": "close_vacancy",
+                              "params": {"job_id": job_id}})
+
+    def close_application_window(self, job_id):
+        if not hasattr(self, "applications"):
+            self.applications = {}
+        return self.applications.pop(job_id, [])
+
+    def n_open_applications(self):
+        return sum(len(v) for v in getattr(self, "applications", {}).values())
+
     def set_job_pending(self, job_id):
         """Positionen är utlovad men inte tillträdd: ingen annan kan söka den,
         men den räknas fortfarande som en öppen vakans."""

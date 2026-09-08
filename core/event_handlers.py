@@ -233,6 +233,9 @@ def handle_start_job(event, world):
                 extra['commute_km'] = round(float(km_par), 3)
             except (TypeError, ValueError):
                 pass
+        na = event['params'].get('n_applicants')
+        if na is not None:
+            extra['n_applicants'] = int(na)
         q_par = event['params'].get('q_hire')
         if q_par is not None:
             try:
@@ -346,27 +349,17 @@ def handle_start_job_search(event, world):
         # Den förhandlade lönen följer med till tillträdet.
         if 'w_neg' in world.individuals.columns:
             world.individuals.at[idx, 'w_neg'] = w_neg
-        # Rekryteringstid: positionen är utlovad men tillträds först senare.
-        # Utan fördröjning fylls en vakans i samma ögonblick den matchas, och
-        # vakansvaraktigheten blir omkring 13 dagar mot faktiska 30-60. Det är
-        # därför vakansgraden hamnade under 1.3 procent mot svenska cirka 2.
-        world.set_job_pending(job_id)
-        lag_cfg = world.cfg_reader.get_event_timing('recruitment_lag')
-        lag = (np.random.exponential(lag_cfg.get('mean', 30.0))
-               if lag_cfg.get('dist', 'exponential') == 'exponential'
-               else float(lag_cfg.get('mean', 30.0)))
-        world._push_event({
-            "time": float(event['time'] + lag),
-            "agent_id": idx,
-            "event_type": "start_job",
-            "params": {"job_id": job_id, "w_neg": w_neg, "q_hire": q_hire,
-                       "commute_km": commute_km},
-        })
+        # ANSÖKAN, inte anställning. Arbetaren lägger sitt bud i jobbets
+        # ansökningslista och väntar tills annonsen stänger. Fram till dess
+        # är hon arbetslös och positionen ledig, så U = L - J + V är oberörd
+        # av fönstret -- ingenting byter tillstånd förrän valet görs.
+        world.file_application(job_id, idx, float(event['time']),
+                               q=q_hire, w_neg=w_neg, surplus=surplus,
+                               commute_km=commute_km)
         world.event_logger.log_event(world, event, extra={
-            'event_detail': 'match_completed', 'job_id': job_id,
+            'event_detail': 'application_filed', 'job_id': job_id,
             'surplus': round(surplus, 4), 'w_neg': round(w_neg, 4),
             'q_hire': round(q_hire, 4), 'commute_km': round(commute_km, 3)})
-        world.n_matched_in_month += 1
     else:
         current_prop = world.individuals.at[idx, 'propensity_start_education']
         new_prop = min(current_prop + 0.1, 1.0)
@@ -390,6 +383,100 @@ def handle_start_job_search(event, world):
             "event_type": "start_job_search",
             "params": {},
         })
+
+
+def _reschedule_search(world, idx, t_now, decay_reservation=True):
+    """Tillbaka i sökandet, med samma reservationsavtagande som en misslyckad
+    sökning: ett avslag ÄR en misslyckad sökning ur hennes synvinkel."""
+    sim = world.cfg_reader.config.get('simulation', {})
+    if decay_reservation:
+        decay = float(sim.get('reservation_decay_per_search', 1.0))
+        floor = float(sim.get('reservation_floor', 0.0))
+        if 'w_res' in world.individuals.columns and decay < 1.0:
+            w_res = float(world.individuals.at[idx, 'w_res'])
+            world.individuals.at[idx, 'w_res'] = max(w_res * decay, floor)
+    timing = world.cfg_reader.get_event_timing('start_job_search')
+    interval = (np.random.exponential(timing.get('mean', 28.0))
+                if timing.get('dist', 'exponential') == 'exponential' else 30.0)
+    world._push_event({"time": float(t_now + interval), "agent_id": idx,
+                       "event_type": "start_job_search", "params": {}})
+
+
+def handle_close_vacancy(event, world):
+    """Annonsen stänger: arbetsgivaren väljer bland de sökande.
+
+    URVALET SKER PÅ q, INTE PÅ p, och det är ett eget antagande som inte
+    följer av produktiviteten. Vid r_j ~ 0 är p = q**(k*r) identiskt ett för
+    alla, så en rangordning på produktivitet vore platt just i den kvartil
+    mekanismen finns till för -- den där u_R ligger på 1.64 mot 0.88-0.97 i
+    de övriga och målet 0.70. Motivet är upplärningskostnad, risken att
+    någon inte klarar sig, och förväntad kvarvarotid: arbetsgivaren föredrar
+    den erfarna diskaren fast vem som helst kan diska. Prisfrågan finns inte:
+    lönen är en funktion av p, så överskottet p*Pi/lambda - w är monotont i p
+    över hela det tillåtna intervallet, och bäst kvalificerad sammanfaller
+    med bäst per krona.
+
+    Aritmetiken: med acceptans proportionell mot q**a blir det accepterade
+    avståndet Rayleigh med skala sigma/sqrt(a). En dos ger 1.03 task-radier.
+    Mötesdraget är kvar som informationsfriktion, så exponenten blir
+    1 + (n-1) = n med n sökande, och n = 1/tightness = 2.1 ger 1.03/sqrt(2.1)
+    = 0.71 mot papper 2:s 0.70. Andra skalan skulle därmed FÖLJA ur
+    marknadstrycket i stället för att vara en andra kalibreringskonstant, och
+    variationen i u_R mellan kommuner blir ett resultat och inte en parameter.
+
+    Mekanismen självkorrigerar: vid höga krav utesluter grinden nästan alla
+    sökande, poolen blir liten och urvalet tillför lite; vid r ~ 0 kvalificerar
+    sig alla och urvalet biter hårt. Lokaliteten läggs alltså där den saknas.
+    """
+    job_id = event['params'].get('job_id')
+    apps = world.close_application_window(job_id)
+    t_now = float(event['time'])
+
+    pos = world.job_index().get(job_id)
+    gone = (pos is None
+            or ('active' in world.jobs.columns
+                and not bool(world.jobs.iat[pos, world.jobs.columns.get_loc('active')]))
+            or pd.notna(world.jobs.iat[pos, world.jobs.columns.get_loc('individual_id')]))
+
+    ind = world.individuals
+    lediga = [a for a in apps
+              if a['idx'] in ind.index
+              and ind.at[a['idx'], 'status'] == 'unemployed'
+              and pd.isna(ind.at[a['idx'], 'job_id'])]
+
+    if gone or not lediga:
+        world.event_logger.log_event(world, event, extra={
+            'event_detail': 'vacancy_closed_unfilled', 'job_id': job_id,
+            'n_applicants': len(apps), 'n_eligible': len(lediga)})
+        for a in lediga:
+            _reschedule_search(world, a['idx'], t_now)
+        return
+
+    win = max(lediga, key=lambda a: a['q'])
+    idx = win['idx']
+
+    # Rekryteringstid: positionen är utlovad men tillträds först senare.
+    world.set_job_pending(job_id)
+    lag_cfg = world.cfg_reader.get_event_timing('recruitment_lag')
+    lag = (np.random.exponential(lag_cfg.get('mean', 30.0))
+           if lag_cfg.get('dist', 'exponential') == 'exponential'
+           else float(lag_cfg.get('mean', 30.0)))
+    world._push_event({
+        "time": t_now + lag, "agent_id": idx, "event_type": "start_job",
+        "params": {"job_id": job_id, "w_neg": win['w_neg'], "q_hire": win['q'],
+                   "commute_km": win['commute_km'],
+                   "n_applicants": len(lediga)},
+    })
+    world.event_logger.log_event(world, event, extra={
+        'event_detail': 'match_completed', 'job_id': job_id,
+        'agent_id': idx, 'n_applicants': len(lediga),
+        'surplus': round(win['surplus'], 4), 'w_neg': round(win['w_neg'], 4),
+        'q_hire': round(win['q'], 4), 'commute_km': round(win['commute_km'], 3)})
+    world.n_matched_in_month = getattr(world, 'n_matched_in_month', 0) + 1
+
+    for a in lediga:
+        if a['idx'] != idx:
+            _reschedule_search(world, a['idx'], t_now)
 
 
 def handle_start_education(event, world):
@@ -641,6 +728,7 @@ RULE_SWITCH = {
     "quit_job": handle_quit_job,
     "start_job": handle_start_job,
     "start_job_search": handle_start_job_search,
+    "close_vacancy": handle_close_vacancy,
     "start_education": handle_start_education,
     "end_education": handle_end_education,
     "start_internal_training": handle_start_internal_training,

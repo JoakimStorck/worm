@@ -84,6 +84,15 @@ simulation:
   retraining_target_k: 50        # antal bästa vakanser som bestämmer riktningen
   retraining_days_per_unit: 900  # varaktighet per enhet förflyttning i planet
   retraining_min_days: 30        # kortaste omskolning
+  # --- Annonsering och urval (docs/individmodell.md) ---
+  # Arbetsgivaren annonserar, sökande som passerar deltagandevillkoret ansöker,
+  # och vid stängning väljs den med högst KONKURRENSKRAFT q -- inte högst
+  # produktivitet p, som är identiskt ett för alla i jobb med r_j ~ 0 och
+  # därför inte kan rangordna någon i just den kvartilen. Motivet är
+  # upplärningskostnad och risk, inte produktion. Fyrtio dagar svarar mot
+  # svensk praxis för annonseringstid; tillsammans med recruitment_lag ger det
+  # vakansvaraktigheten, som mäts mot svenska 30-40 dagar.
+  application_window_days: 40
   min_surplus: 0.0          # acceptera om S > min_surplus
   reservation_decay_per_search: 0.95   # w_res faller 5 % per misslyckad sökning
   # Reservationslönens golv. 0.10 av medellönen är orimligt lågt: med a-kassa
