@@ -228,6 +228,24 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                 row["p10_q_hire"] = round(float(q.quantile(0.10)), 4)
                 row["share_q_below_0.4"] = round(float((q < 0.40).mean()), 4)
                 row["min_q_hire"] = round(float(q.min()), 4)
+            km = tr["commute_km"].dropna() if "commute_km" in tr.columns else pd.Series(dtype=float)
+            if len(km):
+                row["median_commute_km"] = round(float(km.median()), 2)
+                row["p90_commute_km"] = round(float(km.quantile(0.90)), 2)
+
+            # Vakansvaraktighet ur Littles lag: V = flode x varaktighet. Ingen
+            # vakans bar en tidsstampel, sa den exakta varaktigheten per
+            # position gar inte att mata. Medelstocken over manaderna delat med
+            # anstallningar per ar ar rakt fram och giltig i jamvikt, och det
+            # ar det matt som avgor v -- och darmed u, eftersom
+            # U = L - J + V ger u = u_min + V/L exakt.
+            if len(ts) and "vacancies" in ts.columns:
+                yrs = float(ts["year"].iloc[-1]) if "year" in ts.columns else 0.0
+                if yrs > 0 and len(tr):
+                    row["mean_vacancies"] = round(float(ts["vacancies"].mean()), 1)
+                    row["vacancy_days"] = round(
+                        float(ts["vacancies"].mean()) / (len(tr) / yrs) * 365.25, 1)
+
             if "r_req" in cps.columns and cps["r_req"].notna().any():
                 # Det avslöjande måttet: låg q i jobb med högt krav.
                 hi = cps[cps["r_req"] >= 0.6]

@@ -115,6 +115,30 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
                   f"Den ska vara nära noll: annars tillträder folk jobb de inte "
                   f"klarar.\n")
 
+    # Vakansstocken ar det enda stallet u kan roras: U = L - J + V ger
+    # u = u_min + V/L exakt, sa u och v ar samma tal tva ganger. Utan
+    # varaktigheten gick det inte att se vilken av dem som var for hog.
+    if "vacancy_days" in df.columns:
+        vd = pd.to_numeric(df["vacancy_days"], errors="coerce").dropna()
+        km = pd.to_numeric(df.get("median_commute_km"), errors="coerce").dropna()
+        if len(vd):
+            A("## Pendling och vakanser\n")
+            A(f"Vakansvaraktighet (Littles lag, medelstock delat med flöde): "
+              f"**{vd.median():.0f} dagar**"
+              + (f", spann {vd.min():.0f}–{vd.max():.0f} över frön" if len(vd) > 1 else "")
+              + ". Svensk vakansvaraktighet ligger kring 30–40 dagar.\n")
+            A("Eftersom $U = L - J + V$ är $u = u\\_{min} + V/L$ exakt: u och v är "
+              "samma tal två gånger, och vakansstocken är det enda som kan "
+              "flyttas utan att ändra arbetskraften eller jobbstocken.\n")
+            if len(km):
+                p90 = pd.to_numeric(df.get("p90_commute_km"), errors="coerce").dropna()
+                A(f"Medianpendling: **{km.median():.1f} km**"
+                  + (f", p90 {p90.median():.1f} km" if len(p90) else "")
+                  + ". Kalibreras mot tabellen `commuting` (SCB:s flöden mellan "
+                    "kommuner); inom en enda kommun går pendlingsmekanismen inte "
+                    "att pröva, eftersom de högst betalda arbetsgivarna ligger "
+                    "centralt.\n")
+
     A("## Mot referensvärden\n")
     A("| Storhet | Modell (median) | Spridning över frön | Referens | Källa |")
     A("|---|---|---|---|---|")
@@ -251,6 +275,7 @@ def main():
         F.fig_coverage(runs, figdir)
         F.fig_tenure(figdir)
         F.fig_wages(runs, figdir)
+        F.fig_commute(runs, figdir)
 
     write_report(df, grouped, a.out, runs, figdir, by=by)
 

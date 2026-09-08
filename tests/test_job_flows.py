@@ -769,3 +769,48 @@ def test_missing_occupation_source_is_a_hard_error():
     w = _world_with_sni_source("register")      # registertabellen finns inte
     with pytest.raises(ValueError, match="occupation_source='register'"):
         w._occupation_profile("2062")
+
+
+# ---------------------------------------------------------------------------
+# Rapportens pendlings- och vakansmått (0054)
+# ---------------------------------------------------------------------------
+
+def test_summary_reports_commute_and_vacancy_duration(tmp_path):
+    """Vakansstocken är det enda som kan flytta u, eftersom U = L - J + V ger
+    u = u_min + V/L exakt. Utan varaktigheten gick det inte att se vilken av
+    u och v som var för hög."""
+    import numpy as np
+    from core.analysis.eventlog import summary_row
+
+    rd = tmp_path / "run_x"
+    (rd / "tables").mkdir(parents=True)
+    # 12 månader, 100 vakanser i snitt; 600 anställningar på ett år
+    pd.DataFrame({"month": range(1, 13), "year": np.linspace(1/12, 1.0, 12),
+                  "employed": [900]*12, "unemployed": [100]*12,
+                  "vacancies": [100]*12, "active_jobs": [1000]*12,
+                  "labour_force": [1000]*12, "posted": [0]*12,
+                  "not_in_labour_force": [0]*12,
+                  "u": [10.0]*12, "v": [10.0]*12, "tightness": [1.0]*12,
+                  "identity_residual": [0]*12,
+                  }).to_csv(rd / "tables" / "timeseries.csv", index=False)
+    n = 600
+    pd.DataFrame({
+        "time": np.linspace(1, 365, n), "year": np.linspace(0.01, 1.0, n),
+        "agent_id": range(n), "job_id": [f"J{i}" for i in range(n)],
+        "u_R": 1.0, "u_R_occ": 1.0, "commute_km": np.r_[np.zeros(n//2),
+                                                        np.full(n//2, 20.0)],
+        "w_field": 1.0, "w_neg": 0.85, "q_hire": 0.8, "r_req": 0.3,
+        "occ_change": True, "is_mgmt": False, "in_cps_sample": True,
+        "wage_ratio": 0.85,
+    }).to_csv(rd / "tables" / "transitions.csv", index=False)
+    pd.DataFrame({"time": [], "event": []}).to_csv(rd / "tables" / "flows.csv",
+                                                   index=False)
+
+    row = summary_row(str(rd), events=[],
+                      tr=pd.read_csv(rd / "tables" / "transitions.csv"),
+                      ts=pd.read_csv(rd / "tables" / "timeseries.csv"))
+
+    assert row["median_commute_km"] == pytest.approx(10.0)
+    assert row["p90_commute_km"] == pytest.approx(20.0)
+    # Little: 100 vakanser / 600 per år = 0.1667 år = 60.9 dagar
+    assert row["vacancy_days"] == pytest.approx(60.9, abs=0.5)

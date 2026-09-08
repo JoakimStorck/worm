@@ -431,6 +431,109 @@ def fig_wages(run_dirs, out):
 
 
 # ---------------------------------------------------------------------------
+def fig_commute(run_dirs, out):
+    """Pendlingsavstånd, och inversionen mot uppgiftsavstånd.
+
+    Pendlingskostnaden c*km är ABSOLUT och inte proportionell mot lönen, så
+    samma avstånd är en mindre andel av en hög lön. Modellen bör därför ge
+    långa pendlingar koncentrerade till kravtunga, välbetalda yrken med tunn
+    lokal marknad. Höger panel prövar det, och visar samtidigt inversionen:
+    de minst kravtunga jobben pendlar KORTAST geografiskt och färdas LÄNGST i
+    uppgiftsrummet, eftersom p = q**(k*r) är platt vid r ~ 0 och överskottet
+    då inte bär någon information om uppgiftsavstånd alls.
+    """
+    from core.analysis.eventlog import load_tables
+
+    per_run, frames = {}, []
+    for rd in run_dirs:
+        try:
+            tr = load_tables(rd)["transitions"]
+        except Exception:
+            continue
+        if tr.empty or "commute_km" not in tr.columns:
+            continue
+        km = tr["commute_km"].dropna()
+        if not len(km):
+            continue
+        per_run[os.path.basename(str(rd).rstrip("/"))] = km.to_numpy()
+        frames.append(tr)
+
+    if not per_run:
+        print("commute: ingen commute_km i tabellerna (kräver patch 0052)"); return
+    allv = np.concatenate(list(per_run.values()))
+    tr = pd.concat(frames, ignore_index=True)
+    n_runs = len(per_run)
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.4), dpi=ps.DPI)
+
+    ax = ps.cartesian_axes(axes[0])
+    hi = float(np.quantile(allv, 0.995))
+    bins = np.linspace(0, max(hi, 1.0), 45)
+    for v in per_run.values():
+        ax.hist(v, bins=bins, histtype="step", lw=0.8, color="#1f77b4", alpha=0.45)
+    ax.hist(allv, bins=bins, color="#1f77b4", alpha=0.35, lw=0,
+            label=f"alla frön (n={allv.size})")
+    med = float(np.median(allv))
+    ax.axvline(med, ls="--", lw=1.4, color="#1f77b4")
+    ax.text(med, ax.get_ylim()[1]*0.92, f" median {med:.1f} km", fontsize=7.5,
+            color="#1f77b4")
+    ax.set_xlabel("Pendlingsavstånd vid anställning (km)", fontsize=9)
+    ax.set_ylabel("Antal", fontsize=9)
+    ax.legend(fontsize=7.5, framealpha=0.9)
+    ps.title(ax, f"Pendlingsavstånd ({n_runs} körning{'ar' if n_runs > 1 else ''})",
+             pad=10)
+
+    ax2 = ps.cartesian_axes(axes[1])
+    rows = []
+    if tr["r_req"].notna().any():
+        q = pd.qcut(tr["r_req"], 4, duplicates="drop")
+        g = tr.groupby(q, observed=True)
+        mids = [float((iv.left + iv.right) / 2) for iv in g.groups]
+        kmm = g["commute_km"].median().to_numpy()
+        cps = tr[tr["in_cps_sample"].fillna(False).astype(bool)]
+        uq = pd.qcut(cps["r_req"], 4, duplicates="drop")
+        urm = cps.groupby(uq, observed=True)["u_R"].median().to_numpy()
+        ax2.plot(mids, kmm, "o-", lw=1.8, color="#1f77b4", label="pendling (km)")
+        ax2.set_ylabel("Median pendling (km)", fontsize=9, color="#1f77b4")
+        ax2.tick_params(axis="y", labelcolor="#1f77b4")
+        ax3 = ax2.twinx()
+        n = min(len(mids), len(urm))
+        ax3.plot(mids[:n], urm[:n], "s--", lw=1.8, color="#d62728",
+                 label="$u_R$ (task-radier)")
+        ax3.axhline(REF_WITHIN, ls=":", lw=1.2, color="#2ca02c")
+        ax3.text(mids[0], REF_WITHIN, " 0,70", fontsize=7, color="#2ca02c",
+                 va="bottom")
+        ax3.set_ylabel("Median $u_R$ (task-radier)", fontsize=9, color="#d62728")
+        ax3.tick_params(axis="y", labelcolor="#d62728")
+        rows = [{"r_req_mid": m, "median_commute_km": float(k),
+                 "median_u_R": float(u) if i < len(urm) else np.nan}
+                for i, (m, k, u) in enumerate(zip(mids, kmm,
+                                                  list(urm) + [np.nan]*len(mids)))]
+        h1, l1 = ax2.get_legend_handles_labels()
+        h2, l2 = ax3.get_legend_handles_labels()
+        ax2.legend(h1 + h2, l1 + l2, fontsize=7.5, loc="center right",
+                   framealpha=0.9)
+    ax2.set_xlabel("Kravintensitet $r_j$ (kvartilmitt)", fontsize=9)
+    ps.title(ax2, "Geografiskt mot uppgiftsavstånd", pad=10)
+
+    ps.footnote(fig, "Pendlingskostnaden är absolut, inte proportionell mot "
+                     "lönen, så långa pendlingar ska vara koncentrerade till "
+                     "välbetalda yrken. Vid $r_j \\approx 0$ är $p = q^{k r}$ platt: "
+                     "överskottet bär då ingen information om uppgiftsavstånd, "
+                     "och de jobben pendlar kortast geografiskt men längst i "
+                     "uppgiftsrummet.", y=-0.05)
+
+    per = pd.DataFrame({"run": list(per_run), "n": [v.size for v in per_run.values()],
+                        "median_km": [float(np.median(v)) for v in per_run.values()],
+                        "p90_km": [float(np.quantile(v, 0.9)) for v in per_run.values()]})
+    figio.write(fig, "commute_distribution", out,
+                data={"per_run": per, "by_r_req": pd.DataFrame(rows)},
+                run_dirs=run_dirs, save=ps.save,
+                note="Pendlingsavstånd vid anställning; per kvartil i r_req "
+                     "mot uppgiftsavstånd.")
+
+
+# ---------------------------------------------------------------------------
 def latest_run():
     outdir = os.path.join(ROOT, "output")
     c = [os.path.join(outdir, d) for d in os.listdir(outdir)
@@ -445,7 +548,7 @@ def main():
     ap.add_argument("runs", nargs="*", help="körningskataloger (default: senaste)")
     ap.add_argument("--out", default=os.path.join(ROOT, "figures"))
     ap.add_argument("--only", choices=["mobility", "competence", "coverage",
-                                       "tenure", "wages"])
+                                       "tenure", "wages", "commute"])
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     runs = a.runs or [latest_run()]
@@ -462,6 +565,8 @@ def main():
         fig_tenure(a.out)
     if a.only in (None, "wages"):
         fig_wages(runs, a.out)
+    if a.only in (None, "commute"):
+        fig_commute(runs, a.out)
 
 
 if __name__ == "__main__":
