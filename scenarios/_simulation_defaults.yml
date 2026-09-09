@@ -81,6 +81,20 @@ simulation:
   employer_wage_sd: 0.10        # residual per arbetsgivare, sd i log lön
   employer_size_premium: 0.02   # per log-enhet storlek relativt tio anställda
 
+  # Årlig lönerevision. Ökningen ges i PROCENT av befintlig lön, med
+  # prestation som spridning kring märket -- inte som en omräkning mot
+  # Pi*p**theta. Vägberoendet är vad som skapar lönespridning över en karriär.
+  # Märket faller ut ur alla kvoter (både löner och Pi räknas realt), men styr
+  # avkortningen: g >= 0 ger inga nominella sänkningar, och eftersom märket
+  # ligger över noll blir nollutfall ovanliga utan att vara omöjliga.
+  # beta_q = 0 stänger av den individuella delen, så de två effekterna kan
+  # prövas var för sig. Värdena är storleksordningar att kalibrera mot
+  # observerad spridning i löneutveckling, inte skattningar.
+  wage_revision:
+    enabled: true
+    markup: 0.025           # märket, ungefär industrins norm
+    beta_q: 0.10            # hur mycket tillväxt i q betalar sig
+
   bargaining:
     enabled: true
     beta: 0.5                 # används bara om theta saknas (gamla formeln)
