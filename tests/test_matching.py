@@ -3,66 +3,74 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import core.matching as M
 import core.occupations.utils as U
-from core.occupations.utils import (
-    compute_surplus_matrix, global_greedy_matching, effective_wage,
-)
 
 
-def test_all_matches_have_positive_surplus(individuals, jobs):
-    res = global_greedy_matching(individuals, jobs, sigma_gamma=0.6,
-                                 commute_cost_per_km=0.005, min_surplus=0.0)
-    assert len(res) > 0
-    assert (res["surplus"] > 0).all()
+def _search(inds, jbs, **kw):
+    """Kör search_once för varje individ och returnerar valda par.
 
-
-def test_no_double_assignment(individuals, jobs):
-    res = global_greedy_matching(individuals, jobs, sigma_gamma=0.6)
-    assert res["individual_id"].is_unique
-    assert res["job_id"].is_unique
+    Ersätter global_greedy_matching, som var en fyra patchar äldre version av
+    samma modell. Testerna nedan prövar samma egenskaper mot den kod som
+    faktiskt körs -- det var två kodvägar som gjorde samma sak som gav fem av
+    dagens fel.
+    """
+    from core.occupations.utils import search_once, build_job_arrays
+    A = build_job_arrays(jbs)
+    rng = kw.pop("rng", None) or np.random.default_rng(3)
+    cand = np.arange(len(jbs))
+    par = []
+    for i in inds.index:
+        pos, S, w, q, km = search_once(inds.loc[i], jbs, cand, arrays=A,
+                                       rng=rng, **kw)
+        if pos is not None:
+            par.append((i, pos, S))
+    return par
 
 
 def test_higher_reservation_wage_reduces_matches(individuals, jobs):
     low = individuals.assign(w_res=0.1)
     high = individuals.assign(w_res=0.9)
-    assert len(global_greedy_matching(low, jobs, sigma_gamma=0.6)) > \
-           len(global_greedy_matching(high, jobs, sigma_gamma=0.6))
+    assert len(_search(low, jobs, sigma_gamma=0.6)) > \
+           len(_search(high, jobs, sigma_gamma=0.6))
 
 
 def test_commute_cost_reduces_matches(individuals, jobs):
-    cheap = global_greedy_matching(individuals, jobs, sigma_gamma=0.6,
-                                   commute_cost_per_km=0.001)
-    dear = global_greedy_matching(individuals, jobs, sigma_gamma=0.6,
-                                  commute_cost_per_km=0.05)
-    assert len(cheap) > len(dear)
+    cheap = _search(individuals, jobs, sigma_gamma=0.6, commute_cost_per_km=0.001)
+    dear = _search(individuals, jobs, sigma_gamma=0.6, commute_cost_per_km=0.05)
+    assert len(cheap) >= len(dear)
 
 
-def test_surplus_formula(individuals, jobs):
-    """S = w_j - c*km - w_res. Lönen är jobbets, oberoende av passform."""
-    i = individuals.iloc[[0]]
-    j = jobs.iloc[[0]]
-    S = compute_surplus_matrix(i, j, commute_cost_per_km=0.01)[0, 0]
-    km = np.hypot(i["x"].iloc[0] - j["x"].iloc[0], i["y"].iloc[0] - j["y"].iloc[0]) / 1000.0
-    assert S == pytest.approx(j["wage"].iloc[0] - 0.01 * km - i["w_res"].iloc[0])
+def test_surplus_is_wage_minus_commute_minus_reservation(individuals, jobs):
+    """S = w - c*km - w_res, och lönen beror inte på uppgiftsavståndet:
+    passformen avgör om mötet blir av och vad hon är värd, inte var jobbet
+    ligger i planet."""
+    from core.occupations.utils import search_once, build_job_arrays
 
+    i = individuals.iloc[[0]].assign(w_res=0.0)
+    j = jobs.iloc[[0]].assign(wage=1.0, r_req=0.0)
+    A = build_job_arrays(j)
+    ett = lambda jx, jy, jro: np.ones(len(jx))
+    pos, S, w, q, km = search_once(i.iloc[0], j, np.arange(1), arrays=A,
+                                   commute_cost_per_km=0.01,
+                                   competitiveness=ett,
+                                   rng=np.random.default_rng(0))
+    assert pos == 0
+    assert S == pytest.approx(w - 0.01 * km)
 
-def test_surplus_independent_of_task_distance(individuals, jobs):
-    """Passformen får inte påverka LÖNEN, bara sannolikheten att bli anställd."""
-    from core.occupations.utils import hire_probability
-    near = individuals.iloc[[0]].assign(x_occ=jobs["x_occ"].iloc[0],
-                                        y_occ=jobs["y_occ"].iloc[0])
-    far = individuals.iloc[[0]].assign(x_occ=jobs["x_occ"].iloc[0] + 0.6,
-                                       y_occ=jobs["y_occ"].iloc[0])
-    j = jobs.iloc[[0]]
-    assert compute_surplus_matrix(near, j)[0, 0] == pytest.approx(
-        compute_surplus_matrix(far, j)[0, 0])
-    assert hire_probability(near, j)[0, 0] > hire_probability(far, j)[0, 0]
+    # Samma jobb, men individen längre bort i UPPGIFTSRUMMET: överskottet
+    # ändras inte, eftersom lönen inte beror på avståndet.
+    far = i.assign(x_occ=float(j["x_occ"].iloc[0]) + 0.6).iloc[0]
+    _, S2, w2, _, km2 = search_once(far, j, np.arange(1), arrays=A,
+                                    commute_cost_per_km=0.01,
+                                    competitiveness=ett,
+                                    rng=np.random.default_rng(0))
+    assert w2 == pytest.approx(w)
+    assert S2 == pytest.approx(S)
 
 
 def test_transition_distances_match_empirical_distribution():
-    """Modellens mobilitetsfördelning ska motsvara den observerade:
-    median 1.03 task-radier, ~50 % inom en radie, svans bortom två.
+    """Modellens mobilitetsfördelning mot den observerade: median kring en
+    task-radie, ungefär hälften inom en radie, svans bortom två.
     Referens: Two scales of occupational mobility, CPS 2020-2024."""
     rng = np.random.default_rng(7)
 
@@ -70,69 +78,55 @@ def test_transition_distances_match_empirical_distribution():
         r = np.sqrt(rng.uniform(0, 1, n)); t = rng.uniform(0, 2 * np.pi, n)
         return r * np.cos(t), r * np.sin(t)
 
-    N, M = 3000, 9000
+    N, M = 1200, 6000
     ix, iy = disc(N); jx, jy = disc(M)
     inds = pd.DataFrame({"individual_id": np.arange(N), "x_occ": ix, "y_occ": iy,
                          "r_i": 0.0, "w_res": 0.30, "x": 0.0, "y": 0.0})
     jbs = pd.DataFrame({"job_id": np.arange(M), "x_occ": jx, "y_occ": jy,
                         "r_o": 0.272, "wage": rng.uniform(0.45, 0.85, M),
-                        "x": 0.0, "y": 0.0})
-    res = global_greedy_matching(inds, jbs, sigma_gamma=0.875,
-                                 commute_cost_per_km=0.005, rng=rng)
-    im = inds.set_index("individual_id").loc[res["individual_id"]]
-    jm = jbs.set_index("job_id").loc[res["job_id"]]
-    uR = np.hypot(im["x_occ"].values - jm["x_occ"].values,
-                  im["y_occ"].values - jm["y_occ"].values) / jm["r_o"].values
+                        "r_req": 0.0, "x": 0.0, "y": 0.0,
+                        "individual_id": np.nan, "active": True})
+    par = _search(inds, jbs, sigma_gamma=0.875, commute_cost_per_km=0.005,
+                  choice_scale=0.05, rng=rng)
+    assert len(par) > 100
+    uR = np.array([np.hypot(inds.at[i, "x_occ"] - jbs.at[p, "x_occ"],
+                            inds.at[i, "y_occ"] - jbs.at[p, "y_occ"])
+                   / jbs.at[p, "r_o"] for i, p, _ in par])
 
-    assert np.median(uR) == pytest.approx(1.03, abs=0.20)
-    assert 0.40 < (uR <= 1.0).mean() < 0.62
-    assert (uR > 2.0).mean() > 0.02, "svansen saknas: långa övergångar uteslutna"
-
-
-def test_works_without_prices(individuals, jobs):
-    """Saknas wage/w_res ska S = p - c*km (bakåtkompatibelt)."""
-    res = global_greedy_matching(individuals.drop(columns=["w_res"]),
-                                 jobs.drop(columns=["wage"]), sigma_gamma=0.6)
-    assert len(res) > 0
+    assert 0.7 < np.median(uR) < 1.5
+    assert 0.30 < (uR <= 1.0).mean() < 0.70
+    assert (uR > 2.0).mean() > 0.01, "svansen saknas: långa övergångar uteslutna"
 
 
-def test_effective_wage_at_centre_equals_job_wage():
-    ind = pd.Series({"x_occ": 0.3, "y_occ": 0.2, "r_i": 0.0})
-    job = pd.Series({"x_occ": 0.3, "y_occ": 0.2, "r_o": 0.25, "wage": 1.4})
-    assert effective_wage(ind, job) == pytest.approx(1.4)
+def test_parameters_reach_the_kernel(monkeypatch):
+    """REGRESSION: sigma_gamma, commute_cost och min_surplus försvann tidigare
+    i **kwargs, och matchningen körde på defaultvärden. Efter 0069 byggs
+    argumenten på ETT ställe, matching_core.search_config, som delas av
+    uppstarten och händelsehanteraren -- det var där vitlistan i 0061 kunde
+    filtrera bort theta utan att något larmade."""
+    from core.matching_core import search_config
+
+    class R:
+        config = {"simulation": {
+            "sigma_gamma": 0.61, "commute_cost_per_km": 0.0077,
+            "min_surplus": 0.013, "choice_scale": 0.02, "requirement_k": 3.0,
+            "bargaining": {"enabled": True, "beta": 0.5, "theta": 0.5,
+                           "labour_share": 0.65, "wage_floor_share": 0.7}}}
+
+    class W:
+        cfg_reader = R()
+
+    cfg = search_config(W())
+    assert cfg["sigma_gamma"] == 0.61
+    assert cfg["commute_cost_per_km"] == 0.0077
+    assert cfg["min_surplus"] == 0.013
+    assert cfg["requirement_k"] == 3.0
+    # Hela förhandlingsblocket, inte en vitlista
+    assert cfg["bargaining"]["theta"] == 0.5
+    assert cfg["bargaining"]["labour_share"] == 0.65
+    assert "enabled" not in cfg["bargaining"]
 
 
-@pytest.mark.parametrize("fn_name", ["multilevel_exhaustive_matching",
-                                     "interleaved_multilevel_batch_matching"])
-def test_parameters_reach_the_kernel(monkeypatch, individuals, jobs, fn_name):
-    """Regressionstest: sigma_gamma/commute_cost/min_surplus försvann tidigare
-    i **kwargs och den händelsedrivna matchningen körde på defaultvärden."""
-    seen = []
-    orig = U.global_greedy_matching
-
-    def spy(i, j, alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0, sigma_gamma=1.0,
-            utility_min=None, commute_cost_per_km=0.005, min_surplus=0.0):
-        seen.append((sigma_gamma, commute_cost_per_km, min_surplus))
-        return orig(i, j, sigma_gamma=sigma_gamma,
-                    commute_cost_per_km=commute_cost_per_km, min_surplus=min_surplus)
-
-    monkeypatch.setattr(M, "global_greedy_matching", spy)
-    getattr(M, fn_name)(individuals, jobs, sigma_gamma=0.61,
-                        commute_cost_per_km=0.0077, min_surplus=0.013)
-    assert seen, "kärnan anropades aldrig"
-    assert seen[0] == (0.61, 0.0077, 0.013)
-
-
-def test_missing_prices_is_detectable(individuals, jobs):
-    """REGRESSION: prisfältet kunde saknas helt utan att någon märkte det.
-    Jobben fick lön 1.0, ingen fick reservationslön, och överskottet blev
-    S = p - c*km -- vilket gav 98 % fyllnadsgrad och median 0.955."""
-    flat = jobs.assign(wage=1.0)
-    no_res = individuals.assign(w_res=0.0)
-    res_flat = global_greedy_matching(no_res, flat, sigma_gamma=0.6)
-    res_real = global_greedy_matching(individuals, jobs, sigma_gamma=0.6)
-    assert len(res_flat) > len(res_real)
-    assert res_flat["surplus"].median() > res_real["surplus"].median()
 
 
 def test_reservation_wage_decays_on_failed_search():

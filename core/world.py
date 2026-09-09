@@ -8,7 +8,6 @@ import traceback
 import time
 
 from core.geography.geoworld import GeoWorld
-from core.matching import interleaved_multilevel_batch_matching, multilevel_exhaustive_matching
 from core.log import log
 from core.events import EventQueue
 from core.log import EventLogger
@@ -682,138 +681,24 @@ class World:
             self._ja_n = n
         return self._ja
 
-    def match_individuals_to_jobs(self, individuals=None, mode="exhaustive_multilevel", **kwargs):
-        """
-        Batch-matches individuals to jobs. If individuals is None, all unemployed individuals are used.
-        Returns DataFrame with 'individual_id', 'job_id', etc.
-        """
-        # Undvik onödiga kopior
-        if individuals is None:
-            workforce = self.individuals[self.individuals['status'] == 'unemployed']
-        else:
-            workforce = individuals  # Utgå från redan vald DataFrame
-        
-        if not getattr(self, "_wage_checked", False):
-            self._wage_checked = True
-            if 'wage' not in self.jobs.columns or self.jobs['wage'].isna().all():
-                print("VARNING: jobben saknar lön (kolumnen 'wage'). Matchningen körs "
-                      "utan priser: S = p - c*km.")
-            elif float(self.jobs['wage'].std(skipna=True) or 0.0) == 0.0:
-                print("VARNING: alla jobb har samma lön. Prisfältet är sannolikt inte "
-                      "inläst (w_rel tomt i onet_occupation_space).")
-        vacant_jobs = self.jobs[self.jobs['individual_id'].isna()]
-        if 'active' in self.jobs.columns:
-            vacant_jobs = vacant_jobs[vacant_jobs['active']]
-
-        if mode == "interleaved_multilevel":
-            # Import your matching function!
-            return interleaved_multilevel_batch_matching(
-                workforce,
-                vacant_jobs,
-                alpha_chi=kwargs.get("alpha_chi", 5.0),
-                alpha_xi=kwargs.get("alpha_xi", 5.0),
-                alpha_geo=kwargs.get("alpha_geo", 1.0),
-                sigma_gamma=kwargs.get("sigma_gamma", 1.0),
-                utility_min=kwargs.get("utility_min", 0.05),
-                commute_cost_per_km=kwargs.get("commute_cost_per_km", 0.005),
-                min_surplus=kwargs.get("min_surplus", 0.0),
-                batch_frac_deso=kwargs.get("batch_frac_deso", 0.2),
-                batch_frac_muni=kwargs.get("batch_frac_muni", 0.1),
-                batch_frac_global=kwargs.get("batch_frac_global", 0.05),
-                min_batch=kwargs.get("min_batch", 10),
-                verbose=kwargs.get("verbose", False)
-            )
-        elif mode == "exhaustive_multilevel":
-            # Import your matching function!
-            return multilevel_exhaustive_matching(
-                workforce,
-                vacant_jobs,
-                alpha_chi=kwargs.get("alpha_chi", 5.0),
-                alpha_xi=kwargs.get("alpha_xi", 5.0),
-                alpha_geo=kwargs.get("alpha_geo", 1.0),
-                sigma_gamma=kwargs.get("sigma_gamma", 1.0),
-                utility_min=kwargs.get("utility_min", 0.05),
-                commute_cost_per_km=kwargs.get("commute_cost_per_km", 0.005),
-                min_surplus=kwargs.get("min_surplus", 0.0),
-                verbose=kwargs.get("verbose", False)
-            )
-        else:
-            raise ValueError(f"Unknown matching mode: {mode}")
-
-    def update_after_matching(self, matchings=None):
-        """
-        Updates both individuals and jobs after matching.
-        Takes an explicit matchings DataFrame if provided, otherwise self.matchings.
-        """
-        if matchings is None:
-            matchings = self._matchings
-
-        # Update individuals
-        matched = matchings.set_index('individual_id')['job_id']
-        idx = self.individuals['individual_id'].isin(matched.index)
-        self.individuals.loc[idx, 'status'] = 'employed'
-        self.individuals.loc[idx, 'job_id'] = self.individuals.loc[idx, 'individual_id'].map(matched)
-
-        # Update jobs
-        job_to_ind = matchings.set_index('job_id')['individual_id']
-        job_idx = self.jobs['job_id'].isin(job_to_ind.index)
-        self.jobs.loc[job_idx, 'individual_id'] = self.jobs.loc[job_idx, 'job_id'].map(job_to_ind)
-
-        self._seed_wages_for_matched(idx)
-
-    def _seed_wages_for_matched(self, idx):
-        """Startbeståndet får lön och utgångspunkt för lönerevisionen.
-
-        Förmatchningen satte status och job_id men INGEN lön. Individtabellen
-        saknade dessutom w_neg som kolumn helt -- scenariobyggaren skapar
-        w_res men aldrig w_neg -- så vakten 'if "w_neg" in individuals.columns'
-        i handle_start_job var falsk vid varje anställning, och den förhandlade
-        lönen skrevs aldrig till individen.
-
-        Följden är att TVÅ patchar mätte respektive ändrade en storhet som
-        inte fanns. _wage_stock_stats (0064) föll ut på sin första vakt, så
-        beståndets årliga tvärsnitt och månadskvantilerna har aldrig
-        producerat något. _apply_wage_revision (0067) likaså: lönerevisionen
-        har aldrig körts en enda gång.
-
-        Det är samma familj som r_req ur SELECT:en, n_applicants ur
-        transitions_table, theta ur vitlistan och eta ur hasattr -- men värre
-        på ett sätt: här fanns en konsument utan producent. Vakten skrevs som
-        försiktighetsåtgärd och blev det som gjorde felet tyst, eftersom en
-        kolumn som aldrig skapas ser exakt likadan ut som en man valt bort.
-
-        q_last sätts samtidigt. Utan den får hela startbeståndet ett påslag
-        exakt lika med märket vid varje revision, alltså noll spridning, och
-        eftersom de utgör merparten under de första åren skulle mekanismen se
-        ut att fungera medan den inte gjorde något.
-        """
-        ind, jobs = self.individuals, self.jobs
-        if "w_neg" not in ind.columns:
-            ind["w_neg"] = np.nan
-        if "q_last" not in ind.columns:
-            ind["q_last"] = np.nan
-        if "wage" not in jobs.columns:
-            return
-        w_of = dict(zip(jobs["job_id"], jobs["wage"]))
-        rader = ind.index[idx & ind["w_neg"].isna() & ind["job_id"].notna()]
-        if not len(rader):
-            return
-        ind.loc[rader, "w_neg"] = [w_of.get(j, np.nan) for j in ind.loc[rader, "job_id"]]
-
-        if hasattr(self, "circles") and {"x_occ", "y_occ", "r_o"} <= set(jobs.columns):
-            pos_of = self.job_index()
-            jx = jobs["x_occ"].to_numpy(dtype=float)
-            jy = jobs["y_occ"].to_numpy(dtype=float)
-            jr = jobs["r_o"].to_numpy(dtype=float)
-            cp = self.competence_params()
-            for i in rader:
-                pos = pos_of.get(ind.at[i, "job_id"])
-                if pos is None:
-                    continue
-                q = float(self.circles.competitiveness(
-                    i, jx[pos:pos + 1], jy[pos:pos + 1], jr[pos:pos + 1], cp)[0])
-                if q > 0:
-                    ind.at[i, "q_last"] = q
+    # match_individuals_to_jobs och update_after_matching utgick i 0069.
+    # De körde interleaved_multilevel_batch_matching / global_greedy_matching,
+    # en tidigare version av samma modell: samma överskott, samma dragning på
+    # passform, samma sortering på S -- men utan kön i överskottet (0057),
+    # arbetsgivarens urval (0055), kravgrinden (0049) och loneformeln
+    # w = Pi_j * p**theta med arbetsgivareffekt (0061, 0063). Nio tusen
+    # matchningar, alltså större delen av beståndet i flera år, var därför
+    # gjorda under en modell vi inte längre tror på.
+    #
+    # Dessutom partitionerade den GEOGRAFISKT, DeSO -> kommun -> globalt.
+    # Individer i samma bostadsområde liknar varandra i uppgiftsrummet, så den
+    # som råkade komma tidigt i deso_codes-ordningen tog de bästa jobben i hela
+    # kommunen: en gradient efter körordning, permanent, i en modell där
+    # geografi är glesbygdspapprets förklaringsvariabel.
+    #
+    # Uppstarten ligger nu i core.matching_core.bootstrap_matching och anropar
+    # samma funktioner som händelsehanterarna. _seed_wages_for_matched (0068)
+    # utgår med den: startlönen kommer ur negotiated_wage som för alla andra.
 
     def employer_training_prob(self, n_employees):
         tr_cfg = self.cfg_reader.config.get('defaults', {}).get('employer', {}).get('training_prob_by_size', {})

@@ -1100,3 +1100,43 @@ def test_new_jobs_inherit_the_employer_wage_effect():
     new = w.jobs[w.jobs["job_id"].str.startswith("N")]
     assert (new["wage_eta"] == 0.25).all()
     assert new["wage"].iloc[0] == pytest.approx(0.49 * np.exp(0.25))
+
+
+def test_bootstrap_actually_hires_and_leaves_no_pending_leak():
+    """REGRESSION: första försöket läste tillträdena UR kön efter att
+    annonserna stängts. _push_event kastar tyst allt bortom
+    simulation_end_time, så 172 positioner sattes till pending medan
+    tillträdena försvann: noll anställda och en läcka i bokföringen.
+    Tillträdena fångas nu vid källan."""
+    from core.matching_core import bootstrap_matching
+
+    w = make_world(n_employers=30, size=6,
+                   simulation={"application_window_days": 40})
+    n = 200
+    w.individuals = pd.DataFrame({
+        "individual_id": np.arange(n, dtype=float),
+        "status": ["unemployed"] * n,
+        "job_id": pd.Series([None] * n, dtype="object"),
+        "w_res": 0.3, "x_occ": np.linspace(-0.4, 0.4, n),
+        "y_occ": np.linspace(0.4, -0.4, n), "r_i": 0.0, "x": 0.0, "y": 0.0,
+        "propensity_start_education": 0.1,
+        "propensity_internal_training": 0.1, "propensity_quit_job": 0.1,
+        "propensity_career_break": 0.05,
+        "propensity_internal_job_change": 0.1,
+        "w_neg": np.nan, "q_last": np.nan}, index=range(n))
+    w.jobs["r_req"] = 0.0
+    w.jobs["wage"] = 1.0
+
+    st = bootstrap_matching(w, 0.0, log=None)
+
+    anställda = int((w.individuals["status"] == "employed").sum())
+    assert anställda > 0, "uppstarten anställde ingen"
+    assert st["bootstrap_hired"] == anställda
+    assert st["bootstrap_rounds"] >= 1
+    # Inga positioner får bli kvar utlovade: pending utan tillträde är en
+    # läcka i U = L - J + V
+    if "pending" in w.jobs.columns:
+        assert int(w.jobs["pending"].fillna(False).sum()) == 0
+    # Var och en som fick jobb bär sin förhandlade lön
+    lön = w.individuals.loc[w.individuals["status"] == "employed", "w_neg"]
+    assert lön.notna().all() and (lön > 0).all()

@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from core.occupations.utils import (effective_wage, search_once, vacant_job_indices,
+from core.occupations.utils import (search_once, vacant_job_indices,
                                     retraining_target)
 
 def _become_unemployed(world, idx, free_job=True):
@@ -346,78 +346,32 @@ def handle_start_job_search(event, world):
     den sökande får överväga.
     """
     idx = event['agent_id']
+    from core.matching_core import apply_once
 
-    # Med parallella ansökningar har hon utestående sökhändelser när hon får
-    # jobbet. Utan vakt skulle nästa ge en ansökan från en ANSTÄLLD, och
-    # sökning från anställning är steg 2 och inte byggd.
-    if ('status' in world.individuals.columns
-            and world.individuals.at[idx, 'status'] != 'unemployed'):
-        return
+    # Statusvakt, möte, val och ansökan ligger i matching_core.apply_once och
+    # delas med uppstarten. Kvar här är det HÄNDELSESPECIFIKA: loggningen och
+    # omschemaläggningen. Två kodvägar som gör samma sak har glidit isär fem
+    # gånger i den här serien; uppstarten återimplementerar därför ingenting.
+    job_id, w_neg, q_hire, surplus, commute_km = apply_once(
+        world, idx, float(event['time']))
 
-    sim = world.cfg_reader.config.get('simulation', {})
-
-    brg = sim.get('bargaining', {}) or {}
-    job_pos, surplus, w_neg, q_hire, commute_km = search_once(
-        world.individuals.loc[idx], world.jobs,
-        np.flatnonzero(world.vacant_mask()),
-        queue=(world.applicant_counts()
-               if hasattr(world, 'applicant_counts') else None),
-        sigma_gamma=sim.get('sigma_gamma', 1.0),
-        commute_cost_per_km=sim.get('commute_cost_per_km', 0.005),
-        min_surplus=sim.get('min_surplus', 0.0),
-        choice_scale=sim.get('choice_scale', 0.05),
-        arrays=world.job_arrays(),
-        competitiveness=(
-            (lambda jx, jy, jro: world.circles.competitiveness(idx, jx, jy, jro,
-                                                               world.competence_params()))
-            if hasattr(world, 'circles') else None),
-        requirement_k=float(sim.get('requirement_k', 2.0)),
-        # HELA blocket vidare, inte en vitlista. En vitlista här filtrerade
-        # bort theta och labour_share i 0061: formeln, defaultfilen och
-        # testerna var alla riktiga, men konfigurationen nådde aldrig fram och
-        # negotiated_wage föll tillbaka på den gamla Nash-grenen. Minsta p vid
-        # anställning låg kvar på 0.700, den gamla grinden, i stället för
-        # 0.455. Samma fel som r_req i _geom_lookup och n_applicants i
-        # transitions_table: ett värde som beräknas, konfigureras och tappas på
-        # vägen. negotiated_wage tar **_ignored, så okända nycklar är ofarliga.
-        bargaining=({k: v for k, v in brg.items() if k != "enabled"}
-                    if brg.get("enabled", True) else None),
-    )
-
-    if job_pos is not None:
-        job_id = world.jobs.iloc[job_pos]['job_id']
-        # Den förhandlade lönen följer med till tillträdet.
-        if 'w_neg' in world.individuals.columns:
-            world.individuals.at[idx, 'w_neg'] = w_neg
-        # ANSÖKAN, inte anställning. Arbetaren lägger sitt bud i jobbets
-        # ansökningslista och väntar tills annonsen stänger. Fram till dess
-        # är hon arbetslös och positionen ledig, så U = L - J + V är oberörd
-        # av fönstret -- ingenting byter tillstånd förrän valet görs.
-        world.file_application(job_id, idx, float(event['time']),
-                               q=q_hire, w_neg=w_neg, surplus=surplus,
-                               commute_km=commute_km)
+    if job_id is not None:
         world.event_logger.log_event(world, event, extra={
             'event_detail': 'application_filed', 'job_id': job_id,
             'surplus': round(surplus, 4), 'w_neg': round(w_neg, 4),
             'q_hire': round(q_hire, 4), 'commute_km': round(commute_km, 3)})
 
         # Hon fortsätter söka medan ansökan ligger ute. En ansökan i taget
-        # kostade henne hela fönstret per försök. Med sökintervallet 28 dagar
-        # och en väntan kring 25-30 blir det ungefär två utestående åt gången,
-        # alltså två chanser per fönsterperiod i stället för en. Reservationen
-        # faller INTE här: hon har inte fått avslag.
+        # kostade henne hela fönstret per försök. Reservationen faller INTE
+        # här: hon har inte fått avslag.
         _reschedule_search(world, idx, float(event['time']),
                            decay_reservation=False)
-    else:
+    elif ('status' not in world.individuals.columns
+          or world.individuals.at[idx, 'status'] == 'unemployed'):
         current_prop = world.individuals.at[idx, 'propensity_start_education']
         new_prop = min(current_prop + 0.1, 1.0)
         world.individuals.at[idx, 'propensity_start_education'] = new_prop
-
-        decay = float(sim.get('reservation_decay_per_search', 1.0))
-        floor = float(sim.get('reservation_floor', 0.0))
-        if 'w_res' in world.individuals.columns and decay < 1.0:
-            w_res = float(world.individuals.at[idx, 'w_res'])
-            world.individuals.at[idx, 'w_res'] = max(w_res * decay, floor)
+        _decay_reservation(world, idx)
 
         world.event_logger.log_event(world, event, extra={
             'event_detail': 'match_failed', 'new_propensity': round(new_prop, 3)})

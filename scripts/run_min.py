@@ -79,11 +79,8 @@ def main():
     )
 
     # 4. Batch-matchning vid t=0 (alpha-vikterna explicit för robusthet)
-    matchings = world.match_individuals_to_jobs(
-        mode="interleaved_multilevel",
-        alpha_chi=5.0, alpha_xi=5.0, alpha_geo=1.0,
-    )
-    world.update_after_matching(matchings=matchings)
+    from core.matching_core import bootstrap_matching
+    bootstrap_matching(world, t_now=0.0)
 
     n_emp = (world.individuals["status"] == "employed").sum()
     print(f"\n[MATCHNING t=0] {len(matchings)} matchningar, "

@@ -187,14 +187,13 @@ def run_and_log_scenario(config_path):
         # --- 5. Initial statistik/logg ---
         local_log("Scenario:", config_path)
 
-        # --- 6. Initial batch-matching ---
-        matchings = world.match_individuals_to_jobs(
-            mode="interleaved_multilevel",
-            alpha_chi=config.get('alpha_chi', 5.0),
-            alpha_xi=config.get('alpha_xi', 5.0),
-            alpha_geo=config.get('alpha_geo', 1.0)
-        )
-        world.update_after_matching(matchings=matchings)
+        # --- 6. Uppstart: SAMMA matchning som körningen ---
+        # Tidigare interleaved_multilevel_batch_matching, en fyra patchar äldre
+        # version av samma modell utan kön i överskottet, arbetsgivarens urval,
+        # kravgrinden eller loneformeln -- och med en geografisk trappa som gav
+        # startbeståndet en gradient efter partitionsordning.
+        from core.matching_core import bootstrap_matching
+        boot = bootstrap_matching(world, t_now=0.0, log=local_log)
         local_log("Pre-run matching (t=0) completed.")
 
         # --- 7. Statistik för batch-match ---

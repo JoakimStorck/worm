@@ -361,26 +361,54 @@ def test_stock_and_revision_reach_the_run_table():
     assert row["revision_share_zero"] == pytest.approx(0.025)
 
 
-def test_matched_workers_get_a_wage_and_a_revision_baseline():
-    """REGRESSION: förmatchningen satte status och job_id men ingen lön, och
-    individtabellen saknade w_neg som kolumn helt. Vakten
-    'if "w_neg" in individuals.columns' var därför falsk vid varje anställning,
-    beståndets tvärsnitt föll ut på sin första vakt, och lönerevisionen kördes
-    aldrig en enda gång under fem hela körningar."""
-    import numpy as np, pandas as pd
-    from conftest import make_world
+def test_bootstrap_uses_the_same_matching_as_the_run():
+    """REGRESSION: förmatchningen körde interleaved_multilevel_batch_matching,
+    en fyra patchar äldre version av samma modell -- utan kön i överskottet,
+    arbetsgivarens urval, kravgrinden eller loneformeln. Nio tusen matchningar,
+    alltså större delen av beståndet i flera år, var gjorda under en modell vi
+    inte längre tror på.
 
-    w = make_world(n_employers=2, size=4)
-    w.individuals = pd.DataFrame({
-        "individual_id": [0.0, 1.0], "status": ["unemployed"] * 2,
-        "job_id": pd.Series([None, None], dtype="object"),
-        "w_res": [0.5, 0.5]})
-    jid = w.jobs["job_id"].iloc[:2].tolist()
-    w.jobs.loc[w.jobs.index[:2], "wage"] = [0.80, 1.30]
-    m = pd.DataFrame({"individual_id": [0.0, 1.0], "job_id": jid})
-    w.update_after_matching(matchings=m)
+    Och dess geografiska trappa DeSO -> kommun -> globalt var en SYSTEMATISK
+    partitionering: den som råkade komma tidigt i deso_codes-ordningen tog de
+    bästa jobben i hela kommunen, vilket gav startbeståndet en gradient efter
+    körordning i en modell där geografi är förklaringsvariabeln."""
+    import inspect
+    from core import matching_core as mc
+    from core import world as world_mod
 
-    assert "w_neg" in w.individuals.columns, "kolumnen ska skapas vid matchning"
-    assert "q_last" in w.individuals.columns
-    assert w.individuals["w_neg"].tolist() == pytest.approx([0.80, 1.30])
-    assert (w.individuals["status"] == "employed").all()
+    # Den gamla vägen finns inte kvar
+    assert not hasattr(world_mod.World, "match_individuals_to_jobs")
+    assert not hasattr(world_mod.World, "update_after_matching")
+    import importlib
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("core.matching")
+
+    # Uppstarten återimplementerar ingen matchning: den anropar apply_once.
+    # Kommentarer och docstring räknas inte -- de förklarar varför geografin
+    # togs bort och skulle annars fälla kontrollen mot sig själva.
+    src = inspect.getsource(mc.bootstrap_matching)
+    kod = [ln for ln in src.splitlines() if not ln.lstrip().startswith("#")]
+    kod = "\n".join(kod).split('"""')
+    kod = "".join(kod[::2])              # utanför docstringen
+    assert "apply_once" in kod
+    assert "deso" not in kod.lower(), "geografisk partitionering igen"
+    assert "shuffle" in kod, "partitioneringen ska vara slumpmässig"
+
+    # Och hanteraren ramar in samma funktion
+    from core import event_handlers as eh
+    assert "apply_once" in inspect.getsource(eh.handle_start_job_search)
+
+
+def test_bootstrap_round_size_follows_target_density():
+    """Omgångsstorleken härleds ur måltätheten, inte ur en fri parameter: med
+    ungefär 1/tightness sökande per ledig vakans liknar konkurrensen vid start
+    den under körning, och antalet omgångar blir ett resultat."""
+    per_vak, n_vak, n_kö = 2.4, 100, 1000
+    n = max(1, min(n_kö, int(round(per_vak * n_vak))))
+    assert n == 240
+    # Färre lediga jobb ger mindre omgångar, alltså samma täthet
+    assert max(1, min(n_kö, int(round(per_vak * 10)))) == 24
+    # Kön tar slut innan omgången fylls
+    assert max(1, min(50, int(round(per_vak * 100)))) == 50
+
+
