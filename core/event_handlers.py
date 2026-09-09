@@ -349,8 +349,15 @@ def handle_start_job_search(event, world):
                                                                world.competence_params()))
             if hasattr(world, 'circles') else None),
         requirement_k=float(sim.get('requirement_k', 2.0)),
-        bargaining=({"beta": float(brg.get("beta", 0.5)),
-                     "wage_floor_share": float(brg.get("wage_floor_share", 0.0))}
+        # HELA blocket vidare, inte en vitlista. En vitlista här filtrerade
+        # bort theta och labour_share i 0061: formeln, defaultfilen och
+        # testerna var alla riktiga, men konfigurationen nådde aldrig fram och
+        # negotiated_wage föll tillbaka på den gamla Nash-grenen. Minsta p vid
+        # anställning låg kvar på 0.700, den gamla grinden, i stället för
+        # 0.455. Samma fel som r_req i _geom_lookup och n_applicants i
+        # transitions_table: ett värde som beräknas, konfigureras och tappas på
+        # vägen. negotiated_wage tar **_ignored, så okända nycklar är ofarliga.
+        bargaining=({k: v for k, v in brg.items() if k != "enabled"}
                     if brg.get("enabled", True) else None),
     )
 

@@ -669,3 +669,38 @@ def test_floor_is_a_floor_not_half_the_formula():
     w2 = negotiated_wage(np.array([0.9]), np.array([1.0]), 0.0,
                          theta=1.0, labour_share=0.65, wage_floor_share=0.70)
     assert w2[0] == pytest.approx(0.90)         # men bär inte lönen
+
+
+def test_bargaining_config_reaches_the_wage_formula():
+    """REGRESSION: anropet i handle_start_job_search byggde dicten med en
+    VITLISTA på beta och wage_floor_share. theta och labour_share filtrerades
+    bort, negotiated_wage föll tillbaka på den gamla Nash-grenen, och en hel
+    körning gav identiska tal som före patchen -- minsta p vid anställning låg
+    kvar på 0.700, den gamla grinden, i stället för 0.455.
+
+    Formeln, defaultfilen och enhetstesterna var alla riktiga. Bara vägen
+    däremellan var bruten, och enhetstester som anropar formeln direkt kan
+    inte se det."""
+    import inspect
+    from core import event_handlers as eh
+    from core.configreader import ConfigReader
+    from core.occupations.utils import negotiated_wage
+    import yaml, os
+
+    # 1. Ingen vitlista i anropet
+    src = inspect.getsource(eh.handle_start_job_search)
+    assert '"beta":' not in src, "vitlista i bargaining-anropet igen"
+
+    # 2. Scenariots block når formeln och byter gren
+    d = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scenarios")
+    cfg = ConfigReader.resolve_extends(
+        yaml.safe_load(open(os.path.join(d, "mora_baseline.yml"), encoding="utf-8")), d)
+    brg = {k: v for k, v in cfg["simulation"]["bargaining"].items() if k != "enabled"}
+    assert "theta" in brg and "labour_share" in brg
+
+    Pi = np.array([1.0])
+    assert negotiated_wage(np.array([1.0]), Pi, 0.4, **brg)[0] == pytest.approx(1.0)
+    lam, th = brg["labour_share"], brg["theta"]
+    grind = max(lam ** (1.0 / (1.0 - th)), brg["wage_floor_share"] * lam)
+    assert np.isfinite(negotiated_wage(np.array([grind * 1.02]), Pi, 0.0, **brg)[0])
+    assert np.isnan(negotiated_wage(np.array([grind * 0.98]), Pi, 0.0, **brg)[0])
