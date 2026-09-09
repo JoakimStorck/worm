@@ -387,7 +387,14 @@ class ScenarioBuilder:
         # storleksklass; defaultvärdena är storleksordningar, inte skattningar.
         # eta rör PRISET och inte positionen, så jobben ligger kvar på yrkets
         # centroid och u_R-jämförbarheten består.
-        sim = self.config.get('simulation', {}) if hasattr(self, 'config') else {}
+        # ScenarioBuilder har cfg_reader.config, inte self.config. Det tidigare
+        # 'if hasattr(self, "config") else {}' var alltid falskt, så sim blev
+        # tomt, eta_sd blev 0.0 och VARJE arbetsgivare fick eta = 0. Samma
+        # klass av tyst nolla som except Exception i _geom_lookup: fallbacken
+        # slog till varje gång och ingenting larmade. Beviset låg i data,
+        # variationskoefficienten för w_field inom yrke var 0.000 över
+        # 78 yrken.
+        sim = self.cfg_reader.config.get('simulation', {})
         eta_sd = float(sim.get('employer_wage_sd', 0.0))
         eta_size = float(sim.get('employer_size_premium', 0.0))
         eta_by_employer = {}

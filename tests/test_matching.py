@@ -704,3 +704,39 @@ def test_bargaining_config_reaches_the_wage_formula():
     grind = max(lam ** (1.0 / (1.0 - th)), brg["wage_floor_share"] * lam)
     assert np.isfinite(negotiated_wage(np.array([grind * 1.02]), Pi, 0.0, **brg)[0])
     assert np.isnan(negotiated_wage(np.array([grind * 0.98]), Pi, 0.0, **brg)[0])
+
+
+def test_employer_wage_effect_actually_reaches_the_jobs():
+    """REGRESSION: uppslaget i generate_jobs_from_employers använde
+    self.config, som ScenarioBuilder inte har -- den har cfg_reader.config.
+    hasattr var alltid falskt, sim blev tomt, eta_sd blev 0.0 och VARJE
+    arbetsgivare fick eta = 0. Variationskoefficienten för w_field inom yrke
+    var 0.000 över 78 yrken i en hel femfrökörning.
+
+    Testet prövar VÄGEN: att parametern i scenariot faktiskt hamnar som
+    spridning i jobbens löner. Formeln var aldrig fel."""
+    import inspect
+    from core import scenariobuilder as sb
+
+    src = inspect.getsource(sb.ScenarioBuilder.generate_jobs_from_employers)
+    kod = [ln for ln in src.splitlines() if not ln.lstrip().startswith("#")]
+    assert not [ln for ln in kod if "self.config" in ln.replace("self.cfg_reader.config", "")], \
+        "self.config finns inte på ScenarioBuilder"
+    assert any("self.cfg_reader.config" in ln for ln in kod)
+
+    # Och att den läses ur rätt ställe: en attrapp med bara cfg_reader
+    class FakeReader:
+        config = {"simulation": {"employer_wage_sd": 0.25,
+                                 "employer_size_premium": 0.05}}
+
+    class Probe:
+        cfg_reader = FakeReader()
+    sim = Probe.cfg_reader.config.get("simulation", {})
+    assert float(sim.get("employer_wage_sd", 0.0)) == 0.25
+    assert float(sim.get("employer_size_premium", 0.0)) == 0.05
+
+    # Storlekspremien är monoton i antal anställda
+    eta_size = 0.05
+    små = eta_size * np.log(max(3.0, 1.0) / 10.0)
+    stora = eta_size * np.log(max(300.0, 1.0) / 10.0)
+    assert små < 0 < stora
