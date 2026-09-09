@@ -444,44 +444,62 @@ def retraining_target(ind, jobs_df, cand_idx, arrays=None,
 # ---------------------------------------------------------------------------
 # Förhandlad lön (docs/individmodell.md, avsnitt 5)
 # ---------------------------------------------------------------------------
-def negotiated_wage(p, w_field, w_res, beta=0.5, wage_floor_share=0.0, **_ignored):
-    """Nash-förhandling förankrad i fältet.
+def negotiated_wage(p, w_field, w_res, beta=0.5, wage_floor_share=0.0,
+                    theta=None, labour_share=0.65, **_ignored):
+    """Lönen som avvikelse från normen, inte som delning av ett överskott.
 
-        w / Pi = (1 - beta) * max(w_res, phi*Pi)/Pi + beta * p
+        w = Pi * p**theta,   nedåt begränsad av avtalslönen phi*Pi
+        affär om   p*Pi/lambda >= w
 
-    med affär om och endast om p*Pi >= max(w_res, phi*Pi).
+    THETA är graden av individuell lönesättning. theta = 0 ger alla exakt Pi
+    (solidarisk lönesättning), theta = 1 ger var och en sin produktivitet. Det
+    är den dimension som skiljer svenska avtalsområden åt och är därmed
+    observerbar per bransch, inte en fri parameter. I logaritmer är formeln
+    additiv, log w = log Pi + theta*log p, så spridningen inom yrke blir
+    theta*k*r_j*sigma_log_q -- den VÄXER med kravnivån, vilket kan prövas mot
+    SCB:s percentiler per SSYK utan att någon form antas.
 
-    ANKARET. Prisfältet Pi är den observerade genomsnittslönen i yrket. Sätt
-    referensarbetaren: fullt produktiv, p = 1, med reservationslön lika med
-    yrkets egen lön. Hennes förhandlade lön MÅSTE vara Pi -- annars är Pi inte
-    vad vi säger att det är. Löser man Nash-formeln för det villkoret
-    försvinner både produktionsskalan (labour_share) och vakanskostnaden
-    (kappa), och kvar blir ett viktat medel av vad hon kräver och vad hon är
-    värd. I jämvikt, när reservationslönen är den egna lönen, konvergerar w
-    mot p*Pi: lönen anpassar sig till produktiviteten, och full produktivitet
-    ger fältlönen.
+    VARFÖR DEN GAMLA. w = (1-beta)*max(w_res, phi*Pi) + beta*p*Pi såg ut att ha
+    två frihetsgrader men hade en. Reservationen faller trettio procent vid
+    varje separation, så efter första arbetslöshetsperioden ligger den under
+    golvet för alla, max() väljer alltid phi*Pi, och första termen är
+    KONSTANT 0.5*0.70 = 0.35. Kvar blev w/Pi = 0.35 + 0.5p, och med median
+    p = 0.995 satt medianen låst vid 0.8499 -- 87.5 procent av
+    anställningarna följde den identiteten på tre decimaler. Pi kunde inte
+    vara det Pi utger sig för att vara: ett yrkes observerade lön som hälften
+    ligger över.
 
-    Utan ankaret drev lönerna åt båda hållen: 23 procent av yrkena fick sin
-    median exakt på avtalsgolvet och 37 procent låg ÖVER fältlönen, lager-
-    arbetare på 1.28 gånger, eftersom en global produktionsskala inte kan
-    respektera att Pi är ett genomsnitt.
+    Avtalslönen blir nu ett GOLV och inte halva formeln. Ett golv som bär
+    trettiofem procent av lönen för var och en är inget golv.
 
-    GOLVET är en fallback, inte ett klipp. Avtalslönen phi*Pi är vad arbetaren
-    vet att hon minst kan få, så hennes effektiva reservation är
-    max(w_res, phi*Pi). Utfallet ligger ÖVER golvet och varierar med p, i
-    stället för att en massa hamnar exakt på det. Arbetsgivarens deltagande,
-    p*Pi >= effektiv reservation, är hennes vinstvillkor: kan arbetaren inte
-    producera tarifens värde finns ingen affär. Kompetenströskeln följer av
-    att avtalslön möter produktivitet -- q ** (k*r) >= phi -- och blir
-    strängare ju mer jobbet kräver.
+    LOENEANDELEN. Utan lambda vore arbetsgivarens villkor p*Pi >= Pi*p**theta,
+    alltså p >= 1: ingen under medianen skulle anställas. Pi är lön, inte
+    produktionsvärde; värdet per arbetare är Pi/lambda. Med lambda = 0.65 och
+    theta = 0.5 blir grinden p >= lambda**(1/(1-theta)) = 0.42, mot 0.70 i den
+    gamla modellen. Den föll ut i 0050 därför att ankaret sattes punktvis med
+    fast beta, inte för att den var överflödig.
 
-    p är PRODUKTIVITET, q ** (k * r_req), inte konkurrenskraften q. Se
-    core/occupations/requirement.py. Vektoriserat över jobb; NaN utan affär.
+    Reservationen står inte längre i formeln. Den avgör om hon TACKAR JA
+    (S = w - c*km - w_res i search_once), inte vad hon är värd. Att lönenivån
+    berodde på hur länge hon varit arbetslös var en egenskap ingen bett om.
+
+    beta behålls för bakåtkompatibilitet: utan theta används den gamla
+    formeln, så äldre scenarier ger samma utfall.
+
+    p är PRODUKTIVITET, q ** (k * r_req). Vektoriserat; NaN utan affär.
     """
     p = np.asarray(p, dtype=float); w_field = np.asarray(w_field, dtype=float)
-    value = p * w_field
-    eff = np.maximum(w_res, float(wage_floor_share) * w_field) if wage_floor_share else \
-        np.full_like(value, float(w_res))
-    w = (1.0 - beta) * eff + beta * value
-    return np.where(value >= eff, w, np.nan)
+    if theta is None:
+        value = p * w_field
+        eff = np.maximum(w_res, float(wage_floor_share) * w_field) if wage_floor_share else \
+            np.full_like(value, float(w_res))
+        w = (1.0 - beta) * eff + beta * value
+        return np.where(value >= eff, w, np.nan)
+
+    lam = float(labour_share)
+    w = w_field * np.power(np.maximum(p, 0.0), float(theta))
+    if wage_floor_share:
+        w = np.maximum(w, float(wage_floor_share) * w_field)
+    value = p * w_field / lam                      # produktionsvärde per arbetare
+    return np.where(value >= w, w, np.nan)
 

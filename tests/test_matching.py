@@ -612,3 +612,60 @@ def test_meeting_draw_still_treats_fit_as_a_probability():
                            competitiveness=lambda jx, jy, jro: np.array([1.4]))[0] == 0
                for s in range(50))
     assert hits == 50
+
+
+# ---------------------------------------------------------------------------
+# Theta, löneandel och arbetsgivareffekt (0061)
+# ---------------------------------------------------------------------------
+
+def test_theta_puts_the_median_on_the_field_wage():
+    """REGRESSION: den gamla formeln hade en frihetsgrad, inte två.
+    Reservationen faller under golvet för alla, max() väljer alltid phi*Pi,
+    och första termen är konstant 0.35. Med median p = 0.995 satt medianen
+    låst vid 0.8499 -- 87.5 procent av anställningarna följde
+    w/Pi = 0.35 + 0.5p på tre decimaler."""
+    from core.occupations.utils import negotiated_wage
+
+    Pi = np.array([1.0])
+    gammal = dict(beta=0.5, wage_floor_share=0.70)
+    ny = dict(theta=0.5, labour_share=0.65, wage_floor_share=0.70)
+
+    # Medianarbetaren, p ~ 1, reservation under golvet
+    assert negotiated_wage(np.array([1.0]), Pi, 0.4, **gammal)[0] == pytest.approx(0.85)
+    assert negotiated_wage(np.array([1.0]), Pi, 0.4, **ny)[0] == pytest.approx(1.0)
+
+    # Formen består: p under ett ger under Pi, p över ett ger över
+    assert negotiated_wage(np.array([0.64]), Pi, 0.4, **ny)[0] == pytest.approx(0.8)
+    assert negotiated_wage(np.array([1.44]), Pi, 0.4, **ny)[0] == pytest.approx(1.2)
+
+    # Reservationen står inte längre i formeln: lönen beror inte på hur länge
+    # hon varit arbetslös
+    a = negotiated_wage(np.array([1.1]), Pi, 0.20, **ny)[0]
+    b = negotiated_wage(np.array([1.1]), Pi, 0.65, **ny)[0]
+    assert a == pytest.approx(b)
+
+
+def test_labour_share_lets_below_median_workers_be_hired():
+    """Utan lambda vore villkoret p*Pi >= Pi*p**theta, alltså p >= 1: ingen
+    under medianen skulle anställas."""
+    from core.occupations.utils import negotiated_wage
+
+    Pi = np.array([1.0])
+    ny = dict(theta=0.5, labour_share=0.65, wage_floor_share=0.0)
+    grind = 0.65 ** (1.0 / (1.0 - 0.5))          # = 0.4225
+    assert np.isfinite(negotiated_wage(np.array([grind * 1.05]), Pi, 0.0, **ny)[0])
+    assert np.isnan(negotiated_wage(np.array([grind * 0.95]), Pi, 0.0, **ny)[0])
+    # utan löneandel skulle grinden ligga vid p = 1
+    utan = dict(theta=0.5, labour_share=1.0, wage_floor_share=0.0)
+    assert np.isnan(negotiated_wage(np.array([0.9]), Pi, 0.0, **utan)[0])
+
+
+def test_floor_is_a_floor_not_half_the_formula():
+    from core.occupations.utils import negotiated_wage
+
+    w = negotiated_wage(np.array([0.5]), np.array([1.0]), 0.0,
+                        theta=1.0, labour_share=0.65, wage_floor_share=0.70)
+    assert w[0] == pytest.approx(0.70)          # golvet biter
+    w2 = negotiated_wage(np.array([0.9]), np.array([1.0]), 0.0,
+                         theta=1.0, labour_share=0.65, wage_floor_share=0.70)
+    assert w2[0] == pytest.approx(0.90)         # men bär inte lönen

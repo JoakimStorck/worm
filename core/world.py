@@ -232,6 +232,12 @@ class World:
                 })
                 if geom is not None:
                     row.update(geom)
+                # geom ger yrkets fältlön; arbetsgivareffekten är en egenskap
+                # hos arbetsgivaren och följer med mallen, som är samma
+                # arbetsgivare. Utan detta tappar nypostade jobb eta och
+                # betalar yrkets normallön oavsett var de sitter.
+                if "wage_eta" in row and pd.notna(row.get("wage_eta")):
+                    row["wage"] = float(row["wage"]) * float(np.exp(row["wage_eta"]))
                 rows.append(row); new_ids.append(jid)
         if not rows:
             return 0

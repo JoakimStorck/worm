@@ -1071,3 +1071,32 @@ def test_applicant_counts_are_maintained_incrementally():
     assert w.applicant_counts()[pos] == 3.0
     w.close_application_window(jid)
     assert w.applicant_counts()[pos] == 0.0
+
+
+def test_employer_effect_varies_pay_where_productivity_cannot():
+    """REGRESSION: i jobb med r_j ~ 0 är p = q**0 = 1 för ALLA, så utan en
+    arbetsgivarkanal får hela kvartilen identisk lön -- 34.8 procent av
+    anställningarna där låg på exakt samma punkt. Med theta flyttar atomen
+    bara från 0.85 till 1.00; eta är det enda som varierar där."""
+    from core.occupations.utils import negotiated_wage
+
+    ny = dict(theta=0.5, labour_share=0.65, wage_floor_share=0.70)
+    # Två diskjobb, samma yrke, olika arbetsgivare
+    Pi_o, eta = 0.60, np.array([-0.15, 0.0, 0.20])
+    Pi_j = Pi_o * np.exp(eta)
+    w = negotiated_wage(np.ones(3), Pi_j, 0.0, **ny)
+    assert len(set(np.round(w, 6))) == 3, "identisk lön trots olika arbetsgivare"
+    assert w[2] / w[0] == pytest.approx(np.exp(0.35), rel=1e-6)
+
+
+def test_new_jobs_inherit_the_employer_wage_effect():
+    """eta är en egenskap hos arbetsgivaren och följer med mallen. Utan det
+    tappar nypostade jobb sin arbetsgivareffekt och betalar yrkets
+    normallön oavsett var de sitter."""
+    w = _world_with_geometry()
+    w.jobs["wage_eta"] = 0.25
+    w.jobs["active"] = False
+    assert w.post_vacancies_batch(30.0) == 4
+    new = w.jobs[w.jobs["job_id"].str.startswith("N")]
+    assert (new["wage_eta"] == 0.25).all()
+    assert new["wage"].iloc[0] == pytest.approx(0.49 * np.exp(0.25))

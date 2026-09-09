@@ -371,6 +371,33 @@ class ScenarioBuilder:
         # Dubbletter fick update_after_matching att falla med InvalidIndexError.
         if not hasattr(self, "_job_seq"):
             self._job_seq = 0
+
+        # ARBETSGIVAREFFEKTEN. Pi_j = Pi_o * exp(eta_j). Utan den betalar varje
+        # arbetsgivare i ett yrke exakt samma lön, och i jobb med r_j ~ 0 är
+        # p = q**0 = 1 för ALLA, så hela den kvartilen får identisk lön: 34.8
+        # procent av anställningarna där låg på exakt samma punkt. Det är den
+        # enda kanal som varierar där exponenten släcker allt annat, och utan
+        # den flyttar theta bara atomen från 0.85 till 1.00.
+        #
+        # AKM-dekompositioner hittar konsekvent en arbetsgivarkomponent kring
+        # 10-20 procent av variansen i log lön. Formen har två delar med var
+        # sitt empiriskt stöd: en storlekspremie, som finns i data vi redan har
+        # (employer_size), och en residual per arbetsgivare. Båda ska
+        # kalibreras mot SCB:s lönestrukturstatistik per näringsgren och
+        # storleksklass; defaultvärdena är storleksordningar, inte skattningar.
+        # eta rör PRISET och inte positionen, så jobben ligger kvar på yrkets
+        # centroid och u_R-jämförbarheten består.
+        sim = self.config.get('simulation', {}) if hasattr(self, 'config') else {}
+        eta_sd = float(sim.get('employer_wage_sd', 0.0))
+        eta_size = float(sim.get('employer_size_premium', 0.0))
+        eta_by_employer = {}
+        for idx, row in employers_df.iterrows():
+            eid = row.get('employer_id', idx)
+            e = eta_size * np.log(max(float(row['size']), 1.0) / 10.0)
+            if eta_sd > 0:
+                e += float(np.random.normal(0.0, eta_sd))
+            eta_by_employer[eid] = e
+
         for idx, row in employers_df.iterrows():
             geom = row['geometry']
             x, y = geom.x, geom.y
@@ -389,6 +416,8 @@ class ScenarioBuilder:
                     onet_code = np.random.choice(onet_codes, p=np.array(freqs)/np.sum(freqs))
 
                 x_occ, y_occ, r_o, chi, xi, geom_source, wage, r_req = self.get_geom_for_onet_code(onet_code)
+                eta = float(eta_by_employer.get(row.get('employer_id', idx), 0.0))
+                wage = wage * np.exp(eta)
 
                 jobs.append({
                     "job_id": f"J{self._job_seq:07d}",
@@ -410,6 +439,7 @@ class ScenarioBuilder:
                     "r_o": r_o,
                     "geom_source": geom_source,
                     "wage": wage,
+                    "wage_eta": eta,
                     "r_req": r_req,
                 })
                 self._job_seq += 1

@@ -74,9 +74,21 @@ simulation:
   # fallback (avtalslönen), inte ett klipp: utfallet ligger över det och
   # varierar med p. Arbetsgivaren deltar om p >= phi, vilket ger
   # kompetenströskeln q ** (k*r) >= phi, strängare ju mer jobbet kräver.
+  # Arbetsgivareffekt i lönen, Pi_j = Pi_o * exp(eta_j). Storleksordningar att
+  # kalibrera mot SCB:s lönestrukturstatistik per näringsgren och storleks-
+  # klass, inte skattningar. AKM-dekompositioner ger arbetsgivarkomponenten
+  # 10-20 procent av variansen i log lön.
+  employer_wage_sd: 0.10        # residual per arbetsgivare, sd i log lön
+  employer_size_premium: 0.02   # per log-enhet storlek relativt tio anställda
+
   bargaining:
     enabled: true
-    beta: 0.5             # arbetarens förhandlingsstyrka
+    beta: 0.5                 # används bara om theta saknas (gamla formeln)
+    # theta: graden av individuell lönesättning. 0 = alla får Pi, 1 = var och
+    # en sin produktivitet. Sätts theta används w = Pi * p**theta med golvet
+    # som undre gräns; utan den körs den gamla Nash-formeln oförändrat.
+    theta: 0.5
+    labour_share: 0.65        # Pi är lön, produktionsvärdet är Pi/lambda             # arbetarens förhandlingsstyrka
     wage_floor_share: 0.70  # avtalslön som andel av yrkets fältlön
 
   # --- Omskolning: riktad mot där arbete finns, inte ett fast delta_xi ---
