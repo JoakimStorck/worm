@@ -592,11 +592,14 @@ class World:
         """
         if not hasattr(self, "applications"):
             self.applications = {}
+        self.applicant_counts()      # materialisera FÖRE mutationen, annars
+                                     # räknas den nya raden två gånger
         first = job_id not in self.applications
         kö = self.applications.setdefault(job_id, [])
         if any(a["idx"] == idx for a in kö):
             return False                      # redan sökt, ingen dubblett
         kö.append(dict(idx=idx, t=float(t_now), **bud))
+        self._bump_applicant_count(job_id, 1.0)
         if first:
             days = float(self.cfg_reader.config.get("simulation", {})
                          .get("application_window_days", 40.0))
@@ -606,28 +609,39 @@ class World:
         return True
 
     def applicant_counts(self):
-        """Antal liggande ansökningar per jobbposition, som numpy-array.
+        """Antal liggande ansökningar per jobbposition, underhållen array.
 
-        Byggs ur ansökningslistorna, alltså O(antal öppna annonser) och inte
-        O(jobb). Behövs i sökningen: utan kön i överskottet väljer logiten på
-        annonserad lön och 806 sökande kan hamna på samma jobb medan nio tusen
-        positioner aldrig ses av någon.
+        Behövs vid VARJE sökning, så den byggs inte om per anrop: en array
+        över femtontusen jobb allokerad hundratusentals gånger är ren
+        allokeringsvärme. Samma mönster som vacant_mask -- byggs om när
+        tabellen ändrar längd, uppdateras punktvis av file_application och
+        close_application_window.
         """
-        n = np.zeros(len(self.jobs), dtype=float)
-        apps = getattr(self, "applications", None)
-        if not apps:
-            return n
-        pos_of = self.job_index()
-        for jid, kö in apps.items():
-            pos = pos_of.get(jid)
-            if pos is not None and pos < n.size:
-                n[pos] = len(kö)
-        return n
+        n = len(self.jobs)
+        if getattr(self, "_ac_n", None) != n:
+            self._ac = np.zeros(n, dtype=float)
+            self._ac_n = n
+            pos_of = self.job_index()
+            for jid, kö in getattr(self, "applications", {}).items():
+                pos = pos_of.get(jid)
+                if pos is not None and pos < n:
+                    self._ac[pos] = len(kö)
+        return self._ac
+
+    def _bump_applicant_count(self, job_id, delta):
+        ac = self.applicant_counts()
+        pos = self.job_index().get(job_id)
+        if pos is not None and pos < ac.size:
+            ac[pos] = max(0.0, ac[pos] + delta)
 
     def close_application_window(self, job_id):
         if not hasattr(self, "applications"):
             self.applications = {}
-        return self.applications.pop(job_id, [])
+        self.applicant_counts()      # samma skäl som i file_application
+        kö = self.applications.pop(job_id, [])
+        if kö:
+            self._bump_applicant_count(job_id, -float(len(kö)))
+        return kö
 
     def n_open_applications(self):
         return sum(len(v) for v in getattr(self, "applications", {}).values())

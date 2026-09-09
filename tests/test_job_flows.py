@@ -867,10 +867,10 @@ def test_employer_picks_the_most_qualified_applicant():
     assert pushed[0]["agent_id"] == 1
     assert pushed[0]["params"]["q_hire"] == pytest.approx(0.92)
     assert pushed[0]["params"]["n_applicants"] == 3
-    # Förlorarna åter i sökandet, ingen av dem anställd
-    again = sorted(e["agent_id"] for e in w._pushed
-                   if e["event_type"] == "start_job_search")
-    assert again == [0, 2]
+    # Förlorarna får INGEN ny sökkedja: den de fick vid ansökan lever redan.
+    # Två kedjor per ansökan gav 2**5 sökhändelser per person och stannade
+    # körningen.
+    assert [e for e in w._pushed if e["event_type"] == "start_job_search"] == []
     assert jid not in w.applications
 
 
@@ -1034,3 +1034,40 @@ def test_notice_period_applies_only_to_someone_leaving_a_job():
     assert start_delay_days(w, 0) == pytest.approx(10.0)
     w.individuals.at[0, "status"] = "employed"
     assert start_delay_days(w, 0) == pytest.approx(40.0)
+
+
+def test_rejection_does_not_start_a_second_search_chain():
+    """REGRESSION: 0058 schemalade en sökning vid ANSÖKAN, och
+    handle_close_vacancy schemalade en till vid AVSLAG. Varje ansökan gav
+    därmed två levande sökkedjor; med fem ansökningar före en anställning
+    2**5 sökhändelser per person, och körningen stannade av."""
+    from core.event_handlers import handle_close_vacancy
+
+    w, jid = _world_with_applicants([0.2, 0.9, 0.5])
+    for i in range(3):
+        w.individuals.at[i, "w_res"] = 1.0
+    w._pushed.clear()
+    handle_close_vacancy({"time": 40.0, "agent_id": 0, "event_type": "close_vacancy",
+                          "params": {"job_id": jid}}, w)
+
+    assert [e for e in w._pushed if e["event_type"] == "start_job_search"] == []
+    assert len([e for e in w._pushed if e["event_type"] == "start_job"]) == 1
+    # men reservationen ska ha fallit för förlorarna, inte för vinnaren
+    decay = w.cfg_reader.config["simulation"].get("reservation_decay_per_search", 1.0)
+    if decay < 1.0:
+        assert w.individuals.at[0, "w_res"] < 1.0
+        assert w.individuals.at[2, "w_res"] < 1.0
+        assert w.individuals.at[1, "w_res"] == 1.0
+
+
+def test_applicant_counts_are_maintained_incrementally():
+    """En array över femtontusen jobb byggd om vid varje sökning är ren
+    allokeringsvärme; den underhålls punktvis som vacant_mask."""
+    w, jid = _world_with_applicants([0.4, 0.6])
+    pos = w.job_index()[jid]
+    assert w.applicant_counts()[pos] == 2.0
+    assert w.applicant_counts() is w.applicant_counts()      # samma array
+    w.file_application(jid, 5, 1.0, q=0.3, w_neg=0.8, surplus=0.1, commute_km=1.0)
+    assert w.applicant_counts()[pos] == 3.0
+    w.close_application_window(jid)
+    assert w.applicant_counts()[pos] == 0.0

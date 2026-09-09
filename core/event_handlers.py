@@ -403,9 +403,26 @@ def handle_start_job_search(event, world):
         })
 
 
+def _decay_reservation(world, idx):
+    """Ett avslag ÄR en misslyckad sökning ur hennes synvinkel."""
+    sim = world.cfg_reader.config.get('simulation', {})
+    decay = float(sim.get('reservation_decay_per_search', 1.0))
+    floor = float(sim.get('reservation_floor', 0.0))
+    if 'w_res' in world.individuals.columns and decay < 1.0:
+        w_res = float(world.individuals.at[idx, 'w_res'])
+        world.individuals.at[idx, 'w_res'] = max(w_res * decay, floor)
+
+
 def _reschedule_search(world, idx, t_now, decay_reservation=True):
-    """Tillbaka i sökandet, med samma reservationsavtagande som en misslyckad
-    sökning: ett avslag ÄR en misslyckad sökning ur hennes synvinkel."""
+    """Tillbaka i sökandet.
+
+    ANVÄNDS BARA när hon inte redan har en levande sökkedja. Sedan
+    parallella ansökningar infördes får hon en ny sökning direkt vid ANSÖKAN,
+    så ett avslag ska inte ge en till: annars får varje ansökan två kedjor i
+    stället för en, och med fem ansökningar före en anställning blir det
+    2**5 sökhändelser per person. Kön växer exponentiellt och körningen
+    stannar av.
+    """
     sim = world.cfg_reader.config.get('simulation', {})
     if decay_reservation:
         decay = float(sim.get('reservation_decay_per_search', 1.0))
@@ -495,7 +512,7 @@ def handle_close_vacancy(event, world):
             'event_detail': 'vacancy_closed_unfilled', 'job_id': job_id,
             'n_applicants': len(apps), 'n_eligible': len(lediga)})
         for a in lediga:
-            _reschedule_search(world, a['idx'], t_now)
+            _decay_reservation(world, a['idx'])   # kedjan lever redan
         return
 
     win = max(lediga, key=lambda a: a['q'])
@@ -526,7 +543,7 @@ def handle_close_vacancy(event, world):
 
     for a in lediga:
         if a['idx'] != idx:
-            _reschedule_search(world, a['idx'], t_now)
+            _decay_reservation(world, a['idx'])   # kedjan lever redan
 
 
 def handle_start_education(event, world):
