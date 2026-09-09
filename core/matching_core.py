@@ -165,19 +165,34 @@ def bootstrap_matching(world, t_now=0.0, log=print):
         return {}
     rng = np.random.default_rng(sim.get('seed_bootstrap', 20260909))
 
-    lediga = list(ind.index[ind['status'] == 'unemployed'])
-    rng.shuffle(lediga)
-    kö = list(lediga)
-    n_start = len(kö)
-
+    n_start = int((ind['status'] == 'unemployed').sum())
     totalt, omgångar, per_omgång = 0, 0, []
     par = []
-    while kö and omgångar < max_omg:
+    tomma = 0
+
+    while omgångar < max_omg:
+        # KÖN BYGGS OM VARJE OMGÅNG ur dem som fortfarande är arbetslösa. Ett
+        # första försök delade upp en fast kö en gång och lade aldrig tillbaka
+        # den som inte fick jobb: med 11 502 arbetslösa och 10 754 lediga jobb
+        # rymdes hela kön i första omgången (2.4 x 10 754 = 25 800), loopen
+        # avslutades efter EN omgång, och 4 500 stod kvar arbetslösa bredvid
+        # 3 800 lediga positioner -- 60.6 procent matchade mot en jämvikt
+        # kring 86. Hela femårskörningen blev då en transient: anställningarna
+        # fördubblades till 21 200 och n_cps_sample till 17 700, alltså var
+        # halva valideringsunderlaget uppstartsdynamik.
+        #
+        # I körningen får den som misslyckas en ny sökning var 28:e dag. Här
+        # får hon en ny omgång. Det är samma sak.
+        kö = list(ind.index[ind['status'] == 'unemployed'])
+        if not kö:
+            break
         n_vak = int(world.vacant_mask().sum())
         if n_vak == 0:
             break
+        rng.shuffle(kö)
         n = max(1, min(len(kö), int(round(per_vak * n_vak))))
-        omgång, kö = kö[:n], kö[n:]
+        omgång = kö[:n]
+
         for i in omgång:
             apply_once(world, i, t_now)
         före = dict(zip(ind.index, ind['job_id']))
@@ -194,10 +209,13 @@ def bootstrap_matching(world, t_now=0.0, log=print):
         omgångar += 1
         totalt += fyllda
         per_omgång.append(fyllda)
-        if fyllda == 0 and not kö:
+
+        # Avslutas när marknaden är uttömd, inte när kön är slut: två tomma
+        # omgångar i rad betyder att de kvarvarande arbetslösa och de
+        # kvarvarande positionerna inte kan matchas under gällande villkor.
+        tomma = tomma + 1 if fyllda == 0 else 0
+        if tomma >= 2:
             break
-        if fyllda == 0 and omgångar > 2 and sum(per_omgång[-3:]) == 0:
-            break                      # inget rör sig längre
 
     import pandas as pd
     st = {"matchings": pd.DataFrame(par, columns=["individual_id", "job_id",

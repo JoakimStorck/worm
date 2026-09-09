@@ -1223,3 +1223,54 @@ def test_wage_columns_belong_to_the_individual_schema():
                if not ln.lstrip().startswith("#")]
         assert not [ln for ln in kod if "'w_neg' in" in ln or '"w_neg" in' in ln], \
             f"tyst vakt kvar i {fn.__name__}"
+
+
+def test_bootstrap_rebuilds_the_queue_every_round():
+    """REGRESSION: kön delades upp EN gång och den som inte fick jobb lades
+    aldrig tillbaka. Med 11 502 arbetslösa och 10 754 lediga jobb rymdes hela
+    kön i första omgången (2.4 x 10 754), loopen avslutades efter en omgång,
+    och 4 500 stod kvar arbetslösa bredvid 3 800 lediga positioner: 60.6
+    procent matchade mot en jämvikt kring 86.
+
+    Följden var att hela femårskörningen blev en transient -- anställningarna
+    fördubblades till 21 200 och n_cps_sample till 17 700, alltså var halva
+    valideringsunderlaget uppstartsdynamik och inte mobilitet.
+
+    I körningen får den som misslyckas en ny sökning var 28:e dag. I
+    uppstarten får hon en ny omgång."""
+    from core.matching_core import bootstrap_matching
+
+    rng = np.random.default_rng(1)
+    w = make_world(n_employers=60, size=8,
+                   simulation={"application_window_days": 40})
+    n = 300
+    th = rng.uniform(0, 2 * np.pi, n)
+    rr = np.sqrt(rng.uniform(0, 1, n)) * 0.9
+    w.individuals = pd.DataFrame({
+        "individual_id": np.arange(n, dtype=float),
+        "status": ["unemployed"] * n,
+        "job_id": pd.Series([None] * n, dtype="object"),
+        "w_res": 0.55, "x_occ": rr * np.cos(th), "y_occ": rr * np.sin(th),
+        "r_i": 0.0, "x": 0.0, "y": 0.0,
+        "propensity_start_education": 0.1,
+        "propensity_internal_training": 0.1, "propensity_quit_job": 0.1,
+        "propensity_career_break": 0.05,
+        "propensity_internal_job_change": 0.1}, index=range(n))
+    m = len(w.jobs)
+    th2 = rng.uniform(0, 2 * np.pi, m)
+    r2 = np.sqrt(rng.uniform(0, 1, m)) * 0.9
+    w.jobs["x_occ"] = r2 * np.cos(th2)
+    w.jobs["y_occ"] = r2 * np.sin(th2)
+    w.jobs["r_o"] = 0.15
+    w.jobs["r_req"] = 0.0
+    w.jobs["wage"] = 1.0
+
+    st = bootstrap_matching(w, 0.0, log=None)
+
+    assert st["bootstrap_rounds"] >= 2, "kön byggdes inte om"
+    assert len(st["bootstrap_per_round"]) == st["bootstrap_rounds"]
+    # Marknaden ska vara uttömd: inte både arbetslösa OCH lediga kvar
+    kvar_arbetslösa = int((w.individuals["status"] == "unemployed").sum())
+    kvar_lediga = int(w.vacant_mask().sum())
+    assert kvar_arbetslösa == 0 or kvar_lediga == 0, (
+        f"{kvar_arbetslösa} arbetslösa bredvid {kvar_lediga} lediga positioner")
