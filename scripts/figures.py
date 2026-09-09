@@ -360,74 +360,139 @@ def fig_tenure(out):
 
 # ---------------------------------------------------------------------------
 def fig_wages(run_dirs, out):
-    """Lönespridning: fältet ger yrkets nivå, individen förhandlar sin avvikelse."""
+    """Lönen som avvikelse från yrkets norm, och arbetsgivarens andel av den.
+
+    MOT YRKET, INTE MOT JOBBET. Figuren räknade tidigare sin egen kvot,
+    w_neg / w_field, medan w_field är JOBBETS lön Pi_j = Pi_o * exp(eta_j).
+    Med w = Pi_j * p**theta står eta i både täljare och nämnare och försvinner
+    IDENTISKT: figuren visade p**theta och inte lönekvoten, med en spik vid
+    exakt 1.00 i alla jobb där r_j ~ 0 och p per definition är ett. 0064
+    rättade måttet i eventlog men figuren räknade vidare på egen hand.
+
+    Nu läses wage_ratio ur transitions, som alla andra skript gör. Egna
+    parsers och egna härledningar av samma storhet är hur de två kunde glida
+    isär utan att något larmade.
+    """
     from core.analysis.eventlog import pooled_transitions
 
     tr = pooled_transitions(run_dirs, cps_only=False)
-    df = pd.DataFrame()
-    if not tr.empty and {"w_field", "w_neg"} <= set(tr.columns):
-        df = tr[["w_field", "w_neg", "to_onet"]].dropna(
-            subset=["w_field", "w_neg"]).rename(columns={"to_onet": "onet"})
+    if tr.empty or "w_neg" not in tr.columns:
+        print("wages: inga löner i tabellerna"); return
+    kol = [c for c in ("w_neg", "w_occ", "w_field", "wage_ratio",
+                       "employer_premium", "r_req", "to_onet") if c in tr.columns]
+    df = tr[kol].dropna(subset=["w_neg"]).rename(columns={"to_onet": "onet"}).copy()
+    if "wage_ratio" not in df.columns:
+        print("wages: transitions saknar wage_ratio (kräver patch 0064)"); return
+    df = df[df["wage_ratio"] > 0]
     if df.empty:
-        print("wages: inga w_field/w_neg i loggen (kräver körning efter förhandlingen)")
-        return
-    df = df.copy()
-    df["ratio"] = df["w_neg"] / df["w_field"].replace(0, np.nan)
+        print("wages: inga giltiga lönekvoter"); return
 
+    har_eta = "employer_premium" in df.columns and df["employer_premium"].notna().any()
     fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.0), dpi=ps.DPI)
 
+    # 1. Fördelningen mot en lognormal med samma my och sigma. Formen är en
+    #    FÖRUTSÄGELSE: q är en summa av produkter, alltså approximativt
+    #    lognormal, och p = q**(k*r) bevarar det. Den ska kunna slås ut.
     ax = ps.cartesian_axes(axes[0])
-    ax.scatter(df["w_field"], df["w_neg"], s=5, alpha=0.25, color="#1f77b4",
-               edgecolors="none")
-    lim = [0, max(df["w_field"].max(), df["w_neg"].max()) * 1.05]
-    ax.plot(lim, lim, ls="--", lw=1.0, color="#7f7f7f")
-    ax.text(lim[1] * 0.62, lim[1] * 0.97, "full fältlön", fontsize=8, color="#555555")
-    ax.set_xlim(lim); ax.set_ylim(lim)
-    ax.set_xlabel("Fältlön $\\Pi$ (löneandelar)", fontsize=9)
-    ax.set_ylabel("Förhandlad lön $w$", fontsize=9)
-    ps.title(ax, "Fältet ger nivån, individen förhandlar", pad=10)
+    r = df["wage_ratio"].to_numpy()
+    lo, hi = np.quantile(r, [0.002, 0.998])
+    bins = np.linspace(lo, hi, 46)
+    ax.hist(r, bins=bins, color="#1f77b4", alpha=0.75, lw=0)
+    lg = np.log(r); mu, sd = float(lg.mean()), float(lg.std())
+    xs = 0.5 * (bins[:-1] + bins[1:])
+    dens = np.exp(-(np.log(xs) - mu) ** 2 / (2 * sd * sd)) / (xs * sd * np.sqrt(2 * np.pi))
+    ax.plot(xs, dens * r.size * (bins[1] - bins[0]), ls="--", lw=1.6, color="#d62728",
+            label=f"lognormal, $\\sigma$={sd:.3f}")
+    ax.axvline(1.0, ls=":", lw=1.0, color="#7f7f7f")
+    ax.set_xlabel("Förhandlad lön / yrkets fältlön $\\Pi_o$", fontsize=9)
+    ax.set_ylabel("Antal", fontsize=9)
+    ax.legend(fontsize=7.5, framealpha=0.9)
+    ps.title(ax, f"Avvikelse från yrkets norm (median {np.median(r):.2f})", pad=10)
 
+    # 2. Spridningen växer med kravnivån, men de två källorna adderas i
+    #    KVADRATUR och inte linjärt:
+    #
+    #        sigma**2(r) = sigma_eta**2 + (theta*k*sigma_log_q)**2 * r**2
+    #
+    #    Arbetsgivareffekten är oberoende av kravnivån, produktivitetsdelen
+    #    skalar med r. En rät linje i sigma mot r underskattar därför
+    #    interceptet och överskattar lutningen så snart eta finns. Plottad i
+    #    sigma**2 mot r**2 är sambandet linjärt, och båda parametrarna faller
+    #    ut direkt: sqrt(intercept) = sigma_eta, sqrt(lutning) = theta*k*sigma_q.
+    #    Det är den regressionen som ska köras mot SCB:s percentiler per SSYK,
+    #    med r_j ur kapabilitetsfältet -- den validerar lönemodellen och
+    #    fältet samtidigt.
     ax = ps.cartesian_axes(axes[1])
-    ax.hist(df["ratio"].dropna(), bins=40, color="#1f77b4", alpha=0.8)
-    ax.axvline(1.0, ls="--", lw=1.0, color="#7f7f7f")
-    ax.axvline(float(df["ratio"].median()), ls="-", lw=1.4, color="#d62728")
-    ax.set_xlabel("Förhandlad lön / fältlön", fontsize=9); ax.set_ylabel("Antal", fontsize=9)
-    ps.title(ax, f"Andel av fältlönen (median {df['ratio'].median():.2f})", pad=10)
+    rows = []
+    if "r_req" in df.columns and df["r_req"].notna().any():
+        qq = pd.qcut(df["r_req"], 4, duplicates="drop")
+        g = df.groupby(qq, observed=True)
+        mids = [float((iv.left + iv.right) / 2) for iv in g.groups]
+        sds = [float(np.std(np.log(v))) for v in g["wage_ratio"].apply(lambda s: s.to_numpy())]
+        x2 = np.array(mids) ** 2
+        y2 = np.array(sds) ** 2
+        ax.plot(x2, y2, "o-", lw=1.8, color="#1f77b4", label="modell")
+        if len(mids) >= 2:
+            b, a = np.polyfit(x2, y2, 1)
+            xr = np.array([0.0, float(x2.max()) * 1.05])
+            ax.plot(xr, a + b * xr, ls="--", lw=1.2, color="#d62728",
+                    label=(f"$\\sigma_\\eta$={np.sqrt(max(a, 0)):.3f}, "
+                           f"$\\theta k\\sigma_q$={np.sqrt(max(b, 0)):.3f}"))
+            ax.plot([0.0], [max(a, 0)], marker="D", ms=5, color="#d62728")
+        ax.set_xlim(left=0.0)
+        ax.legend(fontsize=7.5, framealpha=0.9)
+        rows = [{"r_req_mid": m, "sd_log_wage_ratio": s,
+                 "r_req_mid_sq": m ** 2, "var_log_wage_ratio": s ** 2}
+                for m, s in zip(mids, sds)]
+    ax.set_xlabel("$r_j^2$ (kvartilmitt i kvadrat)", fontsize=9)
+    ax.set_ylabel("var(log $w/\\Pi_o$)", fontsize=9)
+    ps.title(ax, "Spridning mot kravnivå (kvadratur)", pad=10)
 
-    # Spridning inom yrke: de tio vanligaste
+    # 3. Arbetsgivarkomponenten, exp(eta), som föll bort ur den gamla kvoten.
     ax = ps.cartesian_axes(axes[2])
-    top = df["onet"].value_counts().head(10).index.tolist()
-    data = [df.loc[df["onet"] == o, "w_neg"].to_numpy() for o in top]
-    if data and max(len(d) for d in data) > 3:
-        bp = ax.boxplot(data, widths=0.6, patch_artist=True,
-                        flierprops=dict(marker=".", markersize=2, alpha=0.4))
-        for b in bp["boxes"]:
-            b.set(facecolor="#1f77b4", alpha=0.55, linewidth=0.8)
-        for o, i in zip(top, range(1, len(top) + 1)):
-            pi = df.loc[df["onet"] == o, "w_field"].median()
-            ax.plot([i], [pi], marker="D", ms=4, color="#d62728", zorder=4)
-        ax.set_xticks(range(1, len(top) + 1))
-        ax.set_xticklabels([o[:7] for o in top], rotation=60, fontsize=6.5)
-        ax.set_ylabel("Förhandlad lön", fontsize=9)
-        ax.legend(handles=[Line2D([], [], marker="D", ls="", ms=5, color="#d62728",
-                                  label="fältlön $\\Pi$")], fontsize=7.5, framealpha=0.9)
-    ps.title(ax, "Spridning inom yrke", pad=10)
+    if har_eta:
+        ep = df["employer_premium"].dropna().to_numpy()
+        ep = ep[ep > 0]
+        ax.hist(ep, bins=40, color="#2ca02c", alpha=0.75, lw=0)
+        ax.axvline(1.0, ls=":", lw=1.0, color="#7f7f7f")
+        andel = float(np.var(np.log(ep)) / max(np.var(np.log(df["w_neg"].to_numpy())), 1e-12))
+        ax.set_xlabel("$\\Pi_j / \\Pi_o = e^{\\eta_j}$", fontsize=9)
+        ax.set_ylabel("Antal", fontsize=9)
+        ps.title(ax, f"Arbetsgivareffekt ({100*andel:.0f} % av variansen)", pad=10)
+    else:
+        ax.text(0.5, 0.5, "employer_premium saknas\n(kräver patch 0064)",
+                ha="center", va="center", fontsize=9, color="#777777")
+        ps.title(ax, "Arbetsgivareffekt", pad=10)
 
-    ps.footnote(fig, "Nash-förhandling: $w = w_{res} + \\beta(q\\Pi - w_{res} - \\kappa\\Pi)$. "
-                     "Samma position betalar olika beroende på arbetarens konkurrenskraft och "
-                     "hennes alternativ, vilket ger lönespridning inom yrke som fältet ensamt "
-                     "inte kan ge.", y=-0.10)
-    per_occ = (df.groupby("onet")
-                 .agg(n=("w_neg", "size"), w_field=("w_field", "median"),
-                      w_neg_median=("w_neg", "median"),
-                      w_neg_q25=("w_neg", lambda x: x.quantile(0.25)),
-                      w_neg_q75=("w_neg", lambda x: x.quantile(0.75)))
-                 .reset_index().sort_values("n", ascending=False))
-    figio.write(fig, "wage_dispersion", out,
-                data={"per_occupation": per_occ,
-                      "ratio": df[["w_field", "w_neg", "ratio"]]},
-                run_dirs=run_dirs, save=ps.save,
-                note="Fältlön mot förhandlad lön; spridning inom yrke.")
+    ps.footnote(fig, "Lönen är en avvikelse från yrkets norm, "
+                     "$w = \\Pi_j\\,p^{\\theta}$ med $\\Pi_j = \\Pi_o e^{\\eta_j}$ och golvet "
+                     "$\\varphi\\Pi$ som undre gräns. $\\theta$ är graden av individuell "
+                     "lönesättning. Kvoten mäts mot YRKETS fältlön: mot jobbets "
+                     "försvinner arbetsgivareffekten identiskt, eftersom den står i "
+                     "både täljare och nämnare.", y=-0.10)
+
+    agg = {"n": ("w_neg", "size"), "w_neg_median": ("w_neg", "median"),
+           "w_neg_q10": ("w_neg", lambda x: x.quantile(0.10)),
+           "w_neg_q25": ("w_neg", lambda x: x.quantile(0.25)),
+           "w_neg_q75": ("w_neg", lambda x: x.quantile(0.75)),
+           "w_neg_q90": ("w_neg", lambda x: x.quantile(0.90)),
+           "ratio_median": ("wage_ratio", "median"),
+           "sd_log_ratio": ("wage_ratio", lambda x: float(np.std(np.log(x[x > 0]))))}
+    if "w_occ" in df.columns:
+        agg["w_occ"] = ("w_occ", "median")
+    if "w_field" in df.columns:
+        agg["w_field"] = ("w_field", "median")
+    per_occ = (df.groupby("onet").agg(**agg).reset_index()
+                 .sort_values("n", ascending=False))
+    data = {"per_occupation": per_occ,
+            "ratio": df[[c for c in ("w_occ", "w_field", "w_neg", "wage_ratio",
+                                     "employer_premium", "r_req") if c in df.columns]]}
+    if rows:
+        data["sd_by_r_req"] = pd.DataFrame(rows)
+    figio.write(fig, "wage_dispersion", out, data=data, run_dirs=run_dirs,
+                save=ps.save,
+                note="Lön mot yrkets fältlön; spridning mot kravnivå; "
+                     "arbetsgivareffekt.")
 
 
 # ---------------------------------------------------------------------------

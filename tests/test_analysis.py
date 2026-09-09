@@ -260,3 +260,36 @@ def test_wage_stock_is_measured_annually_not_per_event():
         individuals = pd.DataFrame({"status": ["employed"] * 3,
                                     "w_neg": [1.0, 1.1, 0.9]})
     assert _wage_stock_stats(Tiny()) == {}
+
+
+def test_wage_figure_reads_the_shared_ratio_and_fits_in_quadrature():
+    """REGRESSION: fig_wages räknade sin EGEN kvot w_neg/w_field, medan
+    w_field är jobbets lön Pi_j = Pi_o*exp(eta). Med w = Pi_j*p**theta
+    försvinner eta identiskt ur den kvoten, så figuren visade p**theta och
+    inte lönekvoten -- med en spik vid exakt 1.00 i alla jobb där r_j ~ 0.
+    0064 rättade måttet i eventlog men figuren räknade vidare på egen hand.
+
+    Och de två spridningskällorna adderas i KVADRATUR:
+    sigma**2 = sigma_eta**2 + (theta*k*sigma_q)**2 * r**2. En rät linje i
+    sigma mot r underskattar interceptet och överskattar lutningen."""
+    import inspect
+    import numpy as np
+    from scripts import figures as F
+
+    src = inspect.getsource(F.fig_wages)
+    kod = [ln for ln in src.splitlines() if not ln.lstrip().startswith("#")]
+    assert not [ln for ln in kod if 'w_neg"] / ' in ln or "w_neg'] / " in ln], \
+        "figuren härleder kvoten själv igen"
+    assert any('"wage_ratio"' in ln for ln in kod), "ska läsa wage_ratio ur tabellen"
+
+    # Kvadraturskattningen återger kända parametrar
+    sig_eta, slope = 0.10, 0.30
+    r = np.array([0.1, 0.35, 0.6, 0.9])
+    sd = np.sqrt(sig_eta ** 2 + (slope * r) ** 2)
+    b, a = np.polyfit(r ** 2, sd ** 2, 1)
+    assert np.sqrt(a) == pytest.approx(sig_eta, abs=1e-6)
+    assert np.sqrt(b) == pytest.approx(slope, abs=1e-6)
+    # en rät linje i sigma mot r missar båda parametrarna påtagligt
+    b_lin, a_lin = np.polyfit(r, sd, 1)
+    assert abs(a_lin - sig_eta) > 0.02, "linjär anpassning råkar träffa interceptet"
+    assert abs(b_lin - slope) > 0.02, "linjär anpassning råkar träffa lutningen"
