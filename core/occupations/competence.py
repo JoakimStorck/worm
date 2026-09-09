@@ -122,7 +122,28 @@ class Circles:
     # ---- konkurrenskraft --------------------------------------------------------
     def competitiveness(self, i: int, jx, jy, jro, p: CompetenceParams):
         """q för individ i mot jobb med centra (jx, jy) och radier jro.
-        Vektoriserat över jobben; summa över individens cirklar."""
+        Vektoriserat över jobben; summa över individens cirklar.
+
+        OKAPAT. min(1, .) satt här tidigare, och det gjorde q = 1 till ett
+        MAXIMUM i stället för en normering av den mogna arbetaren i eget
+        yrke. Följden var en atom: 41 procent av alla anställningar låg på
+        exakt w/Pi = 0.85, eftersom p = q**(k*r) blev exakt 1 för var och en
+        som slog i taket, och Pi var ett supremum ingen kunde passera --
+        0.00 procent låg över fältlönen, mot hälften om Pi är yrkets median.
+        Varje förbättring av matchningen gjorde det VÄRRE, eftersom högre q
+        betyder fler i taket: efter urvalet (0055) steg atomen från 24 till
+        44 procent.
+
+        Summan är en summa av produkter, alltså approximativt lognormal, och
+        den som har flera cirklar som alla överlappar jobbet är värd MER än
+        den med en enda perfekt. Bredd betalar sig, vilket är ett påstående om
+        världen som följer ur geometrin i stället för att klistras på. q = 1
+        är fortfarande normeringen (m_ref, skärpefaktorn), men som medianen
+        bland mogna arbetare i eget yrke, inte som tak.
+
+        Sannolikhetsrollen -- mötesdraget i search_once -- kräver [0, 1] och
+        kapar själv. Värderollen får det som kommer.
+        """
         jx = np.asarray(jx, float); jy = np.asarray(jy, float); jro = np.asarray(jro, float)
         occ = self.key[i] != EMPTY
         if not occ.any():
@@ -135,7 +156,7 @@ class Circles:
         contrib = ((1.0 - np.exp(-m / p.m_ref))
                    * (2.0 * ro2 / width)
                    * np.exp(-0.5 * d2 / (p.gamma ** 2 * width)))
-        return np.minimum(1.0, contrib.sum(axis=0))
+        return contrib.sum(axis=0)
 
     # ---- sammanfattning --------------------------------------------------------
     def summarize(self):

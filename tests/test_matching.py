@@ -568,3 +568,47 @@ def test_meeting_is_governed_by_fit_not_productivity(individuals, jobs):
             d_hits.append(np.hypot(x[pos] - 0.3, y[pos] - 0.1) / 0.272)
     assert len(d_hits) > 100
     assert np.median(d_hits) < 1.3, f"lokaliteten försvann: median u_R {np.median(d_hits):.2f}"
+
+
+# ---------------------------------------------------------------------------
+# Taket bort i värderollen (0060)
+# ---------------------------------------------------------------------------
+
+def test_uncapped_fit_lets_the_wage_exceed_the_field():
+    """REGRESSION: med q kapat vid 1 var p <= 1, alltså w <= Pi för alla, för
+    alltid. Pi var ett supremum ingen kunde passera -- 0.00 procent över
+    fältlönen, mot hälften om Pi är yrkets median -- och 41 procent av alla
+    anställningar låg på exakt 0.85 = 0.5*0.70 + 0.5*1."""
+    from core.occupations.requirement import productivity
+    from core.occupations.utils import negotiated_wage
+
+    p = productivity(np.array([1.3]), np.array([0.5]), k=2.0)
+    assert p[0] == pytest.approx(1.3)                  # inget klipp
+    w = negotiated_wage(p, np.array([1.0]), w_res=1.0, beta=0.5,
+                        wage_floor_share=0.70)
+    assert w[0] > 1.0                                   # över fältlönen
+
+    # Ankaret överlever exakt: referensarbetaren får Pi
+    w_ref = negotiated_wage(np.array([1.0]), np.array([1.0]), w_res=1.0,
+                            beta=0.5, wage_floor_share=0.70)
+    assert w_ref[0] == pytest.approx(1.0)
+
+
+def test_meeting_draw_still_treats_fit_as_a_probability():
+    """Sannolikhetsrollen kapar själv: q > 1 ska ge möte med sannolikhet 1,
+    inte krascha eller överskrida."""
+    from core.occupations.utils import search_once, build_job_arrays
+
+    jobs = pd.DataFrame({
+        "job_id": ["A"], "x_occ": [0.3], "y_occ": [0.1], "r_o": [0.27],
+        "wage": [1.0], "r_req": [0.5], "x": [0.0], "y": [0.0],
+        "individual_id": [np.nan], "active": [True],
+    })
+    ind = pd.Series({"x_occ": 0.3, "y_occ": 0.1, "r_i": 0.0,
+                     "x": 0.0, "y": 0.0, "w_res": 0.0})
+    A = build_job_arrays(jobs)
+    hits = sum(search_once(ind, jobs, np.arange(1), arrays=A,
+                           rng=np.random.default_rng(s),
+                           competitiveness=lambda jx, jy, jro: np.array([1.4]))[0] == 0
+               for s in range(50))
+    assert hits == 50

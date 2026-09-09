@@ -19,9 +19,26 @@ def q_at(c, p, x=0.3, y=0.1, ro=RO):
     return float(c.competitiveness(0, [x], [y], [ro], p)[0])
 
 
-def test_mature_worker_is_fully_competitive_at_own_job():
+def test_single_mature_circle_is_the_unit():
+    """q = 1 är NORMERINGEN: en ensam, mogen, skärpt arbetscirkel exakt på
+    jobbet. Den låg tidigare bakom ett min(1, .) som gjorde 1 till ett tak."""
+    p = CompetenceParams()
+    c = Circles(1, 12)
+    c.add(0, "A", 0.3, 0.1, RO ** 2, p.a / p.lam * 0.99, rho2_home=RO ** 2)
+    assert q_at(c, p) == pytest.approx(1.0, abs=0.02)
+
+
+def test_breadth_pays_above_the_unit():
+    """En mogen arbetare bär också grundskolecirkeln vid origo och en
+    utbildningscirkel på yrkets riktning. Alla tre överlappar jobbet, och
+    summan ÖVERSTIGER enheten: bredd betalar sig. Taket dolde det -- och
+    gjorde samtidigt 41 procent av lönerna till en atom på w/Pi = 0.85,
+    eftersom p = q**(k*r) blev exakt 1 för alla i taket."""
     c, p = _one(tenure=20)
-    assert q_at(c, p) == pytest.approx(1.0, abs=0.01)
+    assert q_at(c, p) > 1.0
+    assert q_at(c, p) < 1.3               # men inte orimligt mycket
+    c1, _ = _one(tenure=20, edu=1)        # utan utbildningscirkel: mindre
+    assert q_at(c1, p) < q_at(c, p)
 
 
 def test_learning_curve_saturates():

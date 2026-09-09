@@ -383,7 +383,9 @@ def search_once(ind, jobs_df, cand_idx, queue=None, sigma_gamma=1.0,
     if queue is not None:
         S = S / (1.0 + np.asarray(queue, float)[cand_idx])
 
-    live = (S > min_surplus) & (rng.random(S.size) < q)
+    # Mötesdraget är en sannolikhet och kapar q själv. Värderollen (p, lön,
+    # urval) använder det okapade q: taket där gjorde Pi till ett supremum.
+    live = (S > min_surplus) & (rng.random(S.size) < np.minimum(1.0, q))
     if not live.any():
         return None, None, None, None, None
 

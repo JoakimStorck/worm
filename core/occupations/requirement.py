@@ -93,6 +93,9 @@ class CapabilityField:
 
 def productivity(q, r, k=2.0):
     """p = q ** (k * r). r = 0: alla är fullt produktiva. r = 1: q ** k."""
-    q = np.clip(np.asarray(q, float), 0.0, 1.0)
+    # Inget klipp på q: taket satt på två ställen (här och i competitiveness),
+    # så att ta bort det ena räckte inte. q > 1 ger p > 1 och w > Pi, vilket
+    # är vad Pi som median kräver. Vid r = 0 är p = q**0 = 1 oavsett.
+    q = np.maximum(np.asarray(q, float), 0.0)
     r = np.clip(np.asarray(r, float), 0.0, 1.0)
     return np.power(q, k * r)
