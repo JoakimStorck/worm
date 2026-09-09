@@ -94,6 +94,7 @@ def transitions_table(events):
             "q_hire": _f(r, "q_hire"),
             "commute_km": _f(r, "commute_km"),
             "n_applicants": _f(r, "n_applicants"),
+            "w_occ": _f(r, "w_occ"),
             "r_req": _f(r, "r_req"),
             "occ_change": bool(int(r.get("occ_change", 1))) if "occ_change" in r else np.nan,
             "is_mgmt": (src.startswith(MGMT_PREFIX) or tgt.startswith(MGMT_PREFIX))
@@ -101,7 +102,18 @@ def transitions_table(events):
         })
     df = pd.DataFrame(rows)
     if not df.empty:
-        df["wage_ratio"] = df["w_neg"] / df["w_field"].replace(0, np.nan)
+        # Mot YRKETS fältlön, inte jobbets. Med w = Pi_j * p**theta och
+        # Pi_j = Pi_o * exp(eta) står eta i både täljare och nämnare om man
+        # delar med w_field och försvinner identiskt: bottenkvartilen låg på
+        # exakt 1.000 med 43 procent på punkten trots att sd(log w_field)
+        # inom yrke var 0.103. w_neg/w_occ är det mått SCB:s
+        # lönestrukturstatistik per SSYK går att jämföra med.
+        nämnare = df["w_occ"] if "w_occ" in df.columns else df["w_field"]
+        nämnare = nämnare.fillna(df["w_field"])
+        df["wage_ratio"] = df["w_neg"] / nämnare.replace(0, np.nan)
+        # Arbetsgivarkomponenten isolerad: Pi_j / Pi_o = exp(eta)
+        if "w_occ" in df.columns:
+            df["employer_premium"] = df["w_field"] / df["w_occ"].replace(0, np.nan)
         # Det urval CPS jämförs mot: yrkesbyten utan chefsövergångar.
         df["in_cps_sample"] = (df["occ_change"].fillna(False).astype(bool)
                                & ~df["is_mgmt"].fillna(False).astype(bool))
@@ -229,6 +241,25 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                 row["p10_q_hire"] = round(float(q.quantile(0.10)), 4)
                 row["share_q_below_0.4"] = round(float((q < 0.40).mean()), 4)
                 row["min_q_hire"] = round(float(q.min()), 4)
+            # GLOBAL fördelning: lönenivån över alla yrken, alltså den
+            # storhet lönestrukturstatistikens P90/P10 (2.20 för 2025) mäter.
+            # Inom yrke är en annan sak och står per kvartil i figurens data.
+            wn = pd.to_numeric(tr.get("w_neg"), errors="coerce").dropna()
+            wn = wn[wn > 0]
+            if len(wn) > 50:
+                p10, p90 = wn.quantile(0.10), wn.quantile(0.90)
+                row["flow_w_p90p10"] = round(float(p90 / p10), 4)
+                row["flow_sd_log_w"] = round(float(np.std(np.log(wn))), 4)
+            # Hur stor del av variansen i log lön ligger i ARBETSGIVAREN.
+            # AKM ger 10-20 procent; det är kontrollen på employer_wage_sd.
+            if "employer_premium" in tr.columns:
+                ep = pd.to_numeric(tr["employer_premium"], errors="coerce").dropna()
+                ep = ep[ep > 0]
+                if len(ep) > 50 and len(wn) > 50:
+                    v_eta = float(np.var(np.log(ep)))
+                    v_tot = float(np.var(np.log(wn)))
+                    row["employer_var_share"] = round(v_eta / v_tot, 4) if v_tot > 0 else np.nan
+
             na = (tr["n_applicants"].dropna() if "n_applicants" in tr.columns
                   else pd.Series(dtype=float))
             if len(na):

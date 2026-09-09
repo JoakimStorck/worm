@@ -227,6 +227,21 @@ def handle_start_job(event, world):
             individuals.at[idx, 'w_neg'] = w_eff
         extra['w_field'] = round(w_field, 4)
         extra['w_neg'] = round(w_eff, 4)
+        # YRKETS fältlön, utan arbetsgivareffekten. w_field är JOBBETS lön,
+        # Pi_j = Pi_o * exp(eta_j), och med w = Pi_j * p**theta står eta i
+        # både täljare och nämnare i w_neg/w_field och försvinner IDENTISKT
+        # ur kvoten. Måttet kunde därför varken visa spridning inom yrke
+        # eller arbetsgivarkomponenten: bottenkvartilen låg på exakt 1.000
+        # med 43 procent på punkten trots att sd(log w_field) inom yrke var
+        # 0.103. Med w_occ separat blir w_neg/w_occ jämförbart med SCB:s
+        # lönestrukturstatistik per SSYK, och w_field/w_occ isolerar eta.
+        try:
+            eta = float(job_row.get('wage_eta', 0.0) or 0.0)
+        except (TypeError, ValueError):
+            eta = 0.0
+        extra['w_occ'] = round(w_field * float(np.exp(-eta)), 4)
+
+    # Beståndet mäts årsvis i handle_new_year; lönen bärs av individen.
         km_par = event['params'].get('commute_km')
         if km_par is not None:
             try:
@@ -754,6 +769,17 @@ def handle_destroy_job(event, world):
                                      extra={"event_detail": "vacancy_destroyed", "job_id": job_id})
 
 
+def _wage_flow_quantiles(world):
+    """Tre tal per månad: median och kvartiler i log lön bland anställda.
+
+    Fem årspunkter räcker inte för att se om fördelningen är stationär. Tre
+    float per månad kostar ingenting och gör drift synlig i tidsserien.
+    """
+    st = _wage_stock_stats(world)
+    return {k: st[k] for k in ("stock_w_p10", "stock_w_p50", "stock_w_p90")
+            if k in st}
+
+
 def handle_new_month(event, world):
     from core.statistics.basic_stats import analyze_world
     year = event['params'].get('year')
@@ -769,17 +795,66 @@ def handle_new_month(event, world):
     unemployed = stats['unemployed_individuals']
     unmatched_jobs = stats['unmatched_jobs']
     not_in_labour_force = stats['individuals_not_in_labour_force']
-    world.event_logger.log_event(world, event, extra={
+    m_extra = {
         "month": month,
         "employed": employed,
         "unemployed": unemployed,
         "unmatched_jobs": unmatched_jobs,
         "not_in_labour_force": not_in_labour_force,
         "active_jobs": n_jobs,
-        "posted": n_posted
-    }, print_line=True)
+        "posted": n_posted,
+    }
+    m_extra.update(_wage_flow_quantiles(world))
+    world.event_logger.log_event(world, event, extra=m_extra, print_line=True)
     # Reset match-counter
     world.n_matched_in_month = 0
+
+def _wage_stock_stats(world):
+    """Årligt tvärsnitt av löneBESTÅNDET, inte av flödet.
+
+    Övergångstabellen mäter lönen VID ANSTÄLLNING. SCB:s lönestruktur-
+    statistik mäter beståndet, med september som referensperiod, så ett
+    årligt tvärsnitt är direkt jämförbart med källan medan tolv per år inte
+    ger mer information om just den jämförelsen -- bara tolv gånger kostnaden
+    på tiotusen löner per snapshot.
+
+    Mätningen ligger i new_year-hanteraren och inte som egen händelsetyp. Med
+    en wage_snapshot i kön skulle den konkurrera med den kommande årliga
+    lönerevisionen om ordningen inom samma tidpunkt, och det skulle bli oklart
+    om beståndet mäts före eller efter revisionen. Här är ordningen explicit i
+    koden, och snapshot ska tas FÖRE revisionen: då blir revisionen en
+    observerbar hoppfunktion mellan två tvärsnitt, och fördelningen av
+    lönetillväxt per år kan jämföras med märket.
+
+    ETT GRATIS TEST SÅ LÄNGE. Lönen ändras aldrig efter anställning, så
+    beståndet är en blandning över anställningsårgångar under en
+    tidsinvariant regel: stock och flöde ska vara nästan IDENTISKA. Skiljer de
+    sig materiellt finns ett fel någonstans. När revisionen kommer ska de
+    tvärtom divergera, med beståndet förskjutet uppåt och bredare, och
+    skillnaden blir måttet på hur mycket av lönespridningen som är karriär och
+    hur mycket som är matchning.
+    """
+    ind = world.individuals
+    if 'w_neg' not in ind.columns or 'status' not in ind.columns:
+        return {}
+    w = pd.to_numeric(ind.loc[ind['status'] == 'employed', 'w_neg'],
+                      errors='coerce').dropna()
+    w = w[w > 0]
+    if len(w) < 10:
+        return {}
+    lg = np.log(w.to_numpy())
+    q = np.quantile(w.to_numpy(), [0.10, 0.25, 0.50, 0.75, 0.90])
+    return {
+        "stock_n": int(len(w)),
+        "stock_w_p10": round(float(q[0]), 4),
+        "stock_w_p25": round(float(q[1]), 4),
+        "stock_w_p50": round(float(q[2]), 4),
+        "stock_w_p75": round(float(q[3]), 4),
+        "stock_w_p90": round(float(q[4]), 4),
+        "stock_w_p90p10": round(float(q[4] / q[0]), 4),
+        "stock_sd_log_w": round(float(np.std(lg)), 4),
+    }
+
 
 def handle_new_year(event, world):
     from core.statistics.basic_stats import analyze_world
@@ -789,14 +864,16 @@ def handle_new_year(event, world):
     unemployed = stats['unemployed_individuals']
     unmatched_jobs = stats['unmatched_jobs']
     not_in_labour_force = stats['individuals_not_in_labour_force']
-    world.event_logger.log_event(world, event, extra={
+    extra = {
         "year": year,
         "employed": employed,
         "unemployed": unemployed,
         "unmatched_jobs": unmatched_jobs,
         "not_in_labour_force": not_in_labour_force,
-        "active_jobs": stats['total_jobs']
-    }, print_line=True)
+        "active_jobs": stats['total_jobs'],
+    }
+    extra.update(_wage_stock_stats(world))
+    world.event_logger.log_event(world, event, extra=extra, print_line=True)
 
 RULE_SWITCH = {
     "quit_job": handle_quit_job,

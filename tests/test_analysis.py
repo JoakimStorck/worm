@@ -206,3 +206,57 @@ def test_manifest_flags_mixed_commits(tmp_path):
         runs.append(str(d))
     m = write(None, "mix", str(tmp_path / "f"), run_dirs=runs)
     assert m["mixed_commits"] is True and len(m["commits"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Global och inomyrkes lönefördelning (0064)
+# ---------------------------------------------------------------------------
+
+def test_wage_ratio_is_measured_against_the_occupation_not_the_job():
+    """REGRESSION: wage_ratio var w_neg/w_field, och w_field är JOBBETS lön
+    Pi_j = Pi_o*exp(eta). Med w = Pi_j*p**theta står eta i både täljare och
+    nämnare och försvinner IDENTISKT ur kvoten. Bottenkvartilen låg därför på
+    exakt 1.000 med 43 procent på punkten trots att sd(log w_field) inom yrke
+    var 0.103: arbetsgivareffekten fanns i modellen men inte i måttet."""
+    import numpy as np
+    from core.analysis.eventlog import transitions_table
+
+    bas = dict(event="start_job", from_onet="11-1011.00", to_onet="35-9021.00",
+               u_R=0.8, u_R_occ=0.8, q_hire=1.0, r_req=0.0, occ_change=1)
+    ev = [dict(bas, time=1.0, agent_id=1, job_id="J1",
+               w_occ=1.0, w_field=1.20, w_neg=1.20),     # eta = +0.18
+          dict(bas, time=2.0, agent_id=2, job_id="J2",
+               w_occ=1.0, w_field=0.80, w_neg=0.80)]     # eta = -0.22
+    tr = transitions_table(ev)
+
+    assert "w_occ" in tr.columns
+    # Mot jobbet vore båda exakt 1.0; mot yrket skiljer de sig
+    assert tr["wage_ratio"].tolist() == pytest.approx([1.20, 0.80])
+    assert tr["employer_premium"].tolist() == pytest.approx([1.20, 0.80])
+
+
+def test_wage_stock_is_measured_annually_not_per_event():
+    """Beståndet mäts i new_year-hanteraren, inte som egen händelsetyp: en
+    wage_snapshot i kön skulle konkurrera med den kommande lönerevisionen om
+    ordningen inom samma tidpunkt."""
+    import numpy as np, pandas as pd
+    from core.event_handlers import _wage_stock_stats, RULE_SWITCH
+
+    assert "wage_snapshot" not in RULE_SWITCH
+
+    class W:
+        individuals = pd.DataFrame({
+            "status": ["employed"] * 100 + ["unemployed"] * 20,
+            "w_neg": list(np.linspace(0.5, 1.5, 100)) + [np.nan] * 20,
+        })
+    st = _wage_stock_stats(W())
+    assert st["stock_n"] == 100
+    assert st["stock_w_p50"] == pytest.approx(1.0, abs=0.02)
+    assert st["stock_w_p90p10"] == pytest.approx(1.4 / 0.6, rel=0.05)
+    assert st["stock_sd_log_w"] > 0
+
+    # För få anställda ger inget mått i stället för ett brusigt
+    class Tiny:
+        individuals = pd.DataFrame({"status": ["employed"] * 3,
+                                    "w_neg": [1.0, 1.1, 0.9]})
+    assert _wage_stock_stats(Tiny()) == {}

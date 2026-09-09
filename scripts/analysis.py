@@ -155,6 +155,29 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
               "en enda sökande har inget urval alls, och den lokaliteten "
               "uteblir därför just där ingen söker.\n")
 
+    if "flow_w_p90p10" in df.columns:
+        r9 = pd.to_numeric(df["flow_w_p90p10"], errors="coerce").dropna()
+        sd = pd.to_numeric(df.get("flow_sd_log_w"), errors="coerce").dropna()
+        ev = pd.to_numeric(df.get("employer_var_share"), errors="coerce").dropna()
+        if len(r9):
+            A("## Lönefördelning\n")
+            A(f"**Global**, alla yrken, lön vid anställning: P90/P10 "
+              f"**{r9.median():.2f}**"
+              + (f", sd(log w) {sd.median():.3f}" if len(sd) else "")
+              + ". Lönestrukturstatistikens P90/P10 för hela arbetsmarknaden "
+                "var 2,20 för 2025, men det måttet gäller BESTÅNDET medan "
+                "detta är flödet: nyanställda är ett skevt urval, och utan "
+                "lönetillväxt med tjänstetid saknas det som skiljer stock "
+                "från flöde. Beståndets tvärsnitt loggas årsvis (stock_w_*).\n")
+            if len(ev):
+                A(f"Andel av variansen i log lön som ligger i **arbetsgivaren**: "
+                  f"{100*ev.median():.0f} %. AKM-dekompositioner ger 10–20 "
+                  "procent; det är kontrollen på `employer_wage_sd`.\n")
+            A("Spridningen **inom yrke** är en annan storhet och står per "
+              "kvartil i `r_req` i figurens datafil. Den ska växa med "
+              "kravnivån, $\\sigma = \\theta k r_j \\sigma_{\\log q}$, och "
+              "jämförs med SCB:s percentiler per SSYK.\n")
+
     A("## Mot referensvärden\n")
     A("| Storhet | Modell (median) | Spridning över frön | Referens | Källa |")
     A("|---|---|---|---|---|")
