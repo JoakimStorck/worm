@@ -593,14 +593,17 @@ class World:
         if not hasattr(self, "applications"):
             self.applications = {}
         first = job_id not in self.applications
-        self.applications.setdefault(job_id, []).append(
-            dict(idx=idx, t=float(t_now), **bud))
+        kö = self.applications.setdefault(job_id, [])
+        if any(a["idx"] == idx for a in kö):
+            return False                      # redan sökt, ingen dubblett
+        kö.append(dict(idx=idx, t=float(t_now), **bud))
         if first:
             days = float(self.cfg_reader.config.get("simulation", {})
                          .get("application_window_days", 40.0))
             self._push_event({"time": float(t_now) + days, "agent_id": idx,
                               "event_type": "close_vacancy",
                               "params": {"job_id": job_id}})
+        return True
 
     def applicant_counts(self):
         """Antal liggande ansökningar per jobbposition, som numpy-array.

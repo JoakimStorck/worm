@@ -323,6 +323,14 @@ def handle_start_job_search(event, world):
     den sökande får överväga.
     """
     idx = event['agent_id']
+
+    # Med parallella ansökningar har hon utestående sökhändelser när hon får
+    # jobbet. Utan vakt skulle nästa ge en ansökan från en ANSTÄLLD, och
+    # sökning från anställning är steg 2 och inte byggd.
+    if ('status' in world.individuals.columns
+            and world.individuals.at[idx, 'status'] != 'unemployed'):
+        return
+
     sim = world.cfg_reader.config.get('simulation', {})
 
     brg = sim.get('bargaining', {}) or {}
@@ -362,6 +370,14 @@ def handle_start_job_search(event, world):
             'event_detail': 'application_filed', 'job_id': job_id,
             'surplus': round(surplus, 4), 'w_neg': round(w_neg, 4),
             'q_hire': round(q_hire, 4), 'commute_km': round(commute_km, 3)})
+
+        # Hon fortsätter söka medan ansökan ligger ute. En ansökan i taget
+        # kostade henne hela fönstret per försök. Med sökintervallet 28 dagar
+        # och en väntan kring 25-30 blir det ungefär två utestående åt gången,
+        # alltså två chanser per fönsterperiod i stället för en. Reservationen
+        # faller INTE här: hon har inte fått avslag.
+        _reschedule_search(world, idx, float(event['time']),
+                           decay_reservation=False)
     else:
         current_prop = world.individuals.at[idx, 'propensity_start_education']
         new_prop = min(current_prop + 0.1, 1.0)
@@ -402,6 +418,34 @@ def _reschedule_search(world, idx, t_now, decay_reservation=True):
                 if timing.get('dist', 'exponential') == 'exponential' else 30.0)
     world._push_event({"time": float(t_now + interval), "agent_id": idx,
                        "event_type": "start_job_search", "params": {}})
+
+
+def start_delay_days(world, idx):
+    """Tiden från urval till tillträde: beslut plus uppsägningstid.
+
+    Beslutet -- referenser, kontrakt -- gäller alla. Uppsägningstiden är NOLL
+    för den arbetslösa och en institutionell månad för den som ska lämna en
+    anställning. Annonstiden är redan avverkad när detta anropas.
+
+    Bara annons och beslut hör till vakansen som SCB:s KV mäter: en obemannad
+    befattning som rekryteringsförfarandet pågår för, inte tiden fram till
+    tillträde. Utlovade positioner ingår i unmatched_jobs och därmed i V, så
+    den fasta rekryteringstiden på trettio dagar låg tidigare inne i
+    vakansvaraktigheten för ALLA, också för dem som inte hade något att säga
+    upp.
+
+    Uppsägningsgrenen är oåtkomlig i dag, eftersom urvalet bara släpper fram
+    arbetslösa. Den finns här för att steg 2 -- sökning från anställning --
+    ska ärva den färdig, och för att bokföringen ska kunna prövas medan
+    populationen fortfarande är enkel.
+    """
+    sim = world.cfg_reader.config.get('simulation', {})
+    dagar = float(sim.get('hiring_decision_days', 10.0))
+    if ('status' in world.individuals.columns
+            and idx in world.individuals.index
+            and world.individuals.at[idx, 'status'] == 'employed'):
+        dagar += float(sim.get('notice_period_days', 30.0))
+    return dagar
 
 
 def handle_close_vacancy(event, world):
@@ -457,12 +501,16 @@ def handle_close_vacancy(event, world):
     win = max(lediga, key=lambda a: a['q'])
     idx = win['idx']
 
-    # Rekryteringstid: positionen är utlovad men tillträds först senare.
+    # TRE TIDER, var och en med sitt skäl. Annonstiden (40 dagar) är redan
+    # avverkad här. Kvar är arbetsgivarens beslut och kontrakt, som gäller
+    # alla, och uppsägningstiden, som är noll för den arbetslösa och en
+    # institutionell månad för den som ska lämna en anställning. Bara de två
+    # första hör till vakansen som SCB mäter: KV räknar en obemannad
+    # befattning som rekryteringsförfarandet pågår för, inte tiden fram till
+    # tillträde. Utlovade positioner ingår i unmatched_jobs och därmed i V,
+    # så rekryteringstiden låg tidigare inne i vakansvaraktigheten för alla.
     world.set_job_pending(job_id)
-    lag_cfg = world.cfg_reader.get_event_timing('recruitment_lag')
-    lag = (np.random.exponential(lag_cfg.get('mean', 30.0))
-           if lag_cfg.get('dist', 'exponential') == 'exponential'
-           else float(lag_cfg.get('mean', 30.0)))
+    lag = start_delay_days(world, idx)
     world._push_event({
         "time": t_now + lag, "agent_id": idx, "event_type": "start_job",
         "params": {"job_id": job_id, "w_neg": win['w_neg'], "q_hire": win['q'],

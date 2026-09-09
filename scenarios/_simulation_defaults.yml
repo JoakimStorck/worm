@@ -92,7 +92,17 @@ simulation:
   # upplärningskostnad och risk, inte produktion. Fyrtio dagar svarar mot
   # svensk praxis för annonseringstid; tillsammans med recruitment_lag ger det
   # vakansvaraktigheten, som mäts mot svenska 30-40 dagar.
+  # Tre tider, var och en med sitt skäl:
+  #   application_window_days  annonsering, tills arbetsgivaren väljer
+  #   hiring_decision_days     referenser, beslut, kontrakt -- gäller alla
+  #   notice_period_days       uppsägningstid, NOLL för en arbetslös
+  # Bara de två första hör till vakansen som SCB:s KV mäter: en obemannad
+  # befattning som rekryteringsförfarandet pågår för, inte tiden till
+  # tillträde. I dagens population kommer alla anställda från arbetslöshet,
+  # så uppsägningstiden är noll tills steg 2 (sökning från anställning) finns.
   application_window_days: 40
+  hiring_decision_days: 10
+  notice_period_days: 30
   min_surplus: 0.0          # acceptera om S > min_surplus
   reservation_decay_per_search: 0.95   # w_res faller 5 % per misslyckad sökning
   # Reservationslönens golv. 0.10 av medellönen är orimligt lågt: med a-kassa

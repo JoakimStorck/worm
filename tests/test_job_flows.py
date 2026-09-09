@@ -980,3 +980,57 @@ def test_queue_counts_come_from_the_application_lists():
     assert n.sum() == 3.0
     w.close_application_window(jid)
     assert w.applicant_counts().sum() == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Parallella ansökningar och de tre tiderna (0058)
+# ---------------------------------------------------------------------------
+
+def test_no_duplicate_application_to_the_same_job():
+    """Med parallella ansökningar kan hon annars hamna två gånger i kön."""
+    w, jid = _world_with_applicants([0.5])
+    assert w.file_application(jid, 0, 5.0, q=0.5, w_neg=0.8, surplus=0.1,
+                              commute_km=3.0) is False
+    assert len(w.applications[jid]) == 1
+    assert w.applicant_counts()[w.job_index()[jid]] == 1.0
+
+
+def test_employed_worker_does_not_apply():
+    """REGRESSION: utan statusvakt skulle en utestående sökhändelse ge en
+    ansökan från någon som redan fått jobbet -- sökning från anställning är
+    steg 2 och inte byggd."""
+    from core.event_handlers import handle_start_job_search
+
+    w, jid = _world_with_applicants([0.5])
+    w.individuals.at[0, "status"] = "employed"
+    w._pushed.clear()
+    handle_start_job_search({"time": 50.0, "agent_id": 0,
+                             "event_type": "start_job_search", "params": {}}, w)
+    assert w._pushed == []
+    assert w.n_open_applications() == 1
+
+
+def test_unemployed_hire_has_no_notice_period():
+    """De tre tiderna: annonstiden är avverkad vid stängning, kvar är beslut
+    (alla) plus uppsägningstid (bara för den som lämnar en anställning).
+    Utlovade positioner ingår i unmatched_jobs och därmed i V, så
+    uppsägningstiden låg tidigare i vakansvaraktigheten för ALLA."""
+    from core.event_handlers import handle_close_vacancy
+
+    w, jid = _world_with_applicants([0.9])
+    w._pushed.clear()
+    handle_close_vacancy({"time": 40.0, "agent_id": 0, "event_type": "close_vacancy",
+                          "params": {"job_id": jid}}, w)
+    start = [e for e in w._pushed if e["event_type"] == "start_job"][0]
+    assert start["time"] == pytest.approx(50.0)      # 40 + 10, ingen uppsägning
+
+
+def test_notice_period_applies_only_to_someone_leaving_a_job():
+    """Uppsägningsgrenen är oåtkomlig i dag -- urvalet släpper bara fram
+    arbetslösa -- men den ska ärvas färdig av steg 2, så den prövas här."""
+    from core.event_handlers import start_delay_days
+
+    w, _ = _world_with_applicants([0.9])
+    assert start_delay_days(w, 0) == pytest.approx(10.0)
+    w.individuals.at[0, "status"] = "employed"
+    assert start_delay_days(w, 0) == pytest.approx(40.0)
