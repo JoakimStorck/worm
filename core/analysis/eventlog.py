@@ -94,6 +94,7 @@ def transitions_table(events):
             "q_hire": _f(r, "q_hire"),
             "commute_km": _f(r, "commute_km"),
             "n_applicants": _f(r, "n_applicants"),
+            "is_bootstrap": bool(r.get("is_bootstrap", False)),
             "w_occ": _f(r, "w_occ"),
             "r_req": _f(r, "r_req"),
             "occ_change": bool(int(r.get("occ_change", 1))) if "occ_change" in r else np.nan,
@@ -115,8 +116,19 @@ def transitions_table(events):
         if "w_occ" in df.columns:
             df["employer_premium"] = df["w_field"] / df["w_occ"].replace(0, np.nan)
         # Det urval CPS jämförs mot: yrkesbyten utan chefsövergångar.
+        # Uppstartens anställningar är INTE mobilitet. De går genom
+        # handle_start_job och hamnar därför i tabellen -- 10 165 av 21 594 i
+        # en femårskörning -- och räknades som yrkesövergångar eftersom
+        # individens seedade onet_code skiljer sig från jobbets. Det blåste
+        # upp n_cps_sample från 8 285 till 17 900 och spädde ut median u_R:
+        # uppstartens egna övergångar hade median 0.687 mot körningens
+        # 0.76-0.80, eftersom konkurrensen per vakans är som störst när alla
+        # är lediga samtidigt. De ligger kvar i tabellen med sin flagga -- de
+        # är det bästa måttet på hur väl uppstarten matchar -- men utanför
+        # valideringsurvalet.
         df["in_cps_sample"] = (df["occ_change"].fillna(False).astype(bool)
-                               & ~df["is_mgmt"].fillna(False).astype(bool))
+                               & ~df["is_mgmt"].fillna(False).astype(bool)
+                               & ~df["is_bootstrap"].fillna(False).astype(bool))
     return df
 
 

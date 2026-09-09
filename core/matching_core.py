@@ -79,7 +79,9 @@ def apply_once(world, idx, t_now):
     if job_pos is None:
         return (None,) * 5
 
-    job_id = world.jobs.iloc[job_pos]['job_id']
+    # Kolumnaccess, inte radkopia: jobs.iloc[pos][col] bygger en Series av
+    # hela raden och kostar 54 mikrosekunder mot 11 för .iat på kolumnen.
+    job_id = world.jobs['job_id'].iat[job_pos]
     ind.at[idx, 'w_neg'] = w_neg          # kolumnen garanteras av World.prepare
     world.file_application(job_id, idx, float(t_now),
                            q=q_hire, w_neg=w_neg, surplus=surplus,
@@ -109,7 +111,17 @@ def close_all_windows(world, t_now, immediate=False):
 
         def fånga(ev, _o=orig):
             if ev.get("event_type") == "start_job":
-                starter.append(dict(ev, time=float(t_now)))
+                # MÄRKT. Uppstartens anställningar går genom handle_start_job
+                # och hamnar därför i transitions -- 10 165 av 21 594 i en
+                # femårskörning. De räknades som yrkesövergångar, eftersom
+                # individens seedade onet_code skiljer sig från jobbets, och
+                # blåste upp n_cps_sample från 8 285 till 17 900: hälften av
+                # valideringsunderlaget var att folk fick sitt FÖRSTA jobb.
+                # De ska synas i loggen -- de är verkliga anställningar med
+                # löner som hör till beståndet -- men de är inte mobilitet.
+                p = dict(ev.get("params", {}))
+                p["bootstrap"] = True
+                starter.append(dict(ev, time=float(t_now), params=p))
                 return
             return _o(ev)
         world._push_event = fånga

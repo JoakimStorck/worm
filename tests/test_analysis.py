@@ -412,3 +412,57 @@ def test_bootstrap_round_size_follows_target_density():
     assert max(1, min(50, int(round(per_vak * 100)))) == 50
 
 
+
+
+def test_bootstrap_hires_are_marked_and_left_out_of_the_cps_sample():
+    """REGRESSION: uppstartens anställningar går genom handle_start_job och
+    hamnar därför i transitions -- 10 165 av 21 594 i en femårskörning. De
+    räknades som yrkesövergångar, eftersom individens seedade onet_code
+    skiljer sig från jobbets, och blåste upp n_cps_sample från 8 285 till
+    17 900: hälften av valideringsunderlaget var att folk fick sitt FÖRSTA
+    jobb, inte att de bytte.
+
+    De spädde dessutom ut median u_R nedåt: uppstartens egna övergångar hade
+    median 0.687 mot körningens 0.76-0.80, eftersom konkurrensen per vakans är
+    som störst när alla är lediga samtidigt."""
+    from core.analysis.eventlog import transitions_table
+
+    bas = dict(event="start_job", from_onet="53-7062.00", to_onet="35-9021.00",
+               u_R=0.9, u_R_occ=0.9, w_occ=1.0, w_field=1.0, w_neg=1.0,
+               q_hire=0.9, r_req=0.3, occ_change=1, is_mgmt=0)
+    ev = [dict(bas, time=0.0, agent_id=1, job_id="J1", is_bootstrap=True),
+          dict(bas, time=400.0, agent_id=2, job_id="J2")]
+    tr = transitions_table(ev)
+
+    assert "is_bootstrap" in tr.columns
+    assert tr["is_bootstrap"].tolist() == [True, False]
+    # Uppstarten ligger kvar i tabellen men utanför valideringsurvalet
+    assert len(tr) == 2
+    assert tr["in_cps_sample"].tolist() == [False, True]
+
+
+def test_hot_paths_do_not_scan_the_job_table():
+    """REGRESSION: 'jobs.loc[jobs["job_id"] == job_id, ...]' skannar hela
+    jobbtabellen med en strängjämförelse -- mätt 773 mikrosekunder för
+    jämförelsen och 986 för skrivningen över 11 200 rader, mot 5.5 för ett
+    uppslag i job_index och 7.2 för en iat-skrivning. Mönstret satt i varje
+    separation och varje jobbförstörelse, alltså i de mest frekventa
+    händelserna som finns. Och jobs.iloc[pos][col] bygger en Series av hela
+    raden: 54 mikrosekunder mot 11 för kolumnaccess."""
+    import inspect
+    from core import event_handlers as eh
+    from core import matching_core as mc
+
+    for fn in (eh.handle_start_job, eh.handle_start_job_search, eh._clear_holder,
+               eh.handle_destroy_job, mc.apply_once):
+        # Kommentarer och docstring räknas inte: de citerar mönstret de
+        # ersätter och skulle annars fälla kontrollen mot sig själva.
+        kod = [ln for ln in inspect.getsource(fn).splitlines()
+               if not ln.lstrip().startswith("#")]
+        text = "".join("\n".join(kod).split('"""')[::2])
+        assert "jobs['job_id'] ==" not in text and 'jobs["job_id"] ==' not in text, \
+            f"boolesk skanning av jobbtabellen i {fn.__name__}"
+
+    # Och uppslaget av job_id efter en träff sker på kolumnen, inte på raden
+    mc_kod = inspect.getsource(mc.apply_once)
+    assert "['job_id'].iat[" in mc_kod
