@@ -385,6 +385,16 @@ class World:
         gånger. bootstrap_matching anropar den, och simulate() gör det igen.
         """
         self._init_job_flows()
+        # Lönen och revisionens utgångspunkt hör till individens SCHEMA, inte
+        # till någon enskild funktion. De skapades tidigare i
+        # _seed_wages_for_matched, som utgick med 0069, och då fanns ingen
+        # producent kvar: vakten "if 'w_neg' in ind.columns" i apply_once blev
+        # falsk vid varje anställning, precis som i 0068. Samma tysta vakt,
+        # samma fel, andra gången. Kolumnerna skapas här, tillsammans med
+        # jobbens active och pending, och skrivningen sker utan vakt.
+        for kol in ("w_neg", "q_last"):
+            if kol not in self.individuals.columns:
+                self.individuals[kol] = np.nan
         if "onet_code" in self.individuals.columns and not hasattr(self, "circles"):
             self.init_competence()
 

@@ -223,8 +223,7 @@ def handle_start_job(event, world):
         except (TypeError, ValueError):
             w_eff = w_field
         individuals.at[idx, 'w_res'] = w_eff
-        if 'w_neg' in individuals.columns:
-            individuals.at[idx, 'w_neg'] = w_eff
+        individuals.at[idx, 'w_neg'] = w_eff      # schemat garanteras i prepare
         # Utgångspunkt för nästa revision: revisionen belönar TILLVÄXT i
         # konkurrenskraft sedan förra gången, inte nivån.
         q_par0 = event['params'].get('q_hire')

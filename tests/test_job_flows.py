@@ -1195,3 +1195,31 @@ def test_bootstrap_returns_its_matchings_for_the_statistics():
     assert len(m) == int((w.individuals["status"] == "employed").sum())
     assert len(m) == st["bootstrap_hired"]
     assert m["job_id"].is_unique, "samma position tilldelad två gånger"
+
+
+def test_wage_columns_belong_to_the_individual_schema():
+    """REGRESSION, andra gången. w_neg och q_last skapades i
+    _seed_wages_for_matched, som utgick med 0069 -- och då fanns ingen
+    producent kvar. Vakten "if 'w_neg' in ind.columns" i apply_once blev falsk
+    vid varje anställning, exakt som i 0068, och körningen föll först vid
+    första årsskiftet med 'har anställda men saknar kolumnen w_neg'.
+
+    Kolumnerna hör till individens schema, inte till en enskild funktion, och
+    skrivningen sker utan vakt."""
+    import inspect
+    from core import matching_core as mc
+    from core import event_handlers as eh
+
+    w = make_world(n_employers=3, size=4)
+    w.individuals = pd.DataFrame({
+        "individual_id": [0.0], "status": ["unemployed"],
+        "job_id": pd.Series([None], dtype="object"), "w_res": [0.4]})
+    w.prepare()
+    assert {"w_neg", "q_last"} <= set(w.individuals.columns)
+
+    # Ingen tyst vakt kvar runt skrivningen
+    for fn in (mc.apply_once, eh.handle_start_job):
+        kod = [ln for ln in inspect.getsource(fn).splitlines()
+               if not ln.lstrip().startswith("#")]
+        assert not [ln for ln in kod if "'w_neg' in" in ln or '"w_neg" in' in ln], \
+            f"tyst vakt kvar i {fn.__name__}"

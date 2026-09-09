@@ -80,8 +80,7 @@ def apply_once(world, idx, t_now):
         return (None,) * 5
 
     job_id = world.jobs.iloc[job_pos]['job_id']
-    if 'w_neg' in ind.columns:
-        ind.at[idx, 'w_neg'] = w_neg
+    ind.at[idx, 'w_neg'] = w_neg          # kolumnen garanteras av World.prepare
     world.file_application(job_id, idx, float(t_now),
                            q=q_hire, w_neg=w_neg, surplus=surplus,
                            commute_km=km)
