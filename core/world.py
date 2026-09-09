@@ -759,6 +759,62 @@ class World:
         job_idx = self.jobs['job_id'].isin(job_to_ind.index)
         self.jobs.loc[job_idx, 'individual_id'] = self.jobs.loc[job_idx, 'job_id'].map(job_to_ind)
 
+        self._seed_wages_for_matched(idx)
+
+    def _seed_wages_for_matched(self, idx):
+        """Startbeståndet får lön och utgångspunkt för lönerevisionen.
+
+        Förmatchningen satte status och job_id men INGEN lön. Individtabellen
+        saknade dessutom w_neg som kolumn helt -- scenariobyggaren skapar
+        w_res men aldrig w_neg -- så vakten 'if "w_neg" in individuals.columns'
+        i handle_start_job var falsk vid varje anställning, och den förhandlade
+        lönen skrevs aldrig till individen.
+
+        Följden är att TVÅ patchar mätte respektive ändrade en storhet som
+        inte fanns. _wage_stock_stats (0064) föll ut på sin första vakt, så
+        beståndets årliga tvärsnitt och månadskvantilerna har aldrig
+        producerat något. _apply_wage_revision (0067) likaså: lönerevisionen
+        har aldrig körts en enda gång.
+
+        Det är samma familj som r_req ur SELECT:en, n_applicants ur
+        transitions_table, theta ur vitlistan och eta ur hasattr -- men värre
+        på ett sätt: här fanns en konsument utan producent. Vakten skrevs som
+        försiktighetsåtgärd och blev det som gjorde felet tyst, eftersom en
+        kolumn som aldrig skapas ser exakt likadan ut som en man valt bort.
+
+        q_last sätts samtidigt. Utan den får hela startbeståndet ett påslag
+        exakt lika med märket vid varje revision, alltså noll spridning, och
+        eftersom de utgör merparten under de första åren skulle mekanismen se
+        ut att fungera medan den inte gjorde något.
+        """
+        ind, jobs = self.individuals, self.jobs
+        if "w_neg" not in ind.columns:
+            ind["w_neg"] = np.nan
+        if "q_last" not in ind.columns:
+            ind["q_last"] = np.nan
+        if "wage" not in jobs.columns:
+            return
+        w_of = dict(zip(jobs["job_id"], jobs["wage"]))
+        rader = ind.index[idx & ind["w_neg"].isna() & ind["job_id"].notna()]
+        if not len(rader):
+            return
+        ind.loc[rader, "w_neg"] = [w_of.get(j, np.nan) for j in ind.loc[rader, "job_id"]]
+
+        if hasattr(self, "circles") and {"x_occ", "y_occ", "r_o"} <= set(jobs.columns):
+            pos_of = self.job_index()
+            jx = jobs["x_occ"].to_numpy(dtype=float)
+            jy = jobs["y_occ"].to_numpy(dtype=float)
+            jr = jobs["r_o"].to_numpy(dtype=float)
+            cp = self.competence_params()
+            for i in rader:
+                pos = pos_of.get(ind.at[i, "job_id"])
+                if pos is None:
+                    continue
+                q = float(self.circles.competitiveness(
+                    i, jx[pos:pos + 1], jy[pos:pos + 1], jr[pos:pos + 1], cp)[0])
+                if q > 0:
+                    ind.at[i, "q_last"] = q
+
     def employer_training_prob(self, n_employees):
         tr_cfg = self.cfg_reader.config.get('defaults', {}).get('employer', {}).get('training_prob_by_size', {})
         if n_employees < 10:

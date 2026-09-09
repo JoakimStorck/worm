@@ -318,3 +318,69 @@ def test_dispersion_panel_uses_mean_r_squared_and_shows_q_spread():
     r = np.concatenate([np.zeros(800), np.linspace(0.0, 0.048, 200)])
     mitt = (0.0 + 0.048) / 2
     assert abs((r ** 2).mean() - mitt ** 2) / mitt ** 2 > 0.3
+
+
+def test_stock_and_revision_reach_the_run_table():
+    """REGRESSION: _wage_stock_stats (0064) och _apply_wage_revision (0067)
+    skriver till new_year-radens extra, men summary_row läste bara transitions
+    och timeseries. Måtten stannade i eventlog.csv och nådde aldrig runs.csv --
+    samma väg som n_applicants och theta tappades."""
+    from core.analysis.eventlog import summary_row
+    import pandas as pd, numpy as np
+
+    ev = [{"event": "new_year", "time": 366.0, "year": 2025,
+           "stock_sd_log_w": 0.21, "stock_w_p90p10": 2.30, "stock_w_p50": 1.05,
+           "stock_w_p10": 0.70, "stock_w_p90": 1.61,
+           "revision_g_mean": 0.031, "revision_g_p10": 0.020,
+           "revision_g_p90": 0.045, "revision_share_zero": 0.02,
+           "revision_n": 9000},
+          {"event": "new_year", "time": 731.0, "year": 2026,
+           "stock_sd_log_w": 0.24, "stock_w_p90p10": 2.45, "stock_w_p50": 1.08,
+           "stock_w_p10": 0.71, "stock_w_p90": 1.74,
+           "revision_g_mean": 0.033, "revision_g_p10": 0.021,
+           "revision_g_p90": 0.048, "revision_share_zero": 0.03,
+           "revision_n": 9100}]
+    tr = pd.DataFrame({"u_R": [0.7], "u_R_occ": [0.7], "w_neg": [1.0],
+                       "w_occ": [1.0], "w_field": [1.0], "wage_ratio": [1.0],
+                       "in_cps_sample": [True], "occ_change": [True],
+                       "is_mgmt": [False], "r_req": [0.3], "q_hire": [0.9],
+                       "commute_km": [5.0], "n_applicants": [3.0]})
+    ts = pd.DataFrame({"year": [1.0], "month": [1], "vacancies": [10],
+                       "employed": [90], "unemployed": [10],
+                       "labour_force": [100], "active_jobs": [100],
+                       "posted": [0], "not_in_labour_force": [0],
+                       "u": [10.0], "v": [10.0], "tightness": [1.0],
+                       "identity_residual": [0]})
+    row = summary_row("/tmp/x", events=ev, tr=tr, ts=ts)
+
+    # Beståndet: sista årets tvärsnitt, inte medelvärdet
+    assert row["stock_sd_log_w"] == pytest.approx(0.24)
+    assert row["stock_w_p90p10"] == pytest.approx(2.45)
+    # Revisionen: medel över åren, eftersom varje år är en dragning
+    assert row["revision_g_mean"] == pytest.approx(0.032)
+    assert row["revision_share_zero"] == pytest.approx(0.025)
+
+
+def test_matched_workers_get_a_wage_and_a_revision_baseline():
+    """REGRESSION: förmatchningen satte status och job_id men ingen lön, och
+    individtabellen saknade w_neg som kolumn helt. Vakten
+    'if "w_neg" in individuals.columns' var därför falsk vid varje anställning,
+    beståndets tvärsnitt föll ut på sin första vakt, och lönerevisionen kördes
+    aldrig en enda gång under fem hela körningar."""
+    import numpy as np, pandas as pd
+    from conftest import make_world
+
+    w = make_world(n_employers=2, size=4)
+    w.individuals = pd.DataFrame({
+        "individual_id": [0.0, 1.0], "status": ["unemployed"] * 2,
+        "job_id": pd.Series([None, None], dtype="object"),
+        "w_res": [0.5, 0.5]})
+    jid = w.jobs["job_id"].iloc[:2].tolist()
+    w.jobs.loc[w.jobs.index[:2], "wage"] = [0.80, 1.30]
+    m = pd.DataFrame({"individual_id": [0.0, 1.0], "job_id": jid})
+    w.update_after_matching(matchings=m)
+
+    assert "w_neg" in w.individuals.columns, "kolumnen ska skapas vid matchning"
+    assert "q_last" in w.individuals.columns
+    assert w.individuals["w_neg"].tolist() == pytest.approx([0.80, 1.30])
+    assert (w.individuals["status"] == "employed").all()

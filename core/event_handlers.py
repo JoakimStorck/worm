@@ -843,7 +843,18 @@ def _wage_stock_stats(world):
     hur mycket som är matchning.
     """
     ind = world.individuals
-    if 'w_neg' not in ind.columns or 'status' not in ind.columns:
+    if 'status' not in ind.columns:
+        return {}
+    if 'w_neg' not in ind.columns:
+        # Tom eller minimal ram (tester) är ett legitimt fall. Men finns det
+        # ANSTÄLLDA utan lönekolumn är det ett programmeringsfel som annars
+        # göms: det var precis så beståndsmåttet och lönerevisionen kunde vara
+        # avstängda under fem hela körningar utan att något larmade.
+        if (ind['status'] == 'employed').any():
+            raise KeyError(
+                "individuals har anställda men saknar kolumnen w_neg: "
+                "beståndets tvärsnitt kan inte mätas. Kolumnen skapas i "
+                "World._seed_wages_for_matched och fylls av handle_start_job.")
         return {}
     w = pd.to_numeric(ind.loc[ind['status'] == 'employed', 'w_neg'],
                       errors='coerce').dropna()
@@ -904,7 +915,14 @@ def _apply_wage_revision(world, t_now):
     if not cfg.get('enabled', True):
         return {}
     ind = world.individuals
-    if 'w_neg' not in ind.columns or not hasattr(world, 'circles'):
+    if not hasattr(world, 'circles'):
+        return {}                       # syntetisk värld utan cirklar
+    if 'w_neg' not in ind.columns:
+        if (ind['status'] == 'employed').any():
+            raise KeyError(
+                "individuals har anställda men saknar kolumnen w_neg: "
+                "lönerevisionen kan inte köras. En tyst retur här dolde att "
+                "revisionen aldrig kördes under fem hela körningar.")
         return {}
     mask = (ind['status'] == 'employed') & ind['w_neg'].notna() & ind['job_id'].notna()
     idxs = ind.index[mask]

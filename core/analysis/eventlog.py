@@ -241,6 +241,20 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                 row["p10_q_hire"] = round(float(q.quantile(0.10)), 4)
                 row["share_q_below_0.4"] = round(float((q < 0.40).mean()), 4)
                 row["min_q_hire"] = round(float(q.min()), 4)
+            # BESTÅNDET och REVISIONEN loggas på new_year-raderna, inte i
+            # transitions. Utan detta stannar de i eventlog.csv och når aldrig
+            # tabellerna -- samma väg som n_applicants och theta tappades.
+            ny = [r for r in events if r.get("event") == "new_year"]
+            for f, agg in (("stock_sd_log_w", "last"), ("stock_w_p90p10", "last"),
+                           ("stock_w_p50", "last"), ("stock_w_p10", "last"),
+                           ("stock_w_p90", "last"), ("revision_g_mean", "mean"),
+                           ("revision_g_p10", "mean"), ("revision_g_p90", "mean"),
+                           ("revision_share_zero", "mean"), ("revision_n", "last")):
+                v = [_f(r, f) for r in ny]
+                v = [x for x in v if x is not None and np.isfinite(x)]
+                if v:
+                    row[f] = round(float(v[-1] if agg == "last" else np.mean(v)), 5)
+
             # GLOBAL fördelning: lönenivån över alla yrken, alltså den
             # storhet lönestrukturstatistikens P90/P10 (2.20 för 2025) mäter.
             # Inom yrke är en annan sak och står per kvartil i figurens data.
