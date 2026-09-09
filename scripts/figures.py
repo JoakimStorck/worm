@@ -584,27 +584,34 @@ def fig_commute(run_dirs, out):
         g = tr.groupby(q, observed=True)
         mids = [float((iv.left + iv.right) / 2) for iv in g.groups]
         kmm = g["commute_km"].median().to_numpy()
+        # u_R_occ, inte u_R, och på CPS-urvalet. u_R mäts från INDIVIDENS
+        # position till jobbet; u_R_occ från KÄLLYRKETS centroid till jobbets,
+        # normerat med källans radie. CPS observerar yrkesbyten, alltså
+        # avstånd mellan två yrken, och det är u_R_occ som ska jämföras med
+        # 0.70. Skillnaden är inte kosmetisk: med u_R låg bottenkvartilen på
+        # 1.64 medan den med u_R_occ ligger på 0.79, alltså med de andra --
+        # individen kan ligga långt från jobbet även när yrkena ligger nära.
         cps = tr[tr["in_cps_sample"].fillna(False).astype(bool)]
         uq = pd.qcut(cps["r_req"], 4, duplicates="drop")
-        urm = cps.groupby(uq, observed=True)["u_R"].median().to_numpy()
+        urm = cps.groupby(uq, observed=True)["u_R_occ"].median().to_numpy()
         ax2.plot(mids, kmm, "o-", lw=1.8, color="#1f77b4", label="pendling (km)")
         ax2.set_ylabel("Median pendling (km)", fontsize=9, color="#1f77b4")
         ax2.tick_params(axis="y", labelcolor="#1f77b4")
         ax3 = ax2.twinx()
         n = min(len(mids), len(urm))
         ax3.plot(mids[:n], urm[:n], "s--", lw=1.8, color="#d62728",
-                 label="$u_R$ (task-radier)")
+                 label="$u_R$ mellan yrken (task-radier)")
         ax3.axhline(REF_WITHIN, ls=":", lw=1.2, color="#2ca02c")
         ax3.text(mids[0], REF_WITHIN, " 0,70", fontsize=7, color="#2ca02c",
                  va="bottom")
-        ax3.set_ylabel("Median $u_R$ (task-radier)", fontsize=9, color="#d62728")
+        ax3.set_ylabel("Median $u_R$ mellan yrken", fontsize=9, color="#d62728")
         ax3.tick_params(axis="y", labelcolor="#d62728")
         napp = (tr.groupby(q, observed=True)["n_applicants"].mean().to_numpy()
                 if "n_applicants" in tr.columns and tr["n_applicants"].notna().any()
                 else np.full(len(mids), np.nan))
         rows = [{"r_req_mid": m, "median_commute_km": float(k),
                  "mean_applicants": float(napp[i]) if i < len(napp) else np.nan,
-                 "median_u_R": float(u) if i < len(urm) else np.nan}
+                 "median_u_R_occ": float(u) if i < len(urm) else np.nan}
                 for i, (m, k, u) in enumerate(zip(mids, kmm,
                                                   list(urm) + [np.nan]*len(mids)))]
         h1, l1 = ax2.get_legend_handles_labels()

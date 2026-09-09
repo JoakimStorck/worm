@@ -466,3 +466,31 @@ def test_hot_paths_do_not_scan_the_job_table():
     # Och uppslaget av job_id efter en träff sker på kolumnen, inte på raden
     mc_kod = inspect.getsource(mc.apply_once)
     assert "['job_id'].iat[" in mc_kod
+
+
+def test_locality_is_measured_between_occupations_on_the_cps_sample():
+    """REGRESSION: fig_commute mätte u_R -- avståndet från INDIVIDENS position
+    till jobbet -- på hela transitions. Rapporten mäter u_R_occ, avståndet
+    från KÄLLYRKETS centroid till jobbets, normerat med källans radie, på
+    CPS-urvalet. CPS observerar yrkesbyten, alltså avstånd mellan två yrken,
+    och det är u_R_occ som ska jämföras med 0.70.
+
+    Skillnaden är inte kosmetisk. Med u_R låg bottenkvartilen på 1.64 och gav
+    en U-form som flera tolkningar byggde på; med u_R_occ ligger den på 0.79,
+    alltså med de andra, och kurvan faller i stället monotont i toppen:
+    0.79 / 0.74 / 0.79 / 0.60. Individen kan ligga långt från jobbet även när
+    yrkena ligger nära."""
+    import inspect
+    from scripts import figures as F
+
+    for fn in (F.fig_commute, F.fig_mobility):
+        kod = [ln for ln in inspect.getsource(fn).splitlines()
+               if not ln.lstrip().startswith("#")]
+        text = "".join("\n".join(kod).split('"""')[::2])
+        assert "u_R_occ" in text, f"{fn.__name__} mäter inte mellan yrken"
+        assert '["u_R"]' not in text, f"{fn.__name__} mäter från individen"
+
+    # Och summary_row gör redan rätt: cps-urvalet och u_R_occ
+    src = inspect.getsource(__import__("core.analysis.eventlog",
+                                       fromlist=["summary_row"]).summary_row)
+    assert 'cps["u_R_occ"]' in src
