@@ -196,9 +196,12 @@ def run_and_log_scenario(config_path):
         boot = bootstrap_matching(world, t_now=0.0, log=local_log)
         local_log("Pre-run matching (t=0) completed.")
 
-        # --- 7. Statistik för batch-match ---
+        # --- 7. Statistik för uppstarten ---
+        matchings = boot.pop("matchings")
         match_stats = compute_matching_statistics(matchings)
-        commuting_stats = compute_commuting_statistics(matchings, world.individuals, world.jobs)
+        commuting_stats = compute_commuting_statistics(matchings, world.individuals,
+                                                       world.jobs)
+        match_stats.update(boot)
 
         # --- 8. Spara snapshots och batchresultat ---
         world.individuals.to_csv(os.path.join(outdir, "initial_state_individuals.csv"), index=False)

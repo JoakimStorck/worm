@@ -372,10 +372,24 @@ class World:
                 "wage": float(r["w_rel"]) if pd.notna(r["w_rel"]) else 1.0,
                 "r_req": float(r["r_req"]) if pd.notna(r["r_req"]) else np.nan}
 
-    def _init_events(self):
+    def prepare(self):
+        """Jobbkolumner och kompetenscirklar. Idempotent.
+
+        Låg tidigare bara i _init_events, som körs FÖRST I simulate() -- alltså
+        efter uppstarten. Den gamla batch-matchningen behövde varken active,
+        pending eller cirklar, så ordningen fungerade av en slump. Uppstarten i
+        0069 är samma kod som körningen och behöver allt tre: utan active föll
+        handle_start_job på KeyError vid första tillträdet.
+
+        Vakterna 'if ... not in columns' fanns redan, så den går att anropa två
+        gånger. bootstrap_matching anropar den, och simulate() gör det igen.
+        """
         self._init_job_flows()
         if "onet_code" in self.individuals.columns and not hasattr(self, "circles"):
             self.init_competence()
+
+    def _init_events(self):
+        self.prepare()
         if self._job_flow_cfg()['enabled']:
             self._schedule_destruction(self.jobs.loc[self.jobs['active'], 'job_id'].tolist(),
                                        self.current_time)

@@ -1140,3 +1140,58 @@ def test_bootstrap_actually_hires_and_leaves_no_pending_leak():
     # Var och en som fick jobb bär sin förhandlade lön
     lön = w.individuals.loc[w.individuals["status"] == "employed", "w_neg"]
     assert lön.notna().all() and (lön > 0).all()
+
+
+def test_bootstrap_prepares_the_world_first():
+    """REGRESSION: active, pending och kompetenscirklarna skapades i
+    _init_events, som körs FÖRST I simulate() -- alltså efter uppstarten. Den
+    gamla batch-matchningen behövde inget av det, så ordningen fungerade av en
+    slump. Uppstarten i 0069 är samma kod som körningen och föll på
+    KeyError: 'active' vid första tillträdet."""
+    import inspect
+    from core.matching_core import bootstrap_matching
+    from core.world import World
+
+    assert hasattr(World, "prepare")
+    assert "prepare" in inspect.getsource(bootstrap_matching)
+
+    w = make_world(n_employers=3, size=4)
+    for kol in ("active", "pending", "created_time", "destroyed_time"):
+        if kol in w.jobs.columns:
+            w.jobs = w.jobs.drop(columns=[kol])
+    w.prepare()
+    assert {"active", "pending"} <= set(w.jobs.columns)
+    n_aktiva = int(w.jobs["active"].sum())
+    w.prepare()                                  # idempotent
+    assert int(w.jobs["active"].sum()) == n_aktiva
+
+
+def test_bootstrap_returns_its_matchings_for_the_statistics():
+    """scenario_runner räknar pendlings- och matchningsstatistik på paren från
+    uppstarten. Den gamla batchen returnerade dem; utan att bootstrap gör det
+    faller körningen på NameError efter att uppstarten lyckats."""
+    from core.matching_core import bootstrap_matching
+
+    w = make_world(n_employers=20, size=5,
+                   simulation={"application_window_days": 40})
+    n = 120
+    w.individuals = pd.DataFrame({
+        "individual_id": np.arange(n, dtype=float),
+        "status": ["unemployed"] * n,
+        "job_id": pd.Series([None] * n, dtype="object"),
+        "w_res": 0.3, "x_occ": np.linspace(-0.4, 0.4, n),
+        "y_occ": np.linspace(0.4, -0.4, n), "r_i": 0.0, "x": 0.0, "y": 0.0,
+        "propensity_start_education": 0.1,
+        "propensity_internal_training": 0.1, "propensity_quit_job": 0.1,
+        "propensity_career_break": 0.05,
+        "propensity_internal_job_change": 0.1,
+        "w_neg": np.nan, "q_last": np.nan}, index=range(n))
+    w.jobs["r_req"] = 0.0
+    w.jobs["wage"] = 1.0
+
+    st = bootstrap_matching(w, 0.0, log=None)
+    m = st["matchings"]
+    assert list(m.columns) == ["individual_id", "job_id", "utility"]
+    assert len(m) == int((w.individuals["status"] == "employed").sum())
+    assert len(m) == st["bootstrap_hired"]
+    assert m["job_id"].is_unique, "samma position tilldelad två gånger"

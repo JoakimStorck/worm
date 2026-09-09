@@ -155,6 +155,12 @@ def bootstrap_matching(world, t_now=0.0, log=print):
     per_vak = float(sim.get('bootstrap_applicants_per_vacancy', 2.4))
     max_omg = int(sim.get('bootstrap_max_rounds', 40))
 
+    # Jobbkolumnerna och cirklarna måste finnas: uppstarten är samma kod som
+    # körningen och behöver active, pending och competitiveness. Anropet är
+    # idempotent och görs om i simulate().
+    if hasattr(world, 'prepare'):
+        world.prepare()
+
     ind = world.individuals
     if 'status' not in ind.columns:
         return {}
@@ -166,6 +172,7 @@ def bootstrap_matching(world, t_now=0.0, log=print):
     n_start = len(kö)
 
     totalt, omgångar, per_omgång = 0, 0, []
+    par = []
     while kö and omgångar < max_omg:
         n_vak = int(world.vacant_mask().sum())
         if n_vak == 0:
@@ -174,7 +181,17 @@ def bootstrap_matching(world, t_now=0.0, log=print):
         omgång, kö = kö[:n], kö[n:]
         for i in omgång:
             apply_once(world, i, t_now)
+        före = dict(zip(ind.index, ind['job_id']))
         fyllda = close_all_windows(world, t_now, immediate=True)
+        for i in omgång:
+            j = ind.at[i, 'job_id']
+            if j is not None and str(j) != 'nan' and före.get(i) != j:
+                par.append({"individual_id": ind.at[i, 'individual_id']
+                            if 'individual_id' in ind.columns else i,
+                            "job_id": j,
+                            "utility": float(ind.at[i, 'w_neg'])
+                            if 'w_neg' in ind.columns
+                            and ind.at[i, 'w_neg'] == ind.at[i, 'w_neg'] else 0.0})
         omgångar += 1
         totalt += fyllda
         per_omgång.append(fyllda)
@@ -183,7 +200,10 @@ def bootstrap_matching(world, t_now=0.0, log=print):
         if fyllda == 0 and omgångar > 2 and sum(per_omgång[-3:]) == 0:
             break                      # inget rör sig längre
 
-    st = {"bootstrap_rounds": omgångar, "bootstrap_hired": totalt,
+    import pandas as pd
+    st = {"matchings": pd.DataFrame(par, columns=["individual_id", "job_id",
+                                                  "utility"]),
+          "bootstrap_rounds": omgångar, "bootstrap_hired": totalt,
           "bootstrap_labour_force": n_start,
           "bootstrap_share_hired": round(totalt / max(n_start, 1), 4),
           "bootstrap_per_round": per_omgång}
