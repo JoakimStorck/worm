@@ -772,24 +772,35 @@ class _RevWorld:
         return np.array([self._q_now[int(i)]])
 
 
-def test_revision_pays_growth_in_fit_around_the_mark():
-    """Ökningen ges i PROCENT av befintlig lön, med prestation som spridning
-    kring märket. Vägberoendet är vad som skapar lönespridning över en
-    karriär: två med samma q kan tjäna olika för att de haft olika utfall."""
+def test_revision_is_two_sided_around_the_mark():
+    """REGRESSION: d mättes mot NOLL, men q växer för nästan alla varje år, så
+    påslaget hamnade alltid över märket -- medel 3.9 procent mot märkets 2.5,
+    revision_share_zero exakt noll -- och hela beståndet drev uppåt medan Pi
+    stod still: 58 procent över Pi i stället för 50, alltså en drift och inte
+    en jämvikt.
+
+    I en verklig lönerevision jämförs du med dina KOLLEGOR. Med d centrerad på
+    populationens medeltillväxt blir medelpåslaget exakt märket och
+    fördelningen tvåsidig omkring det."""
     from core.event_handlers import _apply_wage_revision
 
-    w = _RevWorld(q_last=[1.0, 1.0], q_now=[np.exp(0.20), 1.0])
-    st = _apply_wage_revision(w, 366.0)
+    # Två som växer lika mycket: båda får exakt märket, alltså oförändrad
+    # REAL lön. Med d mot noll hade båda fått mer.
+    w = _RevWorld(q_last=[1.0, 1.0], q_now=[np.exp(0.20), np.exp(0.20)])
+    _apply_wage_revision(w, 366.0)
+    assert w.individuals["w_neg"].tolist() == pytest.approx([1.0, 1.0])
 
-    # Den som stått stilla får exakt märket, alltså oförändrad REAL lön
-    assert w.individuals.at[1, "w_neg"] == pytest.approx(1.0)
-    # Den som växt 0.20 i log q får g = 0.025 + 0.10*0.20 = 0.045, alltså
-    # två procentenheter över märket, vilket realt är 1.045/1.025
-    assert w.individuals.at[0, "w_neg"] == pytest.approx(1.045 / 1.025, rel=1e-9)
-    assert w.individuals.at[0, "w_neg"] > w.individuals.at[1, "w_neg"]
+    # En över och en under snittet: symmetriskt kring märket
+    w = _RevWorld(q_last=[1.0, 1.0], q_now=[np.exp(0.30), np.exp(0.10)])
+    st = _apply_wage_revision(w, 366.0)
+    över, under = w.individuals.at[0, "w_neg"], w.individuals.at[1, "w_neg"]
+    assert över > 1.0 > under, "fördelningen är inte tvåsidig"
+    assert över * under == pytest.approx(1.0, rel=2e-3)   # symmetrisk i log
+    assert st["revision_d_bar"] == pytest.approx(0.20)
+    assert st["revision_share_below_mark"] == pytest.approx(0.5)
     assert st["revision_n"] == 2
     # q_last flyttas fram, annars belönas samma tillväxt varje år
-    assert w.individuals.at[0, "q_last"] == pytest.approx(np.exp(0.20))
+    assert w.individuals.at[0, "q_last"] == pytest.approx(np.exp(0.30))
 
 
 def test_revision_never_cuts_the_nominal_wage():
@@ -797,17 +808,19 @@ def test_revision_never_cuts_the_nominal_wage():
     får mindre än märket: nominell stelhet, real flexibilitet."""
     from core.event_handlers import _apply_wage_revision
 
-    # Kraftig nedgång i q: nominellt påslag avkortas vid noll
-    w = _RevWorld(q_last=[1.0], q_now=[np.exp(-3.0)], markup=0.025, beta_q=0.10)
+    # Kraftig nedgång relativt kollegorna: påslaget avkortas vid noll
+    w = _RevWorld(q_last=[1.0, 1.0], q_now=[np.exp(-3.0), np.exp(0.0)],
+                  markup=0.025, beta_q=0.10)
     st = _apply_wage_revision(w, 366.0)
-    assert w.individuals.at[0, "w_neg"] == pytest.approx(1.0 / 1.025)  # real sänkning
-    assert w.individuals.at[0, "w_neg"] < 1.0
-    assert st["revision_share_zero"] == pytest.approx(1.0)
+    assert w.individuals.at[0, "w_neg"] == pytest.approx(1.0 / 1.025)
+    assert w.individuals.at[0, "w_neg"] < 1.0          # real sänkning
+    assert st["revision_share_zero"] == pytest.approx(0.5)
 
     # Måttlig nedgång ger positivt men litet påslag, inte noll
-    w2 = _RevWorld(q_last=[1.0], q_now=[np.exp(-0.10)])
+    w2 = _RevWorld(q_last=[1.0, 1.0], q_now=[np.exp(-0.10), 1.0])
     _apply_wage_revision(w2, 366.0)
     assert w2.individuals.at[0, "w_neg"] < 1.0
+    assert w2.individuals.at[0, "w_neg"] > 0.9
 
 
 def test_revision_can_be_switched_off():
@@ -815,7 +828,7 @@ def test_revision_can_be_switched_off():
     mekanismen, så de två effekterna kan prövas var för sig."""
     from core.event_handlers import _apply_wage_revision
 
-    w = _RevWorld(q_last=[1.0], q_now=[np.exp(0.5)], beta_q=0.0)
+    w = _RevWorld(q_last=[1.0, 1.0], q_now=[np.exp(0.5), 1.0], beta_q=0.0)
     _apply_wage_revision(w, 366.0)
     assert w.individuals.at[0, "w_neg"] == pytest.approx(1.0)
 

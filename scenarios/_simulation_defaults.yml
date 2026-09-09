@@ -93,7 +93,7 @@ simulation:
   wage_revision:
     enabled: true
     markup: 0.025           # märket, ungefär industrins norm
-    beta_q: 0.10            # hur mycket tillväxt i q betalar sig
+    beta_q: 0.10            # hur mycket tillväxt i q RELATIVT KOLLEGORNA betalar sig
 
   bargaining:
     enabled: true

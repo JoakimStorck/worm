@@ -912,25 +912,52 @@ def _apply_wage_revision(world, t_now):
     jy = jobs['y_occ'].to_numpy(dtype=float)
     jr = jobs['r_o'].to_numpy(dtype=float)
 
-    gs = []
-    for i in idxs:
+    # TVÅ PASS. Först tillväxten i konkurrenskraft för alla, sedan påslaget
+    # relativt POPULATIONENS medeltillväxt.
+    #
+    # Med d mätt mot noll blev revisionen ensidig: q växer för nästan alla
+    # varje år, så påslaget hamnade alltid över märket -- medel 3.9 procent
+    # mot märkets 2.5, revision_share_zero exakt noll -- och hela beståndet
+    # drev uppåt medan Pi stod still. Andelen över Pi blev 58 procent i
+    # stället för 50, alltså en drift och inte en jämvikt.
+    #
+    # I en verklig lönerevision jämförs du med dina KOLLEGOR, inte med dig
+    # själv i fjol. Med d centrerad blir medelpåslaget exakt märket,
+    # fördelningen tvåsidig omkring det, och den reala lönenivån stationär.
+    # Den som växer mindre än genomsnittet får mindre än märket och faller
+    # realt -- nominell stelhet, real flexibilitet -- men avkortningen vid
+    # noll gör nollutfall sällsynta.
+    idxs = list(idxs)
+    ds = np.zeros(len(idxs))
+    qs = np.zeros(len(idxs))
+    giltig = np.zeros(len(idxs), dtype=bool)
+    for k, i in enumerate(idxs):
         pos = pos_of.get(ind.at[i, 'job_id'])
         if pos is None:
             continue
         q_now = float(world.circles.competitiveness(
             i, jx[pos:pos + 1], jy[pos:pos + 1], jr[pos:pos + 1], cp)[0])
-        q_prev = ind.at[i, 'q_last'] if 'q_last' in ind.columns else np.nan
+        qs[k] = q_now
+        giltig[k] = True
         try:
-            q_prev = float(q_prev)
+            q_prev = float(ind.at[i, 'q_last'])
         except (TypeError, ValueError):
             q_prev = np.nan
-        d = 0.0
         if np.isfinite(q_prev) and q_prev > 0 and q_now > 0:
-            d = float(np.log(q_now / q_prev))
-        g = max(0.0, markup + beta_q * d)          # ingen nominell sänkning
+            ds[k] = float(np.log(q_now / q_prev))
+
+    if not giltig.any():
+        return {}
+    d_bar = float(ds[giltig].mean())
+
+    gs = []
+    for k, i in enumerate(idxs):
+        if not giltig[k]:
+            continue
+        g = max(0.0, markup + beta_q * (ds[k] - d_bar))
         ind.at[i, 'w_neg'] = float(ind.at[i, 'w_neg']) * (1.0 + g) / (1.0 + markup)
-        if q_now > 0:
-            ind.at[i, 'q_last'] = q_now
+        if qs[k] > 0:
+            ind.at[i, 'q_last'] = qs[k]
         gs.append(g)
 
     if not gs:
@@ -942,6 +969,8 @@ def _apply_wage_revision(world, t_now):
         "revision_g_p10": round(float(np.quantile(g, 0.10)), 5),
         "revision_g_p90": round(float(np.quantile(g, 0.90)), 5),
         "revision_share_zero": round(float((g <= 1e-12).mean()), 4),
+        "revision_share_below_mark": round(float((g < markup - 1e-12).mean()), 4),
+        "revision_d_bar": round(d_bar, 5),
     }
 
 
