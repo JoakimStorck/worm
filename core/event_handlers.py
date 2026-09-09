@@ -225,6 +225,14 @@ def handle_start_job(event, world):
         individuals.at[idx, 'w_res'] = w_eff
         if 'w_neg' in individuals.columns:
             individuals.at[idx, 'w_neg'] = w_eff
+        # Utgångspunkt för nästa revision: revisionen belönar TILLVÄXT i
+        # konkurrenskraft sedan förra gången, inte nivån.
+        q_par0 = event['params'].get('q_hire')
+        try:
+            if q_par0 is not None and float(q_par0) > 0:
+                individuals.at[idx, 'q_last'] = float(q_par0)
+        except (TypeError, ValueError):
+            pass
         extra['w_field'] = round(w_field, 4)
         extra['w_neg'] = round(w_eff, 4)
         # YRKETS fältlön, utan arbetsgivareffekten. w_field är JOBBETS lön,
@@ -856,6 +864,95 @@ def _wage_stock_stats(world):
     }
 
 
+def _apply_wage_revision(world, t_now):
+    """Årlig lönerevision: procentuell ökning på befintlig lön.
+
+    VÄGBEROENDE, INTE NIVÅBESTÄMD. Alternativet vore att räkna om lönen ur
+    w = Pi_j * p**theta med aktuellt q, alltså dra den mot en nivå oavsett var
+    den varit. Svensk lönebildning fungerar inte så: ökningar ges i procent av
+    befintlig lön, och prestation belönas som SPRIDNING KRING MÄRKET. Två
+    personer med samma q kan därför tjäna olika för att de haft olika
+    revisionsutfall, och det vägberoendet är vad som skapar spridning över en
+    karriär:
+
+        log w(t+1) = log w(t) + log(1 + g)
+
+    Summan av många små multiplikativa påslag är approximativt normal, så
+    beståndet blir lognormalt av en ANDRA oberoende orsak utöver den som redan
+    finns i q:s produktstruktur.
+
+    DEN INDIVIDUELLA DELEN hämtas ur något modellen redan vet -- hur mycket
+    konkurrenskraften vuxit sedan förra revisionen -- och inte ur en fri
+    slumpterm. Den som utvecklas i sitt jobb får mer.
+
+    MÄRKET FALLER UT UR ALLA KVOTER. Räknas både löner och Pi upp med märket
+    mäts allt realt relativt normen, och märket behöver ingen indexering av
+    Pi: w * (1+g)/(1+märke). Men det spelar ändå roll, genom avkortningen.
+    Nominella löner sänks inte i Sverige, alltså g >= 0 -- och eftersom märket
+    ligger över noll blir nollutfall ovanliga utan att vara omöjliga, precis
+    som i verkligheten. Realt kan lönen däremot falla, för den som får mindre
+    än märket. Nominell stelhet, real flexibilitet.
+
+    Anropas FRÅN handle_new_year, efter beståndets tvärsnitt. Ordningen är
+    därmed explicit i koden: en egen händelsetyp i kön skulle konkurrera med
+    snapshot om ordningen inom samma tidpunkt, och då vore det oklart om
+    beståndet mäts före eller efter revisionen. Före är det som gör revisionen
+    till en observerbar hoppfunktion mellan två tvärsnitt.
+    """
+    cfg = (world.cfg_reader.config.get('simulation', {})
+           .get('wage_revision', {}) or {})
+    if not cfg.get('enabled', True):
+        return {}
+    ind = world.individuals
+    if 'w_neg' not in ind.columns or not hasattr(world, 'circles'):
+        return {}
+    mask = (ind['status'] == 'employed') & ind['w_neg'].notna() & ind['job_id'].notna()
+    idxs = ind.index[mask]
+    if not len(idxs):
+        return {}
+
+    markup = float(cfg.get('markup', 0.025))
+    beta_q = float(cfg.get('beta_q', 0.10))
+    pos_of = world.job_index()
+    jobs = world.jobs
+    cp = world.competence_params()
+    jx = jobs['x_occ'].to_numpy(dtype=float)
+    jy = jobs['y_occ'].to_numpy(dtype=float)
+    jr = jobs['r_o'].to_numpy(dtype=float)
+
+    gs = []
+    for i in idxs:
+        pos = pos_of.get(ind.at[i, 'job_id'])
+        if pos is None:
+            continue
+        q_now = float(world.circles.competitiveness(
+            i, jx[pos:pos + 1], jy[pos:pos + 1], jr[pos:pos + 1], cp)[0])
+        q_prev = ind.at[i, 'q_last'] if 'q_last' in ind.columns else np.nan
+        try:
+            q_prev = float(q_prev)
+        except (TypeError, ValueError):
+            q_prev = np.nan
+        d = 0.0
+        if np.isfinite(q_prev) and q_prev > 0 and q_now > 0:
+            d = float(np.log(q_now / q_prev))
+        g = max(0.0, markup + beta_q * d)          # ingen nominell sänkning
+        ind.at[i, 'w_neg'] = float(ind.at[i, 'w_neg']) * (1.0 + g) / (1.0 + markup)
+        if q_now > 0:
+            ind.at[i, 'q_last'] = q_now
+        gs.append(g)
+
+    if not gs:
+        return {}
+    g = np.asarray(gs, dtype=float)
+    return {
+        "revision_n": int(g.size),
+        "revision_g_mean": round(float(g.mean()), 5),
+        "revision_g_p10": round(float(np.quantile(g, 0.10)), 5),
+        "revision_g_p90": round(float(np.quantile(g, 0.90)), 5),
+        "revision_share_zero": round(float((g <= 1e-12).mean()), 4),
+    }
+
+
 def handle_new_year(event, world):
     from core.statistics.basic_stats import analyze_world
     year = event['params'].get('year')
@@ -872,7 +969,8 @@ def handle_new_year(event, world):
         "not_in_labour_force": not_in_labour_force,
         "active_jobs": stats['total_jobs'],
     }
-    extra.update(_wage_stock_stats(world))
+    extra.update(_wage_stock_stats(world))          # FÖRE revisionen
+    extra.update(_apply_wage_revision(world, float(event['time'])))
     world.event_logger.log_event(world, event, extra=extra, print_line=True)
 
 RULE_SWITCH = {

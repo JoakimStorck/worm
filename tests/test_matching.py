@@ -740,3 +740,91 @@ def test_employer_wage_effect_actually_reaches_the_jobs():
     små = eta_size * np.log(max(3.0, 1.0) / 10.0)
     stora = eta_size * np.log(max(300.0, 1.0) / 10.0)
     assert små < 0 < stora
+
+
+# ---------------------------------------------------------------------------
+# Årlig lönerevision (0067)
+# ---------------------------------------------------------------------------
+
+class _RevWorld:
+    """Minimal värld: två anställda på samma jobb, en som växt i q och en som
+    stått stilla."""
+    def __init__(self, q_last, q_now, markup=0.025, beta_q=0.10, enabled=True):
+        import pandas as pd, numpy as np
+        from core.occupations.competence import CompetenceParams
+
+        class R:
+            config = {"simulation": {"wage_revision": {
+                "enabled": enabled, "markup": markup, "beta_q": beta_q}}}
+        self.cfg_reader = R()
+        n = len(q_last)
+        self.individuals = pd.DataFrame({
+            "status": ["employed"] * n, "job_id": ["J0"] * n,
+            "w_neg": [1.0] * n, "q_last": list(q_last)})
+        self.jobs = pd.DataFrame({"job_id": ["J0"], "x_occ": [0.3],
+                                  "y_occ": [0.1], "r_o": [0.27]})
+        self._q_now = list(q_now)
+        self.circles = self
+        self._cp = CompetenceParams()
+
+    def competence_params(self):
+        return self._cp
+
+    def job_index(self):
+        return {"J0": 0}
+
+    def competitiveness(self, i, jx, jy, jro, p):
+        import numpy as np
+        return np.array([self._q_now[int(i)]])
+
+
+def test_revision_pays_growth_in_fit_around_the_mark():
+    """Ökningen ges i PROCENT av befintlig lön, med prestation som spridning
+    kring märket. Vägberoendet är vad som skapar lönespridning över en
+    karriär: två med samma q kan tjäna olika för att de haft olika utfall."""
+    from core.event_handlers import _apply_wage_revision
+
+    w = _RevWorld(q_last=[1.0, 1.0], q_now=[np.exp(0.20), 1.0])
+    st = _apply_wage_revision(w, 366.0)
+
+    # Den som stått stilla får exakt märket, alltså oförändrad REAL lön
+    assert w.individuals.at[1, "w_neg"] == pytest.approx(1.0)
+    # Den som växt 0.20 i log q får g = 0.025 + 0.10*0.20 = 0.045, alltså
+    # två procentenheter över märket, vilket realt är 1.045/1.025
+    assert w.individuals.at[0, "w_neg"] == pytest.approx(1.045 / 1.025, rel=1e-9)
+    assert w.individuals.at[0, "w_neg"] > w.individuals.at[1, "w_neg"]
+    assert st["revision_n"] == 2
+    # q_last flyttas fram, annars belönas samma tillväxt varje år
+    assert w.individuals.at[0, "q_last"] == pytest.approx(np.exp(0.20))
+
+
+def test_revision_never_cuts_the_nominal_wage():
+    """Nominella löner sänks inte i Sverige. Realt kan de falla, för den som
+    får mindre än märket: nominell stelhet, real flexibilitet."""
+    from core.event_handlers import _apply_wage_revision
+
+    # Kraftig nedgång i q: nominellt påslag avkortas vid noll
+    w = _RevWorld(q_last=[1.0], q_now=[np.exp(-3.0)], markup=0.025, beta_q=0.10)
+    st = _apply_wage_revision(w, 366.0)
+    assert w.individuals.at[0, "w_neg"] == pytest.approx(1.0 / 1.025)  # real sänkning
+    assert w.individuals.at[0, "w_neg"] < 1.0
+    assert st["revision_share_zero"] == pytest.approx(1.0)
+
+    # Måttlig nedgång ger positivt men litet påslag, inte noll
+    w2 = _RevWorld(q_last=[1.0], q_now=[np.exp(-0.10)])
+    _apply_wage_revision(w2, 366.0)
+    assert w2.individuals.at[0, "w_neg"] < 1.0
+
+
+def test_revision_can_be_switched_off():
+    """beta_q = 0 stänger av den individuella delen, enabled = false hela
+    mekanismen, så de två effekterna kan prövas var för sig."""
+    from core.event_handlers import _apply_wage_revision
+
+    w = _RevWorld(q_last=[1.0], q_now=[np.exp(0.5)], beta_q=0.0)
+    _apply_wage_revision(w, 366.0)
+    assert w.individuals.at[0, "w_neg"] == pytest.approx(1.0)
+
+    w2 = _RevWorld(q_last=[1.0], q_now=[np.exp(0.5)], enabled=False)
+    assert _apply_wage_revision(w2, 366.0) == {}
+    assert w2.individuals.at[0, "w_neg"] == pytest.approx(1.0)
