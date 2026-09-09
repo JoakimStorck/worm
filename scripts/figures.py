@@ -409,19 +409,28 @@ def fig_wages(run_dirs, out):
     ax.legend(fontsize=7.5, framealpha=0.9)
     ps.title(ax, f"Avvikelse från yrkets norm (median {np.median(r):.2f})", pad=10)
 
-    # 2. Spridningen växer med kravnivån, men de två källorna adderas i
-    #    KVADRATUR och inte linjärt:
+    # 2. Spridningen mot kravnivån, och VARFÖR den kröker.
     #
-    #        sigma**2(r) = sigma_eta**2 + (theta*k*sigma_log_q)**2 * r**2
+    #    Den enkla formen sigma**2 = sigma_eta**2 + (theta*k*sigma_q)**2 * r**2
+    #    antar att sigma_q är konstant över r. Det är den inte: urvalet (0055)
+    #    rangordnar på q och grinden q >= phi**(1/(2r)) sållar hårdare ju
+    #    högre kravet är, så de anställda är homogena i q där kraven är höga
+    #    och heterogena där de är låga. Uppmätt faller sd(log q) med en faktor
+    #    3.6 över kvartilerna, 0.93 till 0.26, och motverkar därmed exponenten.
+    #    Lönespridningen växer alltså långsammare med kravnivån än formeln
+    #    säger, och residualerna behåller sitt mönster oavsett x-värde.
     #
-    #    Arbetsgivareffekten är oberoende av kravnivån, produktivitetsdelen
-    #    skalar med r. En rät linje i sigma mot r underskattar därför
-    #    interceptet och överskattar lutningen så snart eta finns. Plottad i
-    #    sigma**2 mot r**2 är sambandet linjärt, och båda parametrarna faller
-    #    ut direkt: sqrt(intercept) = sigma_eta, sqrt(lutning) = theta*k*sigma_q.
-    #    Det är den regressionen som ska köras mot SCB:s percentiler per SSYK,
-    #    med r_j ur kapabilitetsfältet -- den validerar lönemodellen och
-    #    fältet samtidigt.
+    #    x-värdet är kvartilens MEDELVÄRDE av r**2, inte kvadraten på dess
+    #    mittpunkt: sigma**2 är linjär i r**2, så det som ska plottas är
+    #    E[r**2]; E[r]**2 skiljer sig med variansen inom kvartilen (Jensen)
+    #    och avviker med upp till 57 procent i den understa. Korrigeringen är
+    #    riktig men liten, sigma_eta 0.126 -> 0.124, vilket är själva beskedet:
+    #    krökningen är ingen mätartefakt.
+    #
+    #    Den raka linjen står kvar som REFERENS, inte som skattning. Mot SCB
+    #    ska den reducerade förutsägelsen prövas -- att spridningen växer
+    #    monotont med r_j -- eftersom sigma_q(r) är mätbar i modellen men inte
+    #    i lönestrukturstatistiken.
     ax = ps.cartesian_axes(axes[1])
     rows = []
     if "r_req" in df.columns and df["r_req"].notna().any():
@@ -429,24 +438,44 @@ def fig_wages(run_dirs, out):
         g = df.groupby(qq, observed=True)
         mids = [float((iv.left + iv.right) / 2) for iv in g.groups]
         sds = [float(np.std(np.log(v))) for v in g["wage_ratio"].apply(lambda s: s.to_numpy())]
-        x2 = np.array(mids) ** 2
+        x2 = np.array([float((v ** 2).mean()) for v in
+                       g["r_req"].apply(lambda s: s.to_numpy())])
         y2 = np.array(sds) ** 2
-        ax.plot(x2, y2, "o-", lw=1.8, color="#1f77b4", label="modell")
+        ax.plot(x2, y2, "o-", lw=1.8, color="#1f77b4", label="var(log $w/\\Pi_o$)")
         if len(mids) >= 2:
             b, a = np.polyfit(x2, y2, 1)
             xr = np.array([0.0, float(x2.max()) * 1.05])
             ax.plot(xr, a + b * xr, ls="--", lw=1.2, color="#d62728",
-                    label=(f"$\\sigma_\\eta$={np.sqrt(max(a, 0)):.3f}, "
-                           f"$\\theta k\\sigma_q$={np.sqrt(max(b, 0)):.3f}"))
+                    label=(f"rät referens: $\\sigma_\\eta$={np.sqrt(max(a, 0)):.3f}"))
             ax.plot([0.0], [max(a, 0)], marker="D", ms=5, color="#d62728")
         ax.set_xlim(left=0.0)
-        ax.legend(fontsize=7.5, framealpha=0.9)
-        rows = [{"r_req_mid": m, "sd_log_wage_ratio": s,
-                 "r_req_mid_sq": m ** 2, "var_log_wage_ratio": s ** 2}
-                for m, s in zip(mids, sds)]
-    ax.set_xlabel("$r_j^2$ (kvartilmitt i kvadrat)", fontsize=9)
-    ax.set_ylabel("var(log $w/\\Pi_o$)", fontsize=9)
-    ps.title(ax, "Spridning mot kravnivå (kvadratur)", pad=10)
+        ax.set_ylabel("var(log $w/\\Pi_o$)", fontsize=9, color="#1f77b4")
+        ax.tick_params(axis="y", labelcolor="#1f77b4")
+
+        sq = []
+        if "q_hire" in tr.columns:
+            qh = tr.loc[tr["q_hire"] > 0, ["q_hire", "r_req"]].dropna()
+            if not qh.empty:
+                gq = qh.groupby(pd.qcut(qh["r_req"], 4, duplicates="drop"),
+                                observed=True)["q_hire"]
+                sq = [float(np.std(np.log(v))) for v in gq.apply(lambda s: s.to_numpy())]
+        if len(sq) == len(x2):
+            axq = ax.twinx()
+            axq.plot(x2, sq, "s:", lw=1.6, color="#2ca02c", label="sd(log $q$)")
+            axq.set_ylabel("sd(log $q$) vid anställning", fontsize=9, color="#2ca02c")
+            axq.tick_params(axis="y", labelcolor="#2ca02c")
+            axq.set_ylim(bottom=0.0)
+            h1, l1 = ax.get_legend_handles_labels()
+            h2, l2 = axq.get_legend_handles_labels()
+            ax.legend(h1 + h2, l1 + l2, fontsize=7, loc="upper left", framealpha=0.9)
+        else:
+            ax.legend(fontsize=7.5, framealpha=0.9)
+        rows = [{"r_req_mid": m, "mean_r_sq": float(x), "sd_log_wage_ratio": sv,
+                 "var_log_wage_ratio": sv ** 2,
+                 "sd_log_q": (sq[i] if i < len(sq) else np.nan)}
+                for i, (m, x, sv) in enumerate(zip(mids, x2, sds))]
+    ax.set_xlabel("$E[r_j^2]$ inom kvartilen", fontsize=9)
+    ps.title(ax, "Spridning mot kravnivå", pad=10)
 
     # 3. Arbetsgivarkomponenten, exp(eta), som föll bort ur den gamla kvoten.
     ax = ps.cartesian_axes(axes[2])

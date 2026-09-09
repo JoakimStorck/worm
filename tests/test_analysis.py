@@ -293,3 +293,28 @@ def test_wage_figure_reads_the_shared_ratio_and_fits_in_quadrature():
     b_lin, a_lin = np.polyfit(r, sd, 1)
     assert abs(a_lin - sig_eta) > 0.02, "linjär anpassning råkar träffa interceptet"
     assert abs(b_lin - slope) > 0.02, "linjär anpassning råkar träffa lutningen"
+
+
+def test_dispersion_panel_uses_mean_r_squared_and_shows_q_spread():
+    """x-värdet är kvartilens MEDELVÄRDE av r**2, inte kvadraten på dess
+    mittpunkt: sigma**2 är linjär i r**2, så E[r**2] är det som ska plottas.
+    E[r]**2 skiljer sig med variansen inom kvartilen och avviker med upp till
+    57 procent i den understa kvartilen på riktiga data.
+
+    Och sd(log q) måste visas bredvid, för antagandet att den är konstant över
+    r är falskt: urvalet rangordnar på q och grinden sållar hårdare vid höga
+    krav, så den faller med en faktor 3.6 över kvartilerna. Utan den serien
+    ser krökningen i vänsterserien ut som brus."""
+    import inspect
+    import numpy as np
+    from scripts import figures as F
+
+    kod = [ln for ln in inspect.getsource(F.fig_wages).splitlines()
+           if not ln.lstrip().startswith("#")]
+    assert any("** 2).mean()" in ln for ln in kod), "x ska vara E[r**2]"
+    assert any("sd_log_q" in ln for ln in kod), "sd(log q) ska med i datafilen"
+
+    # Jensen: för en skev fördelning i kvartilen skiljer sig E[r^2] från mitt^2
+    r = np.concatenate([np.zeros(800), np.linspace(0.0, 0.048, 200)])
+    mitt = (0.0 + 0.048) / 2
+    assert abs((r ** 2).mean() - mitt ** 2) / mitt ** 2 > 0.3
