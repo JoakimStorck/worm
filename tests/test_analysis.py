@@ -509,3 +509,49 @@ def test_locality_is_measured_between_occupations_on_the_cps_sample():
     src = inspect.getsource(__import__("core.analysis.eventlog",
                                        fromlist=["summary_row"]).summary_row)
     assert 'cps["u_R_occ"]' in src
+
+
+def test_ladder_and_residual_pool_are_measured():
+    """De tre måtten i lonemodell.md avsnitt 5, som avgör vilken diagnos som
+    dominerar innan något byggs: byten per år och lönevinst per byte skiljer
+    en för snabb stege (kappa = lambda_1/delta ~ 26 mot empiriska 2-5) från en
+    felförankrad Pi; restpoolens sammansättning visar undanträngningen; och
+    vakansernas ålder skiljer en växande stock av samma positioner från ett
+    växande flöde."""
+    from core.analysis.eventlog import transitions_table, summary_row
+    import pandas as pd, numpy as np
+
+    bas = dict(event="start_job", from_onet="53-7062.00", to_onet="35-9021.00",
+               u_R=0.7, u_R_occ=0.7, w_occ=1.0, w_field=1.0, q_hire=0.9,
+               r_req=0.3, occ_change=1, is_mgmt=0)
+    ev = [dict(bas, time=100.0, agent_id=1, job_id="J1", w_neg=1.10,
+               w_prev=1.00, job_to_job=True, vacancy_age_days=40.0),
+          dict(bas, time=200.0, agent_id=2, job_id="J2", w_neg=1.00,
+               job_to_job=False, vacancy_age_days=80.0),
+          {"event": "close_vacancy", "event_detail": "match_completed",
+           "time": 100.0, "job_id": "J1", "winner_employed": True,
+           "q_median_employed": 1.10, "q_median_unemployed": 0.60},
+          {"event": "close_vacancy", "event_detail": "match_completed",
+           "time": 200.0, "job_id": "J2", "winner_employed": False,
+           "q_median_employed": 1.05, "q_median_unemployed": 0.55}]
+    tr = transitions_table(ev)
+    assert tr["job_to_job"].tolist() == [True, False]
+    assert tr["vacancy_age_days"].tolist() == pytest.approx([40.0, 80.0])
+
+    ts = pd.DataFrame({"year": [1.0], "month": [1], "vacancies": [10],
+                       "employed": [100], "unemployed": [10],
+                       "labour_force": [110], "active_jobs": [110],
+                       "posted": [0], "not_in_labour_force": [0],
+                       "u": [9.0], "v": [9.0], "tightness": [1.0],
+                       "identity_residual": [0]})
+    row = summary_row("/tmp/x", events=ev, tr=tr, ts=ts)
+
+    assert row["n_job_to_job"] == 1
+    assert row["job_to_job_rate"] == pytest.approx(1 / 1.0 / 100, abs=1e-4)
+    assert row["job_to_job_wage_gain"] == pytest.approx(1.10)
+    # Restpoolen: hälften av tillsättningarna gick till anställda, och deras
+    # q ligger högt över de arbetslösas
+    assert row["share_hires_from_employment"] == pytest.approx(0.5)
+    assert row["q_applicants_employed"] > row["q_applicants_unemployed"]
+    # Vakansåldern kräver mer än tjugo rader för att inte bli brus
+    assert "vacancy_age_median" not in row

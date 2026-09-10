@@ -95,6 +95,9 @@ def transitions_table(events):
             "commute_km": _f(r, "commute_km"),
             "n_applicants": _f(r, "n_applicants"),
             "is_bootstrap": bool(r.get("is_bootstrap", False)),
+            "job_to_job": bool(r.get("job_to_job", False)),
+            "w_prev": _f(r, "w_prev"),
+            "vacancy_age_days": _f(r, "vacancy_age_days"),
             "w_occ": _f(r, "w_occ"),
             "r_req": _f(r, "r_req"),
             "occ_change": bool(int(r.get("occ_change", 1))) if "occ_change" in r else np.nan,
@@ -253,6 +256,42 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                 row["p10_q_hire"] = round(float(q.quantile(0.10)), 4)
                 row["share_q_below_0.4"] = round(float((q < 0.40).mean()), 4)
                 row["min_q_hire"] = round(float(q.min()), 4)
+            # STEGEN. Byten per år som andel av anställda, och lönevinsten per
+            # byte. Med kappa ~ 26 blir bytena många och vinsterna stora; med
+            # empiriska 2-5 få och små. Det är måttet som skiljer en för snabb
+            # stege från en felförankrad Pi.
+            körning = tr[~tr.get("is_bootstrap", False).fillna(False).astype(bool)] \
+                if "is_bootstrap" in tr.columns else tr
+            jtj = körning[körning["job_to_job"].fillna(False).astype(bool)] \
+                if "job_to_job" in körning.columns else körning.iloc[:0]
+            row["n_job_to_job"] = int(len(jtj))
+            _ar = float(row.get("years") or 0.0)
+            if row.get("employed") and _ar > 0:
+                row["job_to_job_rate"] = round(
+                    len(jtj) / _ar / max(float(row["employed"]), 1.0), 4)
+            if len(jtj) and "w_prev" in jtj.columns:
+                g = pd.to_numeric(jtj["w_neg"], errors="coerce") / \
+                    pd.to_numeric(jtj["w_prev"], errors="coerce")
+                g = g.replace([np.inf, -np.inf], np.nan).dropna()
+                if len(g):
+                    row["job_to_job_wage_gain"] = round(float(g.median()), 4)
+            # RESTPOOLEN: vem vinner urvalen
+            mc = [r for r in events if r.get("event_detail") == "match_completed"]
+            if mc:
+                we = [bool(r.get("winner_employed", False)) for r in mc]
+                row["share_hires_from_employment"] = round(float(np.mean(we)), 4)
+                for namn in ("employed", "unemployed"):
+                    v = [_f(r, f"q_median_{namn}") for r in mc]
+                    v = [x for x in v if x is not None and np.isfinite(x)]
+                    if v:
+                        row[f"q_applicants_{namn}"] = round(float(np.median(v)), 4)
+            # VAKANSERNAS ÅLDER vid tillsättning
+            va = pd.to_numeric(körning.get("vacancy_age_days"), errors="coerce").dropna() \
+                if "vacancy_age_days" in körning.columns else pd.Series(dtype=float)
+            if len(va) > 20:
+                row["vacancy_age_median"] = round(float(va.median()), 1)
+                row["vacancy_age_p90"] = round(float(va.quantile(0.90)), 1)
+
             # BESTÅNDET och REVISIONEN loggas på new_year-raderna, inte i
             # transitions. Utan detta stannar de i eventlog.csv och når aldrig
             # tabellerna -- samma väg som n_applicants och theta tappades.

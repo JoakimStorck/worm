@@ -194,6 +194,19 @@ def handle_start_job(event, world):
     jobs.iat[pos, jobs.columns.get_loc('individual_id')] = (
         individuals.at[idx, 'individual_id'] if 'individual_id' in individuals.columns else idx)
 
+    # JOBBYTE eller nyanställning? Den gamla lönen måste fångas innan den
+    # skrivs över: lönevinsten per byte är det som skiljer en för snabb stege
+    # (kappa) från en felförankrad Pi. Med kappa ~ 26 blir bytena många och
+    # vinsterna stora; med rätt kappa få och små.
+    _job_to_job = False
+    _w_prev = np.nan
+    if ('status' in individuals.columns
+            and individuals.at[idx, 'status'] == 'employed'
+            and pd.notna(individuals.at[idx, 'job_id'])
+            and str(individuals.at[idx, 'job_id']) != str(job_id)):
+        _job_to_job = True
+        _w_prev = individuals.at[idx, 'w_neg']
+
     # Den gamla positionen frigörs NU, inte vid erbjudandet: uppsägningstiden
     # har löpt ut. Hon innehar aldrig två positioner samtidigt.
     if 'notice_job_id' in individuals.columns:
@@ -285,6 +298,15 @@ def handle_start_job(event, world):
                 pass
         if event['params'].get('bootstrap'):
             extra['is_bootstrap'] = True
+        extra['job_to_job'] = bool(_job_to_job)
+        if _job_to_job and pd.notna(_w_prev):
+            extra['w_prev'] = round(float(_w_prev), 4)
+        # Vakansens ålder vid tillsättning
+        try:
+            vs = float(jobs.iat[pos, jobs.columns.get_loc('vacant_since')])
+            extra['vacancy_age_days'] = round(float(event['time']) - vs, 1)
+        except (KeyError, TypeError, ValueError):
+            pass
         na = event['params'].get('n_applicants')
         if na is not None:
             extra['n_applicants'] = int(na)
@@ -539,6 +561,22 @@ def handle_close_vacancy(event, world):
 
     lediga = [a for a in apps if _behörig(a['idx'])]
 
+    # RESTPOOLEN. Arbetsgivaren möter inte arbetskraften utan dem som ännu
+    # inte matchats, och hon väljer högst q. En anställd sökande har en mogen
+    # cirkel, en arbetslös en diffunderad -- anställda vinner, och de som
+    # aldrig väljs ackumuleras. Utan detta mått syns undanträngningen bara som
+    # växande arbetslöshet, utan orsak.
+    _anst = [a for a in lediga
+             if ind.at[a['idx'], 'status'] == 'employed'] if lediga else []
+    _arbl = [a for a in lediga
+             if ind.at[a['idx'], 'status'] == 'unemployed'] if lediga else []
+    _pool = {'n_employed_applicants': len(_anst),
+             'n_unemployed_applicants': len(_arbl)}
+    for namn, grp in (('employed', _anst), ('unemployed', _arbl)):
+        qs = [float(a.get('q') or 0.0) for a in grp if a.get('q') is not None]
+        if qs:
+            _pool[f'q_median_{namn}'] = round(float(np.median(qs)), 4)
+
     if gone or not lediga:
         world.event_logger.log_event(world, event, extra={
             'event_detail': 'vacancy_closed_unfilled', 'job_id': job_id,
@@ -583,11 +621,15 @@ def handle_close_vacancy(event, world):
                    "commute_km": win['commute_km'],
                    "n_applicants": len(lediga)},
     })
-    world.event_logger.log_event(world, event, extra={
+    _extra = {
         'event_detail': 'match_completed', 'job_id': job_id,
         'agent_id': idx, 'n_applicants': len(lediga),
         'surplus': round(win['surplus'], 4), 'w_neg': round(win['w_neg'], 4),
-        'q_hire': round(win['q'], 4), 'commute_km': round(win['commute_km'], 3)})
+        'q_hire': round(win['q'], 4), 'commute_km': round(win['commute_km'], 3),
+        'winner_employed': bool(ind.at[idx, 'status'] == 'employed'),
+    }
+    _extra.update(_pool)
+    world.event_logger.log_event(world, event, extra=_extra)
     world.n_matched_in_month = getattr(world, 'n_matched_in_month', 0) + 1
 
     for a in lediga:

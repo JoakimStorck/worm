@@ -184,6 +184,14 @@ class World:
         # anställning i en värld utan föregående batch skulle falla.
         if 'individual_id' in self.jobs.columns and self.jobs['individual_id'].dtype != object:
             self.jobs['individual_id'] = self.jobs['individual_id'].astype(object)
+        if 'vacant_since' not in self.jobs.columns:
+            # När positionen senast blev ledig. created_time säger när jobbet
+            # skapades, vilket är något annat: en position som fyllts och
+            # tömts flera gånger är inte gammal som vakans. Utan detta går
+            # vakansernas ÅLDERSFÖRDELNING inte att mäta, och det är den som
+            # skiljer en växande stock av samma positioner från ett växande
+            # flöde.
+            self.jobs['vacant_since'] = 0.0
         if 'pending' not in self.jobs.columns:
             # Tillsatt men ännu inte tillträtt. Positionen är en öppen vakans i
             # statistiken men får inte sökas av någon annan.
@@ -639,6 +647,9 @@ class World:
             vm = self.vacant_mask()
             if pos < vm.size:
                 vm[pos] = not filled
+            if not filled and 'vacant_since' in self.jobs.columns:
+                self.jobs.iat[pos, self.jobs.columns.get_loc('vacant_since')] = \
+                    float(self.current_time)
         if pos is not None and "pending" in self.jobs.columns:
             # Rensas i båda riktningarna: rekryteringen är avslutad antingen
             # genom tillträde eller genom att positionen frigjorts.
