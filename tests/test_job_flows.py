@@ -1274,3 +1274,31 @@ def test_bootstrap_rebuilds_the_queue_every_round():
     kvar_lediga = int(w.vacant_mask().sum())
     assert kvar_arbetslösa == 0 or kvar_lediga == 0, (
         f"{kvar_arbetslösa} arbetslösa bredvid {kvar_lediga} lediga positioner")
+
+
+def test_run_length_is_read_in_one_place():
+    """REGRESSION: slutdatumet läste config['n_years'] med toppnivån först,
+    medan kalendern bara läste config['simulation']['n_years'] och föll
+    tillbaka på sin egen default fem. Med n_years: 10 på toppnivån -- där det
+    står i scenariofilerna -- körde simuleringen tio år med fem års kalender:
+    sista new_month på dag 1796, sedan simulation_completed vid 3652.50. Under
+    år sex till tio fanns inga månadsskiften, inga årliga tvärsnitt och ingen
+    lönerevision."""
+    from core.world import World
+
+    class R:
+        def __init__(self, cfg):
+            self.config = cfg
+
+    w = make_world(n_employers=2, size=4)
+    for cfg, väntat in (({"n_years": 10}, 10),
+                        ({"simulation": {"n_years": 7}}, 7),
+                        ({"n_years": 10, "simulation": {"n_years": 5}}, 10)):
+        w.cfg_reader = R(cfg)
+        assert w.n_years() == väntat
+        assert w._get_simulation_end_time() == pytest.approx(365.25 * väntat)
+
+    # Saknas den är det ett fel, inte ett värde att gissa
+    w.cfg_reader = R({"simulation": {}})
+    with pytest.raises(KeyError, match="n_years"):
+        w.n_years()

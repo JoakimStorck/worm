@@ -53,15 +53,54 @@ class World:
     def conn(self, value):
         self._conn = value
 
+    def n_years(self):
+        """Körningens längd, läst på ETT ställe.
+
+        Slutdatumet läste toppnivån först medan kalendern bara läste
+        simulation-blocket och föll tillbaka på sin egen default fem. Med
+        n_years: 10 på toppnivån -- där det står i scenariofilerna -- körde
+        simuleringen tio år med fem års kalender: sista new_month låg på dag
+        1796 och sedan hoppade loggen till simulation_completed vid 3652.50.
+        Under år sex till tio fanns inga månadsskiften, inga årsskiften, inga
+        tvärsnitt och INGEN LÖNEREVISION. Halva körningen gick utan sin
+        bokföring, och konvergenskontrollen mätte ingenting.
+
+        Defaulten fem var det som gjorde felet tyst. Saknas parametern helt är
+        det ett fel, inte ett värde att gissa.
+        """
+        cfg = self.cfg_reader.config
+        n = cfg.get('n_years')
+        if n is None:
+            n = cfg.get('simulation', {}).get('n_years')
+        if n is None:
+            raise KeyError("n_years saknas i scenariot: körningens längd kan "
+                           "inte gissas.")
+        return int(n)
+
     def _get_simulation_end_time(self):
-        config = self.cfg_reader.config
-        n_years = config.get('n_years') or config.get('simulation', {}).get('n_years', 1)
-        return DAYS_PER_YEAR * n_years
+        return DAYS_PER_YEAR * self.n_years()
+
+    def _check_calendar_covers_run(self):
+        """Kalendern ska räcka hela vägen. Går den ut i förtid tystnar
+        månadsskiften, årliga tvärsnitt och lönerevisionen medan
+        individhändelserna fortsätter -- och utfallet ser normalt ut."""
+        senaste = max((post[0] for post in getattr(self.event_queue, 'queue', [])
+                       if (post[2] if isinstance(post, tuple) else post)
+                       .get('event_type') in ('new_month', 'new_year')),
+                      default=None)
+        if senaste is None:
+            return
+        if senaste < self.simulation_end_time - 40.0:
+            raise RuntimeError(
+                f"kalendern slutar dag {senaste:.0f} men körningen dag "
+                f"{self.simulation_end_time:.0f}: månadsskiften, tvärsnitt och "
+                "lönerevision skulle saknas i resten av körningen.")
 
     def simulate(self):
         from core.event_handlers import RULE_SWITCH
         self.wallclock_start = time.time()
         self._init_events()
+        self._check_calendar_covers_run()
         while not self.event_queue.is_empty():
             event = self.event_queue.pop()
             if event["time"] > self.simulation_end_time:
@@ -451,7 +490,7 @@ class World:
         self.schedule_calendar_events()
 
     def schedule_calendar_events(self):
-        n_years = self.cfg_reader.config.get('simulation', {}).get('n_years', 5)
+        n_years = self.n_years()
         start_year = self.cfg_reader.config.get('simulation', {}).get('start_year', 2024)
         start_month = self.cfg_reader.config.get('simulation', {}).get('start_month', 1)
 
