@@ -1425,3 +1425,41 @@ def test_quit_job_is_not_scheduled_as_an_exogenous_event():
     assert "quit_job" not in text, "exogen quit_job schemaläggs igen"
     # Men sökimpulsen gäller nu hela arbetskraften
     assert "'employed'" in text and "on_the_job_search_factor" in text
+
+
+def test_job_to_job_is_recorded_at_the_change():
+    """REGRESSION: kontrollen låg efter `individuals.at[idx, "job_id"] = job_id`
+    och jämförde alltså det nya jobbet med sig självt. _job_to_job var alltid
+    falsk: inga byten registrerades trots att de skedde, job_to_job_rate blev
+    noll, kolumnen job_to_job_wage_gain skapades aldrig, och rapporten
+    kraschade på den. Ett mått som alltid säger noll ser ut som ett resultat."""
+    from core.event_handlers import handle_close_vacancy, handle_start_job
+
+    w, gammalt, nytt = _byte_world()
+    w.individuals.at[0, "w_neg"] = 1.00
+    w.file_application(nytt, 0, 0.0, q=1.0, w_neg=1.20, surplus=0.3, commute_km=2.0)
+    handle_close_vacancy({"time": 40.0, "agent_id": None,
+                          "event_type": "close_vacancy",
+                          "params": {"job_id": nytt}}, w)
+    start = [e for e in w._pushed if e["event_type"] == "start_job"][0]
+    handle_start_job(start, w)
+
+    loggat = [dict(e[1]) for e in w.event_logger.events
+              if dict(e[1]).get("job_to_job")]
+    assert loggat, "bytet registrerades inte"
+    assert loggat[-1]["w_prev"] == pytest.approx(1.00)
+    assert w.individuals.at[0, "w_neg"] == pytest.approx(1.20)
+    assert w.individuals.at[0, "job_id"] == nytt
+
+    # En nyanställd arbetslös är inget byte
+    w2, g2, n2 = _byte_world()
+    w2.individuals.at[0, "status"] = "unemployed"
+    w2.individuals.at[0, "job_id"] = None
+    w2.file_application(n2, 0, 0.0, q=1.0, w_neg=0.9, surplus=0.3, commute_km=1.0)
+    handle_close_vacancy({"time": 40.0, "agent_id": None,
+                          "event_type": "close_vacancy",
+                          "params": {"job_id": n2}}, w2)
+    s2 = [e for e in w2._pushed if e["event_type"] == "start_job"][0]
+    handle_start_job(s2, w2)
+    assert not [dict(e[1]) for e in w2.event_logger.events
+                if dict(e[1]).get("job_to_job")]

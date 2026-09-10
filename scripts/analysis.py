@@ -155,11 +155,19 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
               "en enda sökande har inget urval alls, och den lokaliteten "
               "uteblir därför just där ingen söker.\n")
 
-    jr = pd.to_numeric(df.get("job_to_job_rate"), errors="coerce").dropna()
+    def _kol(namn):
+        """Alltid en Series. pd.to_numeric(None) ger np.float64 nan, och
+        rapporten kraschade på .dropna() när kolumnen saknades helt."""
+        v = df[namn] if namn in df.columns else None
+        if v is None:
+            return pd.Series(dtype=float)
+        return pd.to_numeric(v, errors="coerce").dropna()
+
+    jr = _kol("job_to_job_rate")
     if len(jr):
         A("## Stegen\n")
-        wg = pd.to_numeric(df.get("job_to_job_wage_gain"), errors="coerce").dropna()
-        sh = pd.to_numeric(df.get("share_hires_from_employment"), errors="coerce").dropna()
+        wg = _kol("job_to_job_wage_gain")
+        sh = _kol("share_hires_from_employment")
         A(f"Jobbyten per år, andel av anställda: **{100*jr.median():.1f} %**"
           + (f", medianlönevinst per byte {100*(wg.median()-1):+.1f} %" if len(wg) else "")
           + ". Svensk nivå ligger kring tio procent. Byten och vinster är det "
@@ -169,16 +177,16 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
         if len(sh):
             A(f"Andel tillsättningar som gick till en redan anställd sökande: "
               f"**{100*sh.median():.0f} %**.")
-            qe = pd.to_numeric(df.get("q_applicants_employed"), errors="coerce").dropna()
-            qu = pd.to_numeric(df.get("q_applicants_unemployed"), errors="coerce").dropna()
+            qe = _kol("q_applicants_employed")
+            qu = _kol("q_applicants_unemployed")
             if len(qe) and len(qu):
                 A(f" Median $q$ bland sökande: {qe.median():.2f} anställda mot "
                   f"{qu.median():.2f} arbetslösa. Divergerar de tränger "
                   "restpoolen undan: arbetsgivaren möter inte arbetskraften "
                   "utan dem som ännu inte matchats.")
             A("\n")
-        va = pd.to_numeric(df.get("vacancy_age_median"), errors="coerce").dropna()
-        vp = pd.to_numeric(df.get("vacancy_age_p90"), errors="coerce").dropna()
+        va = _kol("vacancy_age_median")
+        vp = _kol("vacancy_age_p90")
         if len(va):
             A(f"Vakansernas ålder vid tillsättning: median **{va.median():.0f}** "
               f"dagar" + (f", p90 {vp.median():.0f}" if len(vp) else "")

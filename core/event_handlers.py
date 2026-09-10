@@ -169,6 +169,17 @@ def handle_start_job(event, world):
     # med arbetarens id utan innehavare, och antalet tillsatta positioner
     # överstiger antalet sysselsatta.
     prev = individuals.at[idx, 'job_id'] if 'job_id' in individuals.columns else None
+
+    # JOBBYTE fångas HÄR, medan prev fortfarande finns. Kontrollen låg
+    # tidigare efter 'individuals.at[idx, "job_id"] = job_id', så den jämförde
+    # det nya jobbet med sig självt och var alltid falsk: inga byten
+    # registrerades trots att de skedde, och rapporten kraschade på en kolumn
+    # som därför aldrig skapades.
+    _job_to_job = bool(pd.notna(prev) and str(prev) != str(job_id)
+                       and 'status' in individuals.columns
+                       and individuals.at[idx, 'status'] == 'employed')
+    _w_prev = individuals.at[idx, 'w_neg'] if _job_to_job else np.nan
+
     if pd.notna(prev) and prev != job_id:
         prev_pos = world.job_index().get(prev)
         if prev_pos is not None:
@@ -194,26 +205,9 @@ def handle_start_job(event, world):
     jobs.iat[pos, jobs.columns.get_loc('individual_id')] = (
         individuals.at[idx, 'individual_id'] if 'individual_id' in individuals.columns else idx)
 
-    # JOBBYTE eller nyanställning? Den gamla lönen måste fångas innan den
-    # skrivs över: lönevinsten per byte är det som skiljer en för snabb stege
-    # (kappa) från en felförankrad Pi. Med kappa ~ 26 blir bytena många och
-    # vinsterna stora; med rätt kappa få och små.
-    _job_to_job = False
-    _w_prev = np.nan
-    if ('status' in individuals.columns
-            and individuals.at[idx, 'status'] == 'employed'
-            and pd.notna(individuals.at[idx, 'job_id'])
-            and str(individuals.at[idx, 'job_id']) != str(job_id)):
-        _job_to_job = True
-        _w_prev = individuals.at[idx, 'w_neg']
-
-    # Den gamla positionen frigörs NU, inte vid erbjudandet: uppsägningstiden
-    # har löpt ut. Hon innehar aldrig två positioner samtidigt.
+    # Uppsägningen är avslutad. Den gamla positionen frigörs av prev-blocket
+    # ovan, som redan fanns; 0079:s egen frigörning här var dubbelarbete.
     if 'notice_job_id' in individuals.columns:
-        gammalt = individuals.at[idx, 'job_id']
-        if pd.notna(gammalt) and str(gammalt) != str(job_id):
-            _clear_holder(world, gammalt)
-            world.set_job_filled(gammalt, False)
         individuals.at[idx, 'notice_job_id'] = None
 
     world.set_job_filled(job_id, True)
