@@ -1,3 +1,5 @@
+> **Observera (0078):** avsnitten om matchning och lön nedan beskriver formler från före 0049 och 0061. Den gällande beskrivningen av kompetens, matchning och lönebildning -- som de fungerar och ska fungera -- finns i [`lonemodell.md`](lonemodell.md).
+
 # Individmodellen — arbetarens representation i uppgiftsrummet
 
 Detta dokument specificerar hur en individ representeras i WORM, hur hon

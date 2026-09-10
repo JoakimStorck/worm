@@ -238,3 +238,38 @@ def test_u_R_occ_measures_from_source_occupation():
     assert logged[-1]["u_R_occ"] == pytest.approx(0.806 / 0.27, abs=0.05)
     assert logged[-1]["from_onet"] == "A"
     assert w.individuals.at[0, "last_onet_code"] == "B"
+
+
+def test_coverage_is_a_union_not_a_sum():
+    """REGRESSION: summan över cirklar hade ingen gräns. Massan är bunden av
+    balansen tillväxt mot glömska, m* = a/lambda = 13, och en ensam cirkel på
+    jobbet mättar mot 1 -- men N skarpa cirklar på samma ställe gav q = N.
+    Tjugo år i ett jobb gav 1.00; samma tjugo år delade på tre NÄRLIGGANDE
+    YRKEN gav 2.66. Inom samma yrke slås cirklarna ihop (nyckeln är
+    yrkeskoden), så fragmenteringen sker mellan grannyrken.
+
+    Bredd lönar sig när en andra erfarenhet täcker uppgifter i jobbet som den
+    första inte täckte -- och bara då. q är unionen av täckning."""
+    p = CompetenceParams()
+
+    def q_of(cirklar):
+        c = Circles(1, 12)
+        for n, (x, y, rho2, m) in enumerate(cirklar):
+            c.add(0, f"Y{n}", x, y, rho2, m, rho2_home=RO ** 2)   # olika yrken
+        return q_at(c, p, x=0.42, y=0.14, ro=RO)
+
+    mogen = (0.42, 0.14, RO ** 2, 13.05)
+    halv = (0.42, 0.14, RO ** 2, 4.35)
+
+    ett = q_of([mogen])
+    assert ett == pytest.approx(1.0, abs=0.01)
+    # Två grannyrken exakt på jobbet: samma uppgifter två gånger, räknas en gång
+    assert q_of([mogen, mogen]) == pytest.approx(ett, abs=0.02)
+    # Fragmentering över tre grannyrken lönar sig inte: tre halva = en hel
+    assert q_of([halv, halv, halv]) < 1.1
+    # Men bredd som täcker olika delar av jobbet räknas
+    två_sidor = q_of([(0.30, 0.14, RO ** 2, 13.05), (0.54, 0.14, RO ** 2, 13.05)])
+    en_sida = q_of([(0.30, 0.14, RO ** 2, 13.05)])
+    assert två_sidor > en_sida
+    # och nybörjaren är oförändrad
+    assert q_of([(0.0, 0.0, 1.0, 1.0)]) == pytest.approx(0.047, abs=0.005)

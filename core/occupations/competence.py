@@ -156,7 +156,73 @@ class Circles:
         contrib = ((1.0 - np.exp(-m / p.m_ref))
                    * (2.0 * ro2 / width)
                    * np.exp(-0.5 * d2 / (p.gamma ** 2 * width)))
-        return contrib.sum(axis=0)
+        return self._union(contrib, cx[:, 0], cy[:, 0], r2[:, 0])
+
+    def _union(self, contrib, cx, cy, r2):
+        """Täckning, inte summa: varje cirkel räknas bara till den del den
+        täcker något de starkare inte redan täcker.
+
+        Summan över cirklar hade ingen gräns. Massan är bunden av balansen
+        tillväxt mot glömska, m* = a/lambda = 13, och en ensam cirkel exakt på
+        jobbet mättar mot 1 -- men N skarpa cirklar på samma ställe gav q = N.
+        Därav en premie på FRAGMENTERING: tjugo år i ett jobb gav 1.00, samma
+        tjugo år delade på tre närliggande jobb gav 3 x 0.887 = 2.66. Den som
+        bytte ofta blev mer konkurrenskraftig än den som stannade, med samma
+        erfarenhet, och över tio år divergerade allt: median q vid anställning
+        1.21, 67 procent över ett, andelen av beståndet över Pi 80 procent,
+        vakansstocken tredubblad.
+
+        Jobbet är ett moln av uppgifter. Bredd lönar sig när en andra
+        erfarenhet täcker uppgifter i jobbet som den första inte täckte -- och
+        bara då. Två cirklar på samma ställe täcker samma uppgifter två gånger.
+        Det som ska mätas är UNIONEN av täckning, och den kan inte överstiga
+        hela jobbet: q får en övre gräns i geometrin, inte i en min().
+
+        Cirklarna tas i fallande bidragsordning. Cirkel k räknas med faktorn
+        prod_{l<k} (1 - O_lk * c_l), där O_lk är Bhattacharyya-överlappet
+        mellan två isotropa gaussiska cirklar -- sluten form ur centrum och
+        bredder, i [0, 1]. Två identiska mogna cirklar ger 1.00, inte 2.00.
+        Tre halva på samma ställe ger 1.00, inte 2.66. Två cirklar som täcker
+        olika delar av ett brett jobb räknas båda. Bredd i den vanliga
+        meningen -- erfarenhet från flera trakter -- lönar sig därmed inte som
+        en stapel på ett jobb man redan behärskar, utan i RÖRLIGHETEN: fler
+        jobb inom räckhåll, bättre passform i vart och ett, och en bättre
+        position vid nästa byte. Det är Burdett-Mortensens stege i
+        uppgiftsrummet, och det är vad Buhai och Teulings hittar i data:
+        avkastningen på tjänstetid är selektion på utsidor, inte deterministisk
+        tillväxt.
+
+        Överlappet mäts mellan cirklarna, inte via jobbet. En jobbmedveten
+        variant -- hur mycket av DET HÄR jobbet täcker k som l inte täckte --
+        är rätt storhet men en trippelprodukt; den står som nästa steg i
+        docs/lonemodell.md.
+        """
+        K, J = contrib.shape
+        if K == 1:
+            return contrib[0]
+        # Bhattacharyya mellan isotropa gaussiska cirklar k och l
+        dx = cx[:, None] - cx[None, :]
+        dy = cy[:, None] - cy[None, :]
+        s2 = r2[:, None] + r2[None, :]
+        O = (np.exp(-(dx ** 2 + dy ** 2) / (2.0 * s2))
+             * (2.0 * np.sqrt(r2[:, None] * r2[None, :]) / s2))
+        q = np.zeros(J)
+        for j in range(J):
+            c = contrib[:, j]
+            ordning = np.argsort(-c)
+            tackt = np.ones(K)               # 1 - täckt andel, per cirkel
+            tot = 0.0
+            for k in ordning:
+                if c[k] <= 0.0:
+                    break
+                novel = 1.0
+                for l in ordning:
+                    if l == k:
+                        break
+                    novel *= (1.0 - O[l, k] * min(c[l], 1.0))
+                tot += c[k] * novel
+            q[j] = tot
+        return q
 
     # ---- sammanfattning --------------------------------------------------------
     def summarize(self):
