@@ -25,6 +25,7 @@ matchningen.
 """
 
 import numpy as np
+import pandas as pd
 
 
 def search_config(world):
@@ -61,12 +62,37 @@ def apply_once(world, idx, t_now):
     from core.occupations.utils import search_once
 
     ind = world.individuals
-    if 'status' in ind.columns and ind.at[idx, 'status'] != 'unemployed':
+    st = ind.at[idx, 'status'] if 'status' in ind.columns else 'unemployed'
+    if st not in ('employed', 'unemployed'):
+        return (None,) * 5
+    # Den som redan sagt upp sig för ett annat jobb söker inte vidare
+    if st == 'employed' and 'notice_job_id' in ind.columns \
+            and pd.notna(ind.at[idx, 'notice_job_id']):
         return (None,) * 5
 
     cfg = search_config(world)
+    rad = ind.loc[idx]
+    if st == 'employed':
+        # RESERVATIONEN ÄR NUVARANDE SITUATION, inte w_res. Den anställdes
+        # alternativ är att stanna: lönen hon har minus dess pendling, plus en
+        # bytesfriktion. Utan friktionen byter hon för en krona; med en för
+        # hög byter ingen. Uttryckt som andel av nuvarande lön biter den lika
+        # på alla nivåer.
+        sim = world.cfg_reader.config.get('simulation', {})
+        frik = float(sim.get('switching_cost_share', 0.05))
+        w_nu = ind.at[idx, 'w_neg']       # kolumnen garanteras av World.prepare
+        if pd.notna(w_nu):
+            pos = world.job_index().get(ind.at[idx, 'job_id'])
+            km_nu = 0.0
+            if pos is not None and {'x', 'y'} <= set(world.jobs.columns):
+                km_nu = float(np.hypot(
+                    world.jobs['x'].iat[pos] - float(rad['x']),
+                    world.jobs['y'].iat[pos] - float(rad['y']))) / 1000.0
+            rad = rad.copy()
+            rad['w_res'] = (float(w_nu) * (1.0 + frik)
+                            - cfg['commute_cost_per_km'] * km_nu)
     job_pos, surplus, w_neg, q_hire, km = search_once(
-        ind.loc[idx], world.jobs,
+        rad, world.jobs,
         np.flatnonzero(world.vacant_mask()),
         queue=(world.applicant_counts()
                if hasattr(world, 'applicant_counts') else None),

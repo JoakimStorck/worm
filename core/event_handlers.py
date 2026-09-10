@@ -194,6 +194,15 @@ def handle_start_job(event, world):
     jobs.iat[pos, jobs.columns.get_loc('individual_id')] = (
         individuals.at[idx, 'individual_id'] if 'individual_id' in individuals.columns else idx)
 
+    # Den gamla positionen frigörs NU, inte vid erbjudandet: uppsägningstiden
+    # har löpt ut. Hon innehar aldrig två positioner samtidigt.
+    if 'notice_job_id' in individuals.columns:
+        gammalt = individuals.at[idx, 'job_id']
+        if pd.notna(gammalt) and str(gammalt) != str(job_id):
+            _clear_holder(world, gammalt)
+            world.set_job_filled(gammalt, False)
+        individuals.at[idx, 'notice_job_id'] = None
+
     world.set_job_filled(job_id, True)
     # Ingen fallback med boolesk skanning: saknas positionen i indexet är det
     # ett fel som ska märkas, inte 773 mikrosekunder per anställning.
@@ -435,7 +444,12 @@ def _reschedule_search(world, idx, t_now, decay_reservation=True):
             w_res = float(world.individuals.at[idx, 'w_res'])
             world.individuals.at[idx, 'w_res'] = max(w_res * decay, floor)
     timing = world.cfg_reader.get_event_timing('start_job_search')
-    interval = (np.random.exponential(timing.get('mean', 28.0))
+    mult = 1.0
+    if ('status' in world.individuals.columns
+            and world.individuals.at[idx, 'status'] == 'employed'):
+        mult = float(world.cfg_reader.config.get('simulation', {})
+                     .get('on_the_job_search_factor', 5.0))
+    interval = (np.random.exponential(timing.get('mean', 28.0) * mult)
                 if timing.get('dist', 'exponential') == 'exponential' else 30.0)
     world._push_event({"time": float(t_now + interval), "agent_id": idx,
                        "event_type": "start_job_search", "params": {}})
@@ -506,10 +520,24 @@ def handle_close_vacancy(event, world):
             or pd.notna(world.jobs.iat[pos, world.jobs.columns.get_loc('individual_id')]))
 
     ind = world.individuals
-    lediga = [a for a in apps
-              if a['idx'] in ind.index
-              and ind.at[a['idx'], 'status'] == 'unemployed'
-              and pd.isna(ind.at[a['idx'], 'job_id'])]
+    # Behöriga: arbetslösa, och ANSTÄLLDA som inte redan sagt upp sig för
+    # ett annat jobb. Filtret släppte tidigare bara igenom arbetslösa,
+    # eftersom sökning från anställning inte fanns.
+    def _behörig(k):
+        if k not in ind.index:
+            return False
+        st = ind.at[k, 'status']
+        if st == 'unemployed':
+            return pd.isna(ind.at[k, 'job_id'])
+        if st != 'employed':
+            return False
+        # "tar det den först erbjuds": har hon redan tackat ja någon annanstans
+        # är hon inte längre tillgänglig
+        if 'notice_job_id' not in ind.columns:
+            return True
+        return pd.isna(ind.at[k, 'notice_job_id'])
+
+    lediga = [a for a in apps if _behörig(a['idx'])]
 
     if gone or not lediga:
         world.event_logger.log_event(world, event, extra={
@@ -532,6 +560,23 @@ def handle_close_vacancy(event, world):
     # så rekryteringstiden låg tidigare inne i vakansvaraktigheten för alla.
     world.set_job_pending(job_id)
     lag = start_delay_days(world, idx)
+
+    # EGEN UPPSÄGNING som konsekvens av erbjudandet, inte som orsak till
+    # arbetslöshet. Hon behåller sitt gamla jobb under uppsägningstiden -- den
+    # position frigörs först vid tillträdet -- så hon är sysselsatt hela vägen
+    # och bokföringen är oberörd. Den gamla positionen blir därmed ledig UTAN
+    # att någon blivit arbetslös, vilket är byteskedjan: Burdett-Mortensens
+    # stege i uppgiftsrummet.
+    if ('status' in ind.columns and ind.at[idx, 'status'] == 'employed'
+            and pd.notna(ind.at[idx, 'job_id'])):
+        if 'notice_job_id' not in ind.columns:
+            ind['notice_job_id'] = pd.Series([None] * len(ind), index=ind.index,
+                                             dtype="object")
+        ind.at[idx, 'notice_job_id'] = job_id
+        world.event_logger.log_event(world, event, extra={
+            'event_detail': 'quit_job', 'agent_id': idx,
+            'job_id': ind.at[idx, 'job_id'], 'to_job_id': job_id,
+            'notice_days': round(float(lag), 1)})
     world._push_event({
         "time": t_now + lag, "agent_id": idx, "event_type": "start_job",
         "params": {"job_id": job_id, "w_neg": win['w_neg'], "q_hire": win['q'],

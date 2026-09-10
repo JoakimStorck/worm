@@ -901,6 +901,7 @@ def test_vacancy_with_no_eligible_applicants_stays_open():
 
     w, jid = _world_with_applicants([0.4, 0.9])
     w.individuals["status"] = "employed"                  # båda hann få annat
+    w.individuals["notice_job_id"] = "J09999"             # och sagt upp sig
     handle_close_vacancy({"time": 40.0, "agent_id": 0, "event_type": "close_vacancy",
                           "params": {"job_id": jid}}, w)
     assert not [e for e in w._pushed if e["event_type"] == "start_job"]
@@ -995,18 +996,19 @@ def test_no_duplicate_application_to_the_same_job():
     assert w.applicant_counts()[w.job_index()[jid]] == 1.0
 
 
-def test_employed_worker_does_not_apply():
-    """REGRESSION: utan statusvakt skulle en utestående sökhändelse ge en
-    ansökan från någon som redan fått jobbet -- sökning från anställning är
-    steg 2 och inte byggd."""
-    from core.event_handlers import handle_start_job_search
+def test_worker_under_notice_does_not_apply():
+    """Den som redan sagt upp sig för ett annat jobb söker inte vidare. Efter
+    0079 söker anställda i övrigt precis som arbetslösa -- statusvakten var
+    skriven för att hindra det, eftersom sökning från anställning inte fanns."""
+    from core.matching_core import apply_once
 
     w, jid = _world_with_applicants([0.5])
+    w.individuals["notice_job_id"] = pd.Series([None] * len(w.individuals),
+                                               index=w.individuals.index,
+                                               dtype="object")
     w.individuals.at[0, "status"] = "employed"
-    w._pushed.clear()
-    handle_start_job_search({"time": 50.0, "agent_id": 0,
-                             "event_type": "start_job_search", "params": {}}, w)
-    assert w._pushed == []
+    w.individuals.at[0, "notice_job_id"] = "J09999"
+    assert apply_once(w, 0, 50.0) == (None,) * 5
     assert w.n_open_applications() == 1
 
 
@@ -1215,14 +1217,14 @@ def test_wage_columns_belong_to_the_individual_schema():
         "individual_id": [0.0], "status": ["unemployed"],
         "job_id": pd.Series([None], dtype="object"), "w_res": [0.4]})
     w.prepare()
-    assert {"w_neg", "q_last"} <= set(w.individuals.columns)
+    assert {"w_neg", "q_last", "notice_job_id"} <= set(w.individuals.columns)
 
     # Ingen tyst vakt kvar runt skrivningen
     for fn in (mc.apply_once, eh.handle_start_job):
         kod = [ln for ln in inspect.getsource(fn).splitlines()
                if not ln.lstrip().startswith("#")]
-        assert not [ln for ln in kod if "'w_neg' in" in ln or '"w_neg" in' in ln], \
-            f"tyst vakt kvar i {fn.__name__}"
+        text = "".join("\n".join(kod).split('"""')[::2])
+        assert "'w_neg' in ind.columns" not in text, f"tyst vakt kvar i {fn.__name__}"
 
 
 def test_bootstrap_rebuilds_the_queue_every_round():
@@ -1302,3 +1304,124 @@ def test_run_length_is_read_in_one_place():
     w.cfg_reader = R({"simulation": {}})
     with pytest.raises(KeyError, match="n_years"):
         w.n_years()
+
+
+# ---------------------------------------------------------------------------
+# Sökning från anställning (0079)
+# ---------------------------------------------------------------------------
+
+def _byte_world():
+    """En anställd med ett jobb, och ett ledigt jobb att byta till."""
+    w = make_world(n_employers=2, size=4, simulation={
+        "application_window_days": 40, "hiring_decision_days": 10,
+        "notice_period_days": 30})
+    w.prepare()
+    gammalt, nytt = w.jobs["job_id"].iloc[0], w.jobs["job_id"].iloc[1]
+    w.individuals = pd.DataFrame({
+        "individual_id": [0.0], "status": ["employed"], "job_id": [gammalt],
+        "w_res": [0.5], "w_neg": [0.6], "q_last": [np.nan],
+        "x_occ": [0.3], "y_occ": [0.1], "r_i": [0.0], "x": [0.0], "y": [0.0],
+        "propensity_start_education": [0.1],
+        "propensity_internal_training": [0.1], "propensity_quit_job": [0.1],
+        "propensity_career_break": [0.05],
+        "propensity_internal_job_change": [0.1]}, index=[0])
+    w.jobs.loc[w.jobs.index[0], "individual_id"] = 0.0
+    w.set_job_filled(gammalt, True)
+    w._pushed = []
+    orig = w._push_event
+    w._push_event = lambda ev, _o=orig, _w=w: (_w._pushed.append(ev), _o(ev))[1]
+    return w, gammalt, nytt
+
+
+def _bokforing(w):
+    """(L, J, V) -- arbetskraft, fyllda positioner, lediga."""
+    ind, jobs = w.individuals, w.jobs
+    L = int(ind["status"].isin(["employed", "unemployed"]).sum())
+    aktiva = jobs["active"] if "active" in jobs else pd.Series(True, index=jobs.index)
+    J = int((jobs["individual_id"].notna() & aktiva).sum())
+    V = int((jobs["individual_id"].isna() & aktiva).sum())
+    return L, J, V
+
+
+def test_identity_holds_through_a_job_change():
+    """INVARIANTEN FÖRST. Mellan erbjudande och tillträde håller hon sitt
+    GAMLA jobb medan det nya är utlovat. Frigörs den gamla positionen för
+    tidigt hamnar den i V utan att någon blivit arbetslös; sätts hon som
+    innehavare av det nya innan uppsägningstiden gått ut innehar hon två
+    positioner. Båda bryter U = L - J + V."""
+    from core.event_handlers import handle_close_vacancy, handle_start_job
+
+    w, gammalt, nytt = _byte_world()
+    L0, J0, V0 = _bokforing(w)
+    U0 = int((w.individuals["status"] == "unemployed").sum())
+    assert U0 == L0 - J0 + V0 - V0 + (L0 - J0)  # trivialt sant vid start: U = L - J
+    assert U0 == L0 - J0
+
+    # Hon ansöker om det nya jobbet medan hon är anställd
+    w.file_application(nytt, 0, 0.0, q=1.0, w_neg=0.9, surplus=0.3, commute_km=2.0)
+    L, J, V = _bokforing(w)
+    assert (L, J, V) == (L0, J0, V0), "ansökan får inte röra bokföringen"
+
+    # Annonsen stänger: hon vinner, säger upp sig, uppsägningstid börjar
+    handle_close_vacancy({"time": 40.0, "agent_id": None,
+                          "event_type": "close_vacancy",
+                          "params": {"job_id": nytt}}, w)
+    L, J, V = _bokforing(w)
+    assert w.individuals.at[0, "status"] == "employed", "hon jobbar kvar under uppsägningen"
+    assert w.individuals.at[0, "job_id"] == gammalt
+    assert (L, J) == (L0, J0), "hon får inte bli arbetslös vid erbjudandet"
+    assert int((w.individuals["status"] == "unemployed").sum()) == L - J + V - V + (L - J)
+
+    # Tillträdet sker efter beslut + uppsägningstid
+    start = [e for e in w._pushed if e["event_type"] == "start_job"]
+    assert len(start) == 1
+    assert start[0]["time"] == pytest.approx(40.0 + 10.0 + 30.0)
+
+    handle_start_job(start[0], w)
+    L, J, V = _bokforing(w)
+    assert w.individuals.at[0, "job_id"] == nytt
+    assert (L, J) == (L0, J0), "hon innehar exakt en position"
+    # Den gamla positionen är nu ledig, utan att någon blivit arbetslös
+    pos_gammalt = w.job_index()[gammalt]
+    assert pd.isna(w.jobs.at[pos_gammalt, "individual_id"])
+    assert V == V0, "vakansantalet ska vara oförändrat: en frigjord, en fylld"
+
+
+def test_employed_reservation_is_the_current_job_plus_friction():
+    """Den anställdes alternativ är att STANNA: lönen hon har minus dess
+    pendling, plus en bytesfriktion. Utan friktionen byter hon för en krona.
+    Den arbetslösas reservation är w_res som förut."""
+    from core.matching_core import apply_once
+
+    w, gammalt, nytt = _byte_world()
+    w.individuals.at[0, "w_neg"] = 1.0
+    # Bara två jobb i spel: hennes eget och ett ledigt som betalar mer
+    w.jobs["active"] = False
+    for jid, lon in ((gammalt, 1.0), (nytt, 1.02)):
+        pos = w.job_index()[jid]
+        w.jobs.iat[pos, w.jobs.columns.get_loc("active")] = True
+        w.jobs.iat[pos, w.jobs.columns.get_loc("wage")] = lon
+    w.jobs["r_req"] = 0.0
+    w.prepare()
+
+    # Med fem procents friktion är två procent inte nog
+    assert apply_once(w, 0, 0.0)[0] is None
+    # Med en procents friktion är det det
+    w.cfg_reader.config["simulation"]["switching_cost_share"] = 0.01
+    assert apply_once(w, 0, 0.0)[0] == nytt
+
+
+def test_quit_job_is_not_scheduled_as_an_exogenous_event():
+    """REGRESSION: quit_job schemalades normalfördelat kring sju år och gjorde
+    omkring 1 250 personer arbetslösa per år utan orsak. Vakansstocken växte
+    från 625 till 1 460 över tio år, arbetslösheten från 1 373 till 2 210, och
+    ingenting planade ut. Få slutar utan att ha något nytt att gå till."""
+    import inspect
+    from core.world import World
+
+    kod = [ln for ln in inspect.getsource(World._init_events).splitlines()
+           if not ln.lstrip().startswith("#")]
+    text = "".join("\n".join(kod).split('"""')[::2])
+    assert "quit_job" not in text, "exogen quit_job schemaläggs igen"
+    # Men sökimpulsen gäller nu hela arbetskraften
+    assert "'employed'" in text and "on_the_job_search_factor" in text

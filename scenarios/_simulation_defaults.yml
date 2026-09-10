@@ -126,6 +126,17 @@ simulation:
   # befattning som rekryteringsförfarandet pågår för, inte tiden till
   # tillträde. I dagens population kommer alla anställda från arbetslöshet,
   # så uppsägningstiden är noll tills steg 2 (sökning från anställning) finns.
+  # Sökning från anställning. Anställda söker med on_the_job_search_factor
+  # gånger den arbetslösas intervall (28 dagar), efter en ramp i det nya
+  # jobbet -- Jovanovics inlärningsargument. Bara uppgången parametriseras:
+  # avtagandet faller ut ur att reservationen är nuvarande lön, så den som
+  # klättrat har färre jobb som slår den. switching_cost_share är
+  # bytesfriktionen som andel av nuvarande lön. Alla tre kalibreras mot den
+  # observerade andelen jobbyten per år, kring tio procent i Sverige.
+  on_the_job_search_factor: 5.0
+  on_the_job_search_ramp_days: 180
+  switching_cost_share: 0.05
+
   application_window_days: 40
   hiring_decision_days: 10
   notice_period_days: 30

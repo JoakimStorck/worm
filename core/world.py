@@ -434,6 +434,11 @@ class World:
         for kol in ("w_neg", "q_last"):
             if kol not in self.individuals.columns:
                 self.individuals[kol] = np.nan
+        # Objekt, inte float: notice_job_id bär ett job_id under uppsägningen
+        if "notice_job_id" not in self.individuals.columns:
+            self.individuals["notice_job_id"] = pd.Series(
+                [None] * len(self.individuals), index=self.individuals.index,
+                dtype="object")
         if "onet_code" in self.individuals.columns and not hasattr(self, "circles"):
             self.init_competence()
 
@@ -442,44 +447,36 @@ class World:
         if self._job_flow_cfg()['enabled']:
             self._schedule_destruction(self.jobs.loc[self.jobs['active'], 'job_id'].tolist(),
                                        self.current_time)
-        # Schemalägg quit_job för alla som är employed från början
-        employed_mask = self.individuals['status'] == 'employed'
-        n_emp = employed_mask.sum()
-        if n_emp > 0:
-            timing = self.cfg_reader.get_event_timing('quit_job')
-            print("QUIT_JOB TIMING:", timing)
-            if timing['dist'] == 'normal':
-                durations = np.random.normal(timing['mean'], timing['std'], size=n_emp)
-                durations = np.clip(durations, 1, None)  # undvik negativa tider
-            elif timing['dist'] == 'lognormal':
-                sigma = timing.get('sigma', 0.4)
-                mu = np.log(timing['mean']) - 0.5 * sigma ** 2
-                durations = np.random.lognormal(mean=mu, sigma=sigma, size=n_emp)
-            else:
-                raise ValueError(f"Unknown dist for quit_job: {timing['dist']}")
-            for idx, t_quit in zip(self.individuals.index[employed_mask], durations):
-                event = {
-                    "time": float(self.current_time + t_quit),
-                    "agent_id": idx,
-                    "event_type": "quit_job",
-                    "params": {}
-                }
-                self._push_event(event)
+        # quit_job schemaläggs INTE längre. Den var en exogen avgång,
+        # normalfördelad kring sju år, som gjorde omkring 1 250 personer
+        # arbetslösa per år utan orsak -- och som drev vakansstocken från 625
+        # till 1 460 över tio år. Få slutar utan att ha något nytt att gå
+        # till. quit_job är nu en KONSEKVENS av ett erbjudande
+        # (handle_close_vacancy), och den sällsynta avgången utan något att gå
+        # till bärs av career_break.
 
-        # Schemalägg start_job_search för arbetslösa från början
-        unemployed_mask = self.individuals['status'] == 'unemployed'
-        n_unemp = unemployed_mask.sum()
-        if n_unemp > 0:
+        # Sökimpulsen gäller HELA arbetskraften. Anställda söker också, med
+        # egen takt: on_the_job_search_factor gånger den arbetslösas intervall.
+        # Sökningen från anställning är det som gör att en position kan bli
+        # ledig utan att någon blir arbetslös.
+        sim = self.cfg_reader.config.get('simulation', {})
+        faktor = float(sim.get('on_the_job_search_factor', 5.0))
+        ramp = float(sim.get('on_the_job_search_ramp_days', 180.0))
+        for status, mult, forsta in (('unemployed', 1.0, 0.0),
+                                     ('employed', faktor, ramp)):
+            mask = self.individuals['status'] == status
+            if not mask.any():
+                continue
             timing = self.cfg_reader.get_event_timing('start_job_search')
-            for idx in self.individuals.index[unemployed_mask]:
+            for idx in self.individuals.index[mask]:
                 if timing['dist'] == 'exponential':
-                    interval = np.random.exponential(timing['mean'])
+                    interval = np.random.exponential(timing['mean'] * mult)
                 elif timing['dist'] == 'uniform':
-                    interval = np.random.uniform(timing['min'], timing['max'])
+                    interval = np.random.uniform(timing['min'], timing['max']) * mult
                 else:
                     interval = 0.0
                 event = {
-                    "time": float(self.current_time + interval),
+                    "time": float(self.current_time + forsta + interval),
                     "agent_id": idx,
                     "event_type": "start_job_search",
                     "params": {}
