@@ -169,6 +169,14 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
                 "detta är flödet: nyanställda är ett skevt urval, och utan "
                 "lönetillväxt med tjänstetid saknas det som skiljer stock "
                 "från flöde. Beståndets tvärsnitt loggas årsvis (stock_w_*).\n")
+            sa = pd.to_numeric(df.get("stock_share_above_pi"), errors="coerce").dropna()
+            if len(sa):
+                A(f"Andel av **beståndet** över sitt eget yrkes $\\Pi$: "
+                  f"**{100*sa.median():.0f} %**. Är $\\Pi$ yrkets median ska den "
+                  "vara 50: det är ett definitionsvillkor och ingen "
+                  "formhypotes. Flödets andel är en ANNAN storhet och ska "
+                  "ligga högre, eftersom den som just valts ut av "
+                  "arbetsgivaren har högre passform än yrkets median.\n")
             if len(ev):
                 A(f"Andel av variansen i log lön som ligger i **arbetsgivaren**: "
                   f"{100*ev.median():.0f} %. AKM-dekompositioner ger 10–20 "

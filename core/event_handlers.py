@@ -837,7 +837,42 @@ def _wage_stock_stats(world):
         return {}
     lg = np.log(w.to_numpy())
     q = np.quantile(w.to_numpy(), [0.10, 0.25, 0.50, 0.75, 0.90])
-    return {
+
+    # ANDELEN AV BESTÅNDET ÖVER SITT EGET YRKES Pi. Det är
+    # definitionsvillkoret: är Pi yrkets median ska hälften ligga över.
+    #
+    # Flödets 58 procent över Pi är INTE samma sak och inte heller ett fel.
+    # Den som just valts ut av arbetsgivaren har per konstruktion högre q än
+    # yrkets median -- 39.5 procent av anställningarna har q > 1 -- så w =
+    # Pi_j * p**theta hamnar över Pi oftare än varannan gång. Flödet och
+    # beståndet är olika populationer, precis som stock och flöde i övrigt,
+    # och bara beståndet kan pröva normeringen.
+    andel = None
+    jobs = world.jobs
+    if {'w_occ', 'job_id'} <= set(jobs.columns) or 'wage' in jobs.columns:
+        pos_of = world.job_index()
+        kol = 'w_occ' if 'w_occ' in jobs.columns else 'wage'
+        c = jobs.columns.get_loc(kol)
+        eta_c = (jobs.columns.get_loc('wage_eta')
+                 if 'wage_eta' in jobs.columns else None)
+        over, n_par = 0, 0
+        for i in w.index:
+            pos = pos_of.get(ind.at[i, 'job_id'])
+            if pos is None:
+                continue
+            pi_j = float(jobs.iat[pos, c])
+            if eta_c is not None and kol == 'wage':
+                try:                       # jobbets lön bär eta; yrkets gör inte
+                    pi_j *= float(np.exp(-float(jobs.iat[pos, eta_c] or 0.0)))
+                except (TypeError, ValueError):
+                    pass
+            if pi_j > 0:
+                n_par += 1
+                over += int(float(w.at[i]) > pi_j)
+        if n_par:
+            andel = round(over / n_par, 4)
+
+    ut = {
         "stock_n": int(len(w)),
         "stock_w_p10": round(float(q[0]), 4),
         "stock_w_p25": round(float(q[1]), 4),
@@ -847,6 +882,9 @@ def _wage_stock_stats(world):
         "stock_w_p90p10": round(float(q[4] / q[0]), 4),
         "stock_sd_log_w": round(float(np.std(lg)), 4),
     }
+    if andel is not None:
+        ut["stock_share_above_pi"] = andel
+    return ut
 
 
 def _apply_wage_revision(world, t_now):

@@ -257,11 +257,15 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
             # transitions. Utan detta stannar de i eventlog.csv och når aldrig
             # tabellerna -- samma väg som n_applicants och theta tappades.
             ny = [r for r in events if r.get("event") == "new_year"]
-            for f, agg in (("stock_sd_log_w", "last"), ("stock_w_p90p10", "last"),
+            for f, agg in (("stock_sd_log_w", "last"),
+                           ("stock_share_above_pi", "last"),
+                           ("stock_w_p90p10", "last"),
                            ("stock_w_p50", "last"), ("stock_w_p10", "last"),
                            ("stock_w_p90", "last"), ("revision_g_mean", "mean"),
                            ("revision_g_p10", "mean"), ("revision_g_p90", "mean"),
-                           ("revision_share_zero", "mean"), ("revision_n", "last")):
+                           ("revision_share_zero", "mean"),
+                           ("revision_share_below_mark", "mean"),
+                           ("revision_d_bar", "mean"), ("revision_n", "last")):
                 v = [_f(r, f) for r in ny]
                 v = [x for x in v if x is not None and np.isfinite(x)]
                 if v:

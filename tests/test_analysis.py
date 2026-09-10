@@ -248,17 +248,32 @@ def test_wage_stock_is_measured_annually_not_per_event():
         individuals = pd.DataFrame({
             "status": ["employed"] * 100 + ["unemployed"] * 20,
             "w_neg": list(np.linspace(0.5, 1.5, 100)) + [np.nan] * 20,
+            "job_id": [f"J{i}" for i in range(100)] + [None] * 20,
         })
+        jobs = pd.DataFrame({"job_id": [f"J{i}" for i in range(100)],
+                             "wage": [1.0] * 100})
+
+        @staticmethod
+        def job_index():
+            return {f"J{i}": i for i in range(100)}
     st = _wage_stock_stats(W())
     assert st["stock_n"] == 100
     assert st["stock_w_p50"] == pytest.approx(1.0, abs=0.02)
     assert st["stock_w_p90p10"] == pytest.approx(1.4 / 0.6, rel=0.05)
     assert st["stock_sd_log_w"] > 0
+    # Hälften av beståndet ligger över yrkeslönen 1.0: definitionsvillkoret
+    assert st["stock_share_above_pi"] == pytest.approx(0.5, abs=0.02)
 
     # För få anställda ger inget mått i stället för ett brusigt
     class Tiny:
         individuals = pd.DataFrame({"status": ["employed"] * 3,
-                                    "w_neg": [1.0, 1.1, 0.9]})
+                                    "w_neg": [1.0, 1.1, 0.9],
+                                    "job_id": ["J0", "J1", "J2"]})
+        jobs = pd.DataFrame({"job_id": ["J0", "J1", "J2"], "wage": [1.0] * 3})
+
+        @staticmethod
+        def job_index():
+            return {"J0": 0, "J1": 1, "J2": 2}
     assert _wage_stock_stats(Tiny()) == {}
 
 
