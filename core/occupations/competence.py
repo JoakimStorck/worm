@@ -200,28 +200,30 @@ class Circles:
         K, J = contrib.shape
         if K == 1:
             return contrib[0]
+
+        # VEKTORISERAT ÖVER JOBBEN. En loop över j kostade 144 Python-
+        # operationer per jobb, alltså 1.5 miljoner per sökning med tiotusen
+        # kandidater -- uppstarten blev praktiskt taget stillastående.
+        # Ordningen skiljer sig per jobb, vilket är det som tvingade fram
+        # loopen; take_along_axis löser det, och kvar blir en loop över de
+        # tolv cirklarna med numpy-operationer på vektorer av längd J.
         # Bhattacharyya mellan isotropa gaussiska cirklar k och l
         dx = cx[:, None] - cx[None, :]
         dy = cy[:, None] - cy[None, :]
         s2 = r2[:, None] + r2[None, :]
         O = (np.exp(-(dx ** 2 + dy ** 2) / (2.0 * s2))
              * (2.0 * np.sqrt(r2[:, None] * r2[None, :]) / s2))
+
+        ordning = np.argsort(-contrib, axis=0)              # K x J
+        c_s = np.take_along_axis(contrib, ordning, axis=0)
+        novel = np.ones(J)
         q = np.zeros(J)
-        for j in range(J):
-            c = contrib[:, j]
-            ordning = np.argsort(-c)
-            tackt = np.ones(K)               # 1 - täckt andel, per cirkel
-            tot = 0.0
-            for k in ordning:
-                if c[k] <= 0.0:
-                    break
-                novel = 1.0
-                for l in ordning:
-                    if l == k:
-                        break
-                    novel *= (1.0 - O[l, k] * min(c[l], 1.0))
-                tot += c[k] * novel
-            q[j] = tot
+        for k in range(K):
+            if k > 0:
+                # O mellan cirkeln på plats k och den på plats k-1, per jobb
+                Ok = O[ordning[k - 1], ordning[k]]
+                novel = novel * (1.0 - Ok * np.minimum(c_s[k - 1], 1.0))
+            q += c_s[k] * novel
         return q
 
     # ---- sammanfattning --------------------------------------------------------

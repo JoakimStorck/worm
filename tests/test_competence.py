@@ -273,3 +273,36 @@ def test_coverage_is_a_union_not_a_sum():
     assert två_sidor > en_sida
     # och nybörjaren är oförändrad
     assert q_of([(0.0, 0.0, 1.0, 1.0)]) == pytest.approx(0.047, abs=0.005)
+
+
+def test_union_is_vectorised_over_jobs():
+    """REGRESSION: unionen (0078) loopade i Python ÖVER JOBBEN -- 144
+    operationer per kandidat, alltså 1.5 miljoner per sökning med tiotusen
+    lediga jobb. Uppstarten, som söker mot hela jobbstocken, blev praktiskt
+    taget stillastående: 67 ms per anrop mot 1.8 vektoriserat, trettiosju
+    gånger. Ordningen skiljer sig per jobb, vilket tvingade fram loopen;
+    take_along_axis löser det och kvar blir en loop över de tolv cirklarna."""
+    import inspect
+    import numpy as np
+    from core.occupations import competence as C
+
+    kod = [ln for ln in inspect.getsource(C.Circles._union).splitlines()
+           if not ln.lstrip().startswith("#")]
+    text = "".join("\n".join(kod).split('"""')[::2])
+    assert "for j in range(J)" not in text, "loopar över jobben igen"
+    assert "take_along_axis" in text
+
+    # Och utfallet är detsamma för många jobb som för ett
+    p = CompetenceParams()
+    c = Circles(1, 12)
+    for n, (x, y, rho2, m) in enumerate([(0.42, 0.14, RO ** 2, 13.05),
+                                         (0.30, 0.14, RO ** 2, 8.0),
+                                         (0.0, 0.0, 1.0, 1.0)]):
+        c.add(0, f"Y{n}", x, y, rho2, m, rho2_home=RO ** 2)
+    rng = np.random.default_rng(0)
+    jx, jy = rng.uniform(-0.4, 0.4, 50), rng.uniform(-0.4, 0.4, 50)
+    jr = np.full(50, RO)
+    många = c.competitiveness(0, jx, jy, jr, p)
+    for i in range(50):
+        ett = c.competitiveness(0, jx[i:i + 1], jy[i:i + 1], jr[i:i + 1], p)[0]
+        assert många[i] == pytest.approx(ett, rel=1e-12)
