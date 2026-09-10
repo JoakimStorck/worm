@@ -1463,3 +1463,38 @@ def test_job_to_job_is_recorded_at_the_change():
     handle_start_job(s2, w2)
     assert not [dict(e[1]) for e in w2.event_logger.events
                 if dict(e[1]).get("job_to_job")]
+
+
+def test_applying_does_not_overwrite_the_current_wage():
+    """REGRESSION: apply_once skrev ind['w_neg'] = det sökta jobbets lön VID
+    ANSÖKAN. För en arbetslös var det skadligt men osynligt -- hon har ingen
+    lön att förstöra. Med sökning från anställning (0079) blev det förödande:
+    reservationen läser w_neg som "nuvarande lön", så snart hon sökt ETT jobb
+    var hennes jämförelsepunkt det jobbets erbjudna lön i stället för hennes
+    egen.
+
+    Spärrhaken i stegen försvann. Utfallet över tio år: 46.6 procent jobbyten
+    per år mot svenska tio, medianlönevinst per byte exakt noll -- hon bytte
+    till det hon nyss jämfört sig med -- och 100 procent av tillsättningarna
+    gick till redan anställda."""
+    from core.matching_core import apply_once
+
+    w, gammalt, nytt = _byte_world()
+    w.individuals.at[0, "w_neg"] = 1.00
+    w.jobs["active"] = False
+    for jid, lon in ((gammalt, 1.00), (nytt, 3.00)):
+        pos = w.job_index()[jid]
+        w.jobs.iat[pos, w.jobs.columns.get_loc("active")] = True
+        w.jobs.iat[pos, w.jobs.columns.get_loc("wage")] = lon
+    w.jobs["r_req"] = 0.0
+    w.prepare()
+
+    jid, w_ny, q, S, km = apply_once(w, 0, 0.0)
+    assert jid == nytt, "hon ska söka det bättre jobbet"
+    assert w_ny > 1.5, "ansökan bär den erbjudna lönen"
+    # ... men hennes egen lön är oförändrad tills hon tillträder
+    assert w.individuals.at[0, "w_neg"] == pytest.approx(1.00), \
+        "ansökan skrev över den faktiska lönen"
+
+    # Och därför är hennes reservation nästa gång fortfarande den gamla lönen
+    assert w.n_open_applications() == 1

@@ -108,7 +108,20 @@ def apply_once(world, idx, t_now):
     # Kolumnaccess, inte radkopia: jobs.iloc[pos][col] bygger en Series av
     # hela raden och kostar 54 mikrosekunder mot 11 för .iat på kolumnen.
     job_id = world.jobs['job_id'].iat[job_pos]
-    ind.at[idx, 'w_neg'] = w_neg          # kolumnen garanteras av World.prepare
+    # LÖNEN SKRIVS INTE HÄR. w_neg är individens FAKTISKA lön, och den sätts av
+    # handle_start_job när anställningen sker. Att skriva den vid ansökan var
+    # en rest från när bara arbetslösa sökte -- skadlig men osynlig, eftersom
+    # en arbetslös inte har någon lön att förstöra.
+    #
+    # Med sökning från anställning (0079) blev den förödande: reservationen
+    # ovan läser w_neg som "nuvarande lön", så snart hon sökt ETT jobb var
+    # hennes jämförelsepunkt det jobbets erbjudna lön i stället för hennes
+    # egen. Spärrhaken i stegen försvann. Utfallet: 46.6 procent jobbyten per
+    # år mot svenska tio, med en medianlönevinst per byte på exakt noll -- hon
+    # bytte till det hon nyss jämfört sig med.
+    #
+    # Den erbjudna lönen bärs i ansökan (file_application nedan) och når
+    # anställningen den vägen.
     world.file_application(job_id, idx, float(t_now),
                            q=q_hire, w_neg=w_neg, surplus=surplus,
                            commute_km=km)
