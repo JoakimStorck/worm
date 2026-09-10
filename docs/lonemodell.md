@@ -1,6 +1,6 @@
 # Lönebildning och kompetens i WORM
 
-Status per patch 0078. Dokumentet beskriver hur modellen **fungerar** i
+Status per patch 0081. Dokumentet beskriver hur modellen **fungerar** i
 koden, vad som är **prövat** mot data, och vad som **återstår**. Det ersätter
 avsnitt 4 (matchning och lön) i `individmodell.md`, som beskrev formler från
 före 0049 och 0061.
@@ -222,18 +222,130 @@ monoton tillväxt -- inte lutningen.
 
 ---
 
-## 4. Öppna nivåfrågor
+## 4. Varför modellen inte konvergerar
 
-- **u 14 procent mot 7,5 och vakanstid 59 dagar mot 30–40.** Samma tal två
-  gånger: u = u_min + V/L exakt. u_min ≈ 6 procent är strukturellt; resten
-  är vakansstocken.
-- **Konvergens.** Tioårskörningen visade divergens före 0078. Ska köras om.
-- **Femårshorisonten.** Övergångarna växte år för år; huruvida modellen når
-  jämvikt på fem år avgörs av omkörningen.
+Över tio år växer vakansstocken från 614 till 1 368 och arbetslösheten från
+1 362 till 2 163, medan andelen av beståndet över Π hoppar till 0,93. Sökning
+från anställning (0079) gav dubbelt så många sökande per vakans men stoppade
+inte tillväxten. Tre saker verkar samtidigt, och de ska skiljas åt innan något
+byggs.
+
+### 4.1 Stegen är för snabb
+
+I Burdett–Mortensen är beståndets lönefördelning
+
+    G(w) = F(w) / (1 + κ(1−F(w))),   κ = λ₁/δ
+
+alltså kvoten mellan hur ofta anställda får erbjudanden och hur ofta de kastas
+tillbaka till arbetslöshet. Med `on_the_job_search_factor` = 5 söker den
+anställde var 140:e dag, λ₁ ≈ 2,6 per år mot δ = 0,1: **κ ≈ 26** mot empiriska
+skattningar kring 2–5. Praktiskt taget hela beståndet hamnar i toppen av
+erbjudandefördelningen, vilket är vad 0,93 över Π betyder. Spridningen
+kollapsar först, 0,30 → 0,22, därför att alla samlas vid samma tak, och
+återhämtar sig sedan långsamt genom revisionen.
+
+### 4.2 Restpoolen tränger undan
+
+Arbetsgivaren väljer högst q. En anställd sökande har en mogen cirkel, en
+arbetslös en diffunderad; anställda vinner, och de arbetslösa som aldrig väljs
+ackumuleras. Arbetslösheten växer trots att sökande per vakans nästan
+fördubblats.
+
+Becsi (2026) formaliserar precis det: arbetsgivaren möter inte arbetskraften
+utan **restpoolen**, de som ännu inte matchats, och typer utanför
+acceptansmängden lämnar bara genom egen sökning. I hans räknade exempel ligger
+96 procent av poolmassan under tröskeln. Det är Blanchard–Diamonds
+rankningsmodell, och den är verklig — men här utan motkraft.
+
+### 4.3 Arbetsgivaren betalar inget för att avvisa
+
+Becsis bidrag är att skilja **sökkostnaden**, priset för att titta, från
+**avvisningskostnaden**, priset för att titta bort. Med k = 0 är arbetsgivaren
+maximalt selektiv, och hans Proposition 3 säger att det ger sämst
+genomströmning: när det är dyrt att gå ifrån en upptäckt sänker man sina krav.
+
+WORM har kostnaden fysiskt — fyrtio dagar till om ingen anställs — men
+arbetsgivaren väger den inte i urvalet.
+
+### 4.4 Vakanser avvecklas aldrig
+
+Positioner postas mot ett storleksmål oavsett om de går att fylla, och en
+vakans som inte fylls står kvar för evigt. Det är en strukturell orsak till att
+stocken bara kan växa. Becsis fria inträde är motstycket: där ger firman upp
+när det inte längre lönar sig att söka.
+
+### 4.5 Om Becsi som källa
+
+Relevant för begreppen, och för papper 4:s placering i litteraturen — det han
+härleder analytiskt räknar WORM fram numeriskt, med heterogenitet i två
+dimensioner i stället för en. Men det är ett ogranskat preprint med starka
+existensvillkor och ett stiliserat räknat exempel, så talen (78 procents
+välfärdsgap) är interna för leksaksmodellen. Och hans modell är stationär utan
+separationer: den beskriver fixpunkten vi vill nå, inte vägen dit.
+
+### 4.6 Nivåfrågorna
+
+u 14 procent mot 7,5 och vakanstid 59 dagar mot 30–40 är samma tal två gånger:
+u = u_min + V/L exakt. u_min ≈ 6 procent är strukturellt; resten är
+vakansstocken, alltså 4.1–4.4.
 
 ---
 
-## 5. Läsanvisning för utfall
+## 5. Ordningen på det som återstår
+
+**Mät först, ingen mekanikändring.** De tre måtten avgör vilken diagnos som
+dominerar. Byten per år som andel av anställda och medianlönevinsten per byte,
+ur `quit_job` med `to_job_id` sedan 0079: 30 procent per år med tjugo procents
+vinst är κ, tio procent med fem procents vinst är Π-förankringen. Restpoolens
+q-fördelning bland arbetslösa mot de anställda sökandes, per år. Och
+vakansernas åldersfördelning — en växande svans säger att stocken består av
+samma positioner, inte av flöde.
+
+**Kalibrera κ.** `on_the_job_search_factor` mot 15–25 och
+`switching_cost_share` mot 8–10 procent, tills andelen byten per år landar
+kring tio procent som i svensk data. Ingen kod. Räcker det ensamt behövs inte
+nästa två steg.
+
+**Avvisningskostnad i urvalet.** Arbetsgivaren rangordnar på q minus värdet av
+den tid positionen står tom om ingen anställs nu. En rad, en parameter, och en
+verklig mekanism. Kontroll: `share_uncontested` och median q vid anställning
+ska falla, och q-fördelningen bland arbetslösa sluta divergera från de
+anställdas.
+
+**Förankra Π i beståndet.** Ingångslönen blir Π·p^θ·ζ med ζ < 1 så att
+beståndets median landar på Π efter klättringen. B-M ger ζ ur κ, så den är
+härledd och inte anpassad. Görs **sist**: en ζ kalibrerad mot en okalibrerad
+stege blir fel. Kontroll: `stock_share_above_pi` mot 0,50, stabilt över åren.
+
+**Vakansavveckling.** Arbetsgivaren ger upp en position som inte gått att
+fylla. Kräver en beslutsregel — värdet av att fortsätta söka mot värdet av att
+lägga ned — inte bara en hazard. Hör till scenariomodellen och är
+glesbygdsfrågans kärna: det är där arbetsgivare faktiskt slutar försöka.
+
+### 5.1 Därefter
+
+**Lokalt marknadstryck i förhandlingen.** θ endogent i kön: en vakans utan
+sökande blir dyrare. Kön i överskottet gör redan motsvarande på söksidan.
+Kräver att stegen och Π är kalibrerade.
+
+**Job Zone, SUN-nyckel, mjuk spärr.** Nivån i utbildningsdimensionen.
+
+**Utbildningen på de nya primitiverna.**
+
+**m_ref(r_j)**, se 1.3. Ändrar inlärningstakten för alla jobb samtidigt och ska
+inte blandas med annat.
+
+**Överlappet via jobbet**, se 1.3.
+
+**Bytespremien som mått.** Att den som byter arbetsgivare får bättre
+löneutveckling än den som stannar är modellens egen förutsägelse — bytaren
+omvärderas till formeln, stannaren släpar med sin revisionshistorik, och bara
+den som tjänar på det byter eftersom reservationen är nuvarande lön. Den ska
+läsas av, inte byggas in.
+
+---
+
+## 6. Läsanvisning för utfall
 
 - `median_u_R` i rapporten är u_R_occ på CPS-urvalet. Figurer och skript ska
   mäta samma sak.

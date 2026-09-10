@@ -1,4 +1,8 @@
-> **Observera (0078):** avsnitten om matchning och lön nedan beskriver formler från före 0049 och 0061. Den gällande beskrivningen av kompetens, matchning och lönebildning -- som de fungerar och ska fungera -- finns i [`lonemodell.md`](lonemodell.md).
+> **Observera.** Avsnitten om matchning och lön nedan beskriver formler från
+> före 0049 och 0061. Den gällande beskrivningen av kompetens, matchning och
+> lönebildning — hur de fungerar, vad som är prövat, och ordningen på det som
+> återstår — finns i [`lonemodell.md`](lonemodell.md). Avsnitt 10 här bär
+> arbetsreglerna.
 
 # Individmodellen — arbetarens representation i uppgiftsrummet
 
@@ -368,34 +372,62 @@ matchningen. Det tredje prövas när sökning från anställning finns.
 
 ---
 
-## 10. Byggordning
+## 10. Arbetsregler
 
-Varje steg med tester och invariantkontroll från början.
+Byggordningen som stod här är genomförd (0036–0080). Ordningen på det som
+återstår finns i [`lonemodell.md`](lonemodell.md) avsnitt 5.
 
-1. **Kompetenscirklarna.** Cirkeltabellen, exponering, läckage, diffusion,
-   skärpning, konkurrenskraften q. Härledd inträdesposition. `initial_r`,
-   `switch_cost_kappa` och `breadth_from_move` utgår. Allt annat vilar på
-   detta. Kontroll: t = 0-matchningen ger samma antal ±2 % som före, eftersom
-   betydelsen ändrats men inte beteendet.
-2. **Sökning från anställning.** Puckelformad intensitet per jobb,
-   bytesfriktion, uppsägningstid. Ersätter `quit_job` och de interna
-   händelserna. Rättar kalibreringens population.
-3. **Lokalt marknadstryck i förhandlingen.** Förhandlingen finns sedan
-   steg 1; här tillkommer k_vakans som funktion av sökande per vakans inom
-   räckhåll. Behöver steg 2 för anställdas reservation.
-4. **Nivån.** Job Zone-inläsning, SUN-nyckel, mjuk spärr med tryckberoende,
-   exponent efter krav. Förutsätter att grindvaktsfrågan är mätt.
-5. **Utbildningen** på de nya primitiverna.
+Kvar står de regler som visat sig kosta att bryta. Varje rad nedan har ett
+pris betalt i felsökning.
 
-Efter steg 2 ska valideringens första och fjärde faktum prövas. Efter steg 5
-alla fyra.
+**Invariantkontrollen skrivs före mekanismen.** U = L − J + V höll genom hela
+jobbytesfallet i 0079 därför att testet fanns först. De två fel som låg nära —
+att frigöra den gamla positionen vid erbjudandet i stället för vid tillträdet,
+och att sätta innehavaren på det nya jobbet under uppsägningstiden — hade båda
+gett en tyst läcka i bokföringen.
+
+**En kodväg per sak.** Sex fel i serien var två vägar som gjorde samma sak och
+glidit isär: `r_req` ur SELECT:en, `n_applicants` ur `transitions_table`,
+`theta` ur en vitlista, `eta` ur ett `hasattr`, `w_neg` som saknade producent,
+och `u_R` mot `u_R_occ` i figur mot rapport. Uppstarten anropar därför samma
+funktioner som körningen (0069), och argumenten byggs på ett ställe
+(`search_config`).
+
+**Inga tysta vakter.** `if x in df.columns` och `except Exception` gjorde att
+beståndsmåttet och lönerevisionen var avstängda under fem hela körningar utan
+att något larmade. Saknas något som ska finnas är det ett fel som ska kastas,
+inte en gren som tar en annan väg. Ett `hasattr`-fallback som alltid slår till
+ser ut som ett medvetet val.
+
+**Mät, gissa inte.** Lönerevisionen som jag var säker på var flaskhalsen
+kostade en sekund per körning; booleska skanningar av jobbtabellen kostade
+fyrtio. Och unionsberäkningen var trettiosju gånger för långsam därför att
+testvärlden har 240 jobb och den riktiga 10 754 — ett prestandatest mot
+realistisk storlek hade fångat det.
+
+**Rätt population, rätt kolumn.** `u_R` mäter från individens position,
+`u_R_occ` mellan yrkena; flödet är inte beståndet; uppstartens anställningar är
+inte mobilitet. Flera tolkningar byggde på fel kolumn innan 0074, däribland
+hela resonemanget om bottenkvartilens U-form.
+
+**Fröspannet är tröskeln.** Nu 0,007 för u_R och 0,4 procentenheter för u. En
+modelländring som ger mindre än så har inte visat något.
+
+**Formen ska falla ut, inte antas.** Lognormaliteten i lönefördelningen kom ur
+att q är en summa av produkter, inte ur en anpassning — och den blev synlig
+först när taket `min(1, q)` togs bort. En degenererad fördelning, en atom eller
+en vägg, är ett besked om att en tillståndsvariabel slutat bära information.
 
 ---
 
 ## 11. Öppna frågor
 
-- Bytesfriktionens storlek.
+- Bytesfriktionens storlek. Finns som `switching_cost_share` sedan 0079,
+  satt till 0,05 som storleksordning; ska kalibreras mot andelen jobbyten per
+  år (lonemodell.md 5).
 - Om k_vakans ska bero på tunnhet i uppgiftsrummet.
+- Arbetsgivarens avvisningskostnad: om den ska bero på hur tunn poolen är, och
+  om den är samma sak som k_vakans sett från andra hållet.
 - Nyckeln SUN ↔ Job Zone.
 - Form och skala för α(zon).
 - Programriktningar för gymnasium och högskola: kräver att utbildningar
