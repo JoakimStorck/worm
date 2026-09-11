@@ -42,7 +42,6 @@ class ConfigReader:
     # varning och köra vidare, inte KeyError: 'dist' mitt i _init_events.
     # falun_baseline.yml saknar blocket helt.
     DEFAULT_EVENT_TIMINGS = {
-        "quit_job":                {"dist": "normal", "mean": 1461.0, "std": 730.5},
         "start_job_search":        {"dist": "exponential", "mean": 28.0},
         "recruitment_lag":         {"dist": "exponential", "mean": 30.0},
         "start_education":         {"dist": "uniform", "min": 30.0, "max": 365.0},

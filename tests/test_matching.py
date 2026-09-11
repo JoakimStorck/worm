@@ -175,7 +175,7 @@ def test_missing_event_timings_get_defaults():
     from core.configreader import ConfigReader
 
     cfg = ConfigReader({"simulation": {}}, None)
-    for ev in ("quit_job", "start_job_search", "start_education",
+    for ev in ("start_job_search", "start_education",
                "end_education", "start_internal_training",
                "internal_job_change", "career_break"):
         assert "dist" in cfg.get_event_timing(ev), ev

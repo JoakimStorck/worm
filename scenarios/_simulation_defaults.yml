@@ -164,10 +164,6 @@ simulation:
       dist: uniform
       min: 5d       # 5 dagar
       max: 40d      # 40 dagar
-    quit_job:
-      dist: normal
-      mean: 7y      # 14 %/år. Littles lag: V = separationer x rekryteringstid,
-      std: 3y       # så 14 % uppsägningar + 10 % jobbförstörelse ger ~2 % vakanser
     career_break:
       dist: uniform
       min: 2w

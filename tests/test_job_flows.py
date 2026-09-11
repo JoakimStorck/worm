@@ -1412,18 +1412,33 @@ def test_employed_reservation_is_the_current_job_plus_friction():
 
 
 def test_quit_job_is_not_scheduled_as_an_exogenous_event():
-    """REGRESSION: quit_job schemalades normalfördelat kring sju år och gjorde
-    omkring 1 250 personer arbetslösa per år utan orsak. Vakansstocken växte
-    från 625 till 1 460 över tio år, arbetslösheten från 1 373 till 2 210, och
-    ingenting planade ut. Få slutar utan att ha något nytt att gå till."""
+    """REGRESSION, andra gången. 0079 tog bort den exogena quit_job ur
+    _init_events och testet inspekterade bara _init_events. Men uppstarten
+    går sedan 0069 genom handle_start_job, som fortfarande schemalade en
+    quit_job normalfördelad kring sju år vid VARJE tillträde. 84 procent av
+    startbeståndet lämnade därför sina jobb utan orsak inom tio år, med
+    topp kring 1 300 per år vid år sju, medan commit-meddelandet sade att
+    avgången var borta. Provet är nu det som faktiskt händer: ett tillträde
+    får inte lägga någon quit_job i kön, och händelsetypen har ingen
+    hanterare."""
+    from core.event_handlers import RULE_SWITCH, handle_close_vacancy, handle_start_job
+
+    assert "quit_job" not in RULE_SWITCH, "exogen quit_job har en hanterare igen"
+
+    w, gammalt, nytt = _byte_world()
+    w.file_application(nytt, 0, 0.0, q=1.0, w_neg=0.9, surplus=0.3, commute_km=2.0)
+    handle_close_vacancy({"time": 40.0, "agent_id": None,
+                          "event_type": "close_vacancy",
+                          "params": {"job_id": nytt}}, w)
+    start = [e for e in w._pushed if e["event_type"] == "start_job"][0]
+    handle_start_job(start, w)
+    typer = {e["event_type"] for e in w._pushed}
+    assert "quit_job" not in typer, "tillträdet schemalade en exogen avgång"
+
+    # Men sökimpulsen gäller fortfarande hela arbetskraften vid start
     import inspect
     from core.world import World
-
-    kod = [ln for ln in inspect.getsource(World._init_events).splitlines()
-           if not ln.lstrip().startswith("#")]
-    text = "".join("\n".join(kod).split('"""')[::2])
-    assert "quit_job" not in text, "exogen quit_job schemaläggs igen"
-    # Men sökimpulsen gäller nu hela arbetskraften
+    text = inspect.getsource(World._init_events)
     assert "'employed'" in text and "on_the_job_search_factor" in text
 
 

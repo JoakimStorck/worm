@@ -26,6 +26,19 @@ avståndsfördelningar, inte kalibrerade mot data.
 
 ## Modell
 
+- [ ] **Omskolningen saknar utlösare** sedan 0085 tog bort den exogena avgången.
+      Ska utlösas ur torr sökning (`propensity_start_education` växer redan där),
+      efter beslut om nivå och inriktning (individmodell.md 11).
+- [ ] **Sökkedjan har ingen ägare.** Den anställdes kedja dör vid första torra
+      sökning; `destroy_job` och "job gone before start" pushar nya kedjor utan
+      att fråga om en lever. En `next_search_time` per individ. Utred först: mät
+      sökningar per personår efter status ur loggen.
+- [ ] **Aktiv cirkel släcks inte** i `handle_destroy_job`; `_become_unemployed`
+      gör rätt och ska användas.
+- [ ] **Crosswalk O*NET--SNI** (`onet_sni_longform.csv`) är inofficiell och
+      odokumenterad. Genomtänkt analys av alternativ (yrkesregistret på SSYK4 via
+      O*NET-SOC -> ISCO-08 -> SSYK 2012; steg 0 i STRATEGI_v2) innan den byts.
+
 - [ ] **Beveridgekurvan är degenererad.** Med fast arbetskraft och fast antal
       jobb är v en linjär funktion av u per bokföringsidentitet – alla körningar
       hamnar på samma linje. En äkta kurva kräver variation i efterfrågan

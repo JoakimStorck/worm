@@ -43,59 +43,6 @@ def _resolve_individual_index(world, holder):
     return hit[0] if len(hit) else None
 
 
-def handle_quit_job(event, world):
-    idx = event['agent_id']
-    individuals = world.individuals
-    jobs = world.jobs
-    individuals.at[idx, 'status'] = 'unemployed'
-    job_id = individuals.at[idx, 'job_id']
-    if pd.notna(job_id):
-        _clear_holder(world, job_id)
-        world.set_job_filled(job_id, False)
-        individuals.at[idx, 'job_id'] = np.nan
-    # Arbetslös: reservationslönen faller till rho * senaste lön
-    if 'w_res' in individuals.columns:
-        rho = world.cfg_reader.config.get('simulation', {}).get('rho_reservation', 0.7)
-        individuals.at[idx, 'w_res'] = rho * float(individuals.at[idx, 'w_res'])
-
-    prop_edu = individuals.at[idx, 'propensity_start_education']
-    if np.random.rand() < prop_edu:
-        eff = (world.cfg_reader.config.get('simulation', {})
-               .get('event_effects', {}).get('start_education', {}).get('broad', {}))
-        timing = world.cfg_reader.get_event_timing('start_education')
-        if timing['dist'] == 'uniform':
-            days_until_start = np.random.uniform(timing['min'], timing['max'])
-        else:
-            raise ValueError("Unknown dist for start_education")
-        edu_event = {
-            "time": event['time'] + days_until_start,
-            "agent_id": idx,
-            "event_type": "start_education",
-            "params": {
-                'education_type': 'broad',
-                'delta_chi': eff['delta_chi'],
-                'delta_r': eff.get('delta_r', eff.get('delta_H', 0.0)),
-                'duration': eff['duration'],
-                'delta_xi': eff.get('delta_xi', 10),
-            }
-        }
-        world._push_event(edu_event)
-    else:
-        timing = world.cfg_reader.get_event_timing('start_job_search')
-        if timing['dist'] == 'exponential':
-            interval = np.random.exponential(timing['mean'])
-        else:
-            raise ValueError("Unknown dist for start_job_search")
-        search_event = {
-            "time": event['time'] + interval,
-            "agent_id": idx,
-            "event_type": "start_job_search",
-            "params": {}
-        }
-        world._push_event(search_event)
-
-    world.event_logger.log_event(world, event, "individual")
-
 def _clear_holder(world, job_id):
     """Nollar innehavaren på en position via INDEX, inte via mask.
 
@@ -360,24 +307,13 @@ def handle_start_job(event, world):
         }
         world._push_event(change_event)
 
-    quit_timing = world.cfg_reader.get_event_timing('quit_job')
-    if quit_timing['dist'] == 'normal':
-        duration = np.random.normal(quit_timing['mean'], quit_timing['std'])
-        duration = max(duration, 1)
-    elif quit_timing['dist'] == 'lognormal':
-        sigma = quit_timing.get('sigma', 0.4)
-        mu = np.log(quit_timing['mean']) - 0.5 * sigma ** 2
-        duration = np.random.lognormal(mean=mu, sigma=sigma)
-    else:
-        duration = 365
-    t_quit = event['time'] + duration
-    quit_event = {
-        "time": t_quit,
-        "agent_id": idx,
-        "event_type": "quit_job",
-        "params": {}
-    }
-    world._push_event(quit_event)
+    # INGEN EXOGEN AVGÅNG. Här låg fram till 0084 en quit_job normalfördelad
+    # kring sju år, schemalagd vid VARJE tillträde -- också uppstartens, som
+    # sedan 0069 går genom den här funktionen. 0079 tog bort den ur
+    # _init_events och testade bara _init_events, så 84 procent av
+    # startbeståndet lämnade ändå sina jobb utan orsak inom tio år. En
+    # anställning slutar nu bara genom ett erbjudande (handle_close_vacancy)
+    # eller genom att positionen förstörs (handle_destroy_job).
 
 def handle_start_job_search(event, world):
     """En sökomgång: relevansmängd i uppgiftsrummet, därefter logit-val över
@@ -1114,7 +1050,6 @@ def handle_new_year(event, world):
     world.event_logger.log_event(world, event, extra=extra, print_line=True)
 
 RULE_SWITCH = {
-    "quit_job": handle_quit_job,
     "start_job": handle_start_job,
     "start_job_search": handle_start_job_search,
     "close_vacancy": handle_close_vacancy,

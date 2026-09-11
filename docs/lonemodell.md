@@ -283,6 +283,22 @@ existensvillkor och ett stiliserat räknat exempel, så talen (78 procents
 välfärdsgap) är interna för leksaksmodellen. Och hans modell är stationär utan
 separationer: den beskriver fixpunkten vi vill nå, inte vägen dit.
 
+### 4.5b Den exogena avgången fanns kvar (0085)
+
+Genomgången efter 0084 visade att `handle_start_job` fortfarande schemalade
+en `quit_job` normalfördelad kring sju år vid varje tillträde -- också
+uppstartens, som sedan 0069 går genom samma funktion. 0079 tog bort den ur
+`_init_events` och testade bara `_init_events`. 84 procent av
+startbeståndet lämnade därför sina jobb utan orsak inom tio år, med topp
+kring 1 300 per år vid år sju, in i en pool som aldrig vann ett urval.
+Diagnoserna 4.1--4.4 ska läsas om efter att avgången är borta; det som står
+kvar av divergensen efter 0085 är det som mekanismerna ska förklara.
+
+Omskolningen (`start_education`) utlöstes enbart ur den exogena avgången
+och har ingen utlösare nu. Den ska få en ur den torra sökningen, där
+`propensity_start_education` redan växer, när frågan om nivå och inriktning
+i utbildningen är avgjord.
+
 ### 4.6 Nivåfrågorna
 
 u 14 procent mot 7,5 och vakanstid 59 dagar mot 30–40 är samma tal två gånger:
