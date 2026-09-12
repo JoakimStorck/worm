@@ -729,8 +729,12 @@ def handle_destroy_job(event, world):
             rho = world.cfg_reader.config.get('simulation', {}).get('rho_reservation', 0.7)
             ind.at[idx, 'w_res'] = rho * float(ind.at[idx, 'w_res'])
         world.schedule_search(idx, world.search_interval(idx, float(event['time'])))
+        # agent_id med: förstörelsen är en JOBBhändelse, så händelsens agent_id
+        # är None, och den som mister jobbet gick inte att följa i loggen.
+        # --displaced i individual_history.py gav noll individer av ~990 per år.
         world.event_logger.log_event(world, event,
                                      extra={"event_detail": "job_destroyed_holder_displaced",
+                                            "agent_id": idx,
                                             "job_id": job_id})
     else:
         world.event_logger.log_event(world, event,

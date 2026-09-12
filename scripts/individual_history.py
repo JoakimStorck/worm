@@ -173,7 +173,8 @@ def main():
         rng = random.Random(args.seed)
         if args.displaced:
             candidates = [aid for aid, rs in events_by_agent.items()
-                    if any(r.get("event_detail") == "job_destroyed_holder_displaced" for r in rs)]
+                          if any(r.get("event_detail") == "job_destroyed_holder_displaced"
+                                 for r in rs)]
         else:
             candidates = [aid for aid, rs in events_by_agent.items()
                     if sum(1 for r in rs if r.get("event") == "start_job"

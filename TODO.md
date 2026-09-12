@@ -29,6 +29,10 @@ avståndsfördelningar, inte kalibrerade mot data.
 - [ ] **Omskolningen saknar utlösare** sedan 0085 tog bort den exogena avgången.
       Ska utlösas ur torr sökning (`propensity_start_education` växer redan där),
       efter beslut om nivå och inriktning (individmodell.md 11).
+- [ ] **Beslut vid erbjudandet, inte vid ansökan** (lonemodell.md 4.5d). Bud
+      utvärderade vid ansökan binder i 40 dagar plus uppsägningstid, så byten
+      med negativ lönevinst förekommer. Byggs med avvisningskostnaden (Becsi
+      2026, fråga 4). Mät först: share_moves_wage_loss.
 - [ ] **Interna byten som notis** (individmodell.md 6, "Interna byten: notisen"):
       extra sökdrag mot arbetsgivarens nypostade position, mötessannolikhet 1,
       ingen pendlingskostnad, försprång `internal_notice_lead_days` med default 0.

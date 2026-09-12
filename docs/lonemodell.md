@@ -323,6 +323,30 @@ vakansbegrepp gör det inte. En jämförelse med v = 2 procent kräver V utan
 pending, som är ungefär hälften. Det är en rapporteringsfråga, inte en
 mekanism.
 
+### 4.5d Beslutet fattas vid ansökan, aldrig vid erbjudandet (0092)
+
+Individkedjorna (0091) visade byten med NEGATIV lönevinst, upp till
+-12 procent. Mönstret är detsamma varje gång: ansökan lämnas som arbetslös,
+ett annat erbjudande kommer först, hon tillträder det -- och när det första
+fönstret stängs tillträder hon ÄVEN det, till en lägre lön än den hon nu
+har. `handle_close_vacancy` väljer vinnare bland buden och `handle_start_job`
+kontrollerar bara att positionen finns kvar (`job_gone_before_start`); ingen
+av dem jämför erbjudandet med hennes nuvarande situation. Buden är
+utvärderade vid ansökningstillfället och binder henne i fyrtio dagar plus
+uppsägningstid.
+
+Det är precis den marginal Becsi (2026) gör till primitiv: att avslå ett
+funnet alternativ ska vara ett val med en kostnad, inte en omöjlighet.
+Mekanismen hör dit och byggs med avvisningskostnaden (fråga 4).
+
+Måtten som säger hur stor kanalen är: `share_moves_wage_loss`,
+`share_moves_applied_while_unemployed` och `share_moves_application_matched`.
+
+Kedjorna visade också yrkeshopp långt utanför medianen -- u_R_occ 2.7, 2.0,
+1.5 i enskilda övergångar, mot medianen 0.66. `u_R_occ_p90` och
+`share_u_R_occ_above_1` rapporteras nu, eftersom en median inte säger något
+om svansen och det är svansen som avgör om geometrin binder rörligheten.
+
 ### 4.6 Nivåfrågorna
 
 u 14 procent mot 7,5 och vakanstid 59 dagar mot 30–40 är samma tal två gånger:

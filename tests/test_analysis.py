@@ -665,3 +665,64 @@ def test_individual_history_tells_one_individuals_story(tmp_path):
     assert "ANSTÄLLS ur arbetslöshet: J2" in ut and "0.926 × Π_o" in ut
     assert "SÄGER UPP SIG från J2 för J3" in ut
     assert "BYTE: J3" in ut and "vinst +15.9 %" in ut
+
+
+def test_log_writes_one_form_of_agent_id(tmp_path):
+    """REGRESSION: extra-dicten skrev över agent_id med DataFrame-indexet,
+    medan händelsens egen agent_id slogs upp till individual_id. Loggen hade
+    två former för samma person -- 2062_i003443 på ansökan, 3443 på
+    match_completed -- så varje läsare som jämförde dem fick ingen träff, och
+    individens egna vinster lästes som förluster mot en okänd."""
+    import pandas as pd
+    from core.log import EventLogger
+
+    class Stub:
+        individuals = pd.DataFrame({"individual_id": ["2062_i000000", "2062_i003443"],
+                                    "chi": [0.3, 0.3], "xi": [0.2, 0.2], "r_i": [0.1, 0.1]},
+                                   index=[0, 3443])
+        employers = pd.DataFrame()
+
+    path = tmp_path / "e.csv"
+    lg = EventLogger(str(path))
+    # close_vacancy: händelsen har ingen agent, vinnaren står i extra
+    lg.log_event(Stub(), {"time": 1.0, "agent_id": None, "event_type": "close_vacancy"},
+                 extra={"event_detail": "match_completed", "agent_id": 3443, "job_id": "J1"})
+    # start_job_search: agenten står på händelsen
+    lg.log_event(Stub(), {"time": 2.0, "agent_id": 3443, "event_type": "start_job_search"},
+                 extra={"event_detail": "application_filed", "job_id": "J1"})
+    lg.file.close()
+    rader = [parse_line(l) for l in path.read_text(encoding="utf-8").splitlines()]
+    assert [r["agent_id"] for r in rader] == ["2062_i003443", "2062_i003443"]
+    assert rader[0]["agent_type"] == "individual"
+
+
+def test_wage_losing_moves_and_stale_applications_are_counted(tmp_path):
+    """Individkedjorna (0091) visade byten med negativ lönevinst: ansökan
+    lämnad som arbetslös, erbjudandet kom efter att hon tagit ett annat jobb,
+    tillträdet skedde ändå. Två mått ska fånga kanalen."""
+    lines = [
+        "0.00, new_month, agent_type system, month 1, employed 900, unemployed 100, "
+        "unmatched_jobs 0, not_in_labour_force 0, active_jobs 900, posted 0",
+        # A ansöker som arbetslös, tillträder senare som anställd med lägre lön
+        "100.00, start_job_search, event_detail application_filed, status unemployed, "
+        "agent_id A, job_id J2, w_neg 0.90, q_hire 0.6",
+        "150.00, start_job, agent_id A, job_id J1, from_onet 43-4051.00, to_onet 51-2011.00, occ_change 1, w_field 1.0, w_occ 1.0, "
+        "w_neg 1.00, q_hire 0.7, job_to_job False, u_R 0.5, u_R_occ 0.5",
+        "200.00, start_job, agent_id A, job_id J2, from_onet 43-4051.00, to_onet 51-2011.00, occ_change 1, w_field 1.0, w_occ 1.0, "
+        "w_neg 0.90, q_hire 0.6, job_to_job True, w_prev 1.00, u_R 2.4, u_R_occ 2.4",
+        # B ansöker som anställd och byter uppåt
+        "300.00, start_job_search, event_detail application_filed, status employed, "
+        "agent_id B, job_id J4, w_neg 1.20, q_hire 0.9",
+        "310.00, start_job, agent_id B, job_id J3, from_onet 43-4051.00, to_onet 51-2011.00, occ_change 1, w_field 1.0, w_occ 1.0, "
+        "w_neg 1.00, q_hire 0.8, job_to_job False, u_R 0.3, u_R_occ 0.3",
+        "350.00, start_job, agent_id B, job_id J4, from_onet 43-4051.00, to_onet 51-2011.00, occ_change 1, w_field 1.2, w_occ 1.2, "
+        "w_neg 1.20, q_hire 0.9, job_to_job True, w_prev 1.00, u_R 0.4, u_R_occ 0.4",
+        "3652.50, simulation_completed, agent_type system",
+    ]
+    d = tmp_path / "run_w"; d.mkdir()
+    (d / "eventlog.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    row = summary_row(str(d))
+    assert row["share_moves_wage_loss"] == pytest.approx(0.5)
+    assert row["share_moves_application_matched"] == pytest.approx(1.0)
+    assert row["share_moves_applied_while_unemployed"] == pytest.approx(0.5)
+    assert row["share_u_R_occ_above_1"] == pytest.approx(0.25)

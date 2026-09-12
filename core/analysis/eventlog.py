@@ -327,6 +327,36 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                     n_from_unemp = int((~is_jtj).sum())
                     if n_from_unemp:
                         row["share_unemployed_hires_that_step"] = round(len(gaps) / n_from_unemp, 4)
+            # FÖRLORANDE BYTEN OCH GAMLA ANSÖKNINGAR. Individkedjorna (0091)
+            # visade byten med NEGATIV lönevinst: ansökan lämnas som
+            # arbetslös, erbjudandet kommer efter att hon tagit ett annat
+            # jobb, och tillträdet sker ändå -- beslutet fattas vid ansökan,
+            # aldrig vid erbjudandet. Måtten säger hur stor den kanalen är.
+            if len(jtj) and "w_prev" in jtj.columns:
+                w_ny = pd.to_numeric(jtj["w_neg"], errors="coerce")
+                w_fore = pd.to_numeric(jtj["w_prev"], errors="coerce")
+                par = pd.concat([w_ny, w_fore], axis=1).dropna()
+                if len(par):
+                    row["share_moves_wage_loss"] = round(
+                        float((par.iloc[:, 0] < par.iloc[:, 1]).mean()), 4)
+                appl = {(r.get("agent_id"), r.get("job_id")): r.get("status")
+                        for r in events if r.get("event_detail") == "application_filed"}
+                status_vid_ansokan = [
+                    appl.get((r["agent_id"], r["job_id"]))
+                    for _, r in jtj.iterrows()
+                    if (r.get("agent_id"), r.get("job_id")) in appl]
+                if status_vid_ansokan:
+                    row["share_moves_applied_while_unemployed"] = round(
+                        float(np.mean([s == "unemployed" for s in status_vid_ansokan])), 4)
+                    row["share_moves_application_matched"] = round(
+                        len(status_vid_ansokan) / len(jtj), 4)
+            # Yrkesavståndet i svansen: medianen 0.66 döljer enskilda hopp
+            # över halva skivan (u_R_occ 2.7 i kedjorna).
+            if "u_R_occ" in körning.columns:
+                uro = pd.to_numeric(körning["u_R_occ"], errors="coerce").dropna()
+                if len(uro):
+                    row["u_R_occ_p90"] = round(float(uro.quantile(0.90)), 4)
+                    row["share_u_R_occ_above_1"] = round(float((uro > 1.0).mean()), 4)
             # SÖKINTENSITETEN, efter status. Sedan 0088 bär varje sökning sin
             # status; sökningar per personår är det tal parametrarna påstår
             # (365/28 = 13 arbetslös, 13/on_the_job_search_factor anställd)

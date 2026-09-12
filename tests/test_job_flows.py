@@ -1601,3 +1601,29 @@ def test_start_job_supersedes_the_old_search_and_applies_the_ramp():
     with pytest.raises(KeyError):
         handle_start_job_search({"time": nst, "agent_id": 0,
                                  "event_type": "start_job_search", "params": {}}, w)
+
+
+def test_destroyed_job_logs_who_lost_it():
+    """REGRESSION: förstörelsen är en JOBBhändelse, så händelsens agent_id är
+    None, och raden job_destroyed_holder_displaced bar ingen person. Den som
+    mister jobbet gick inte att följa i loggen: --displaced i
+    individual_history.py hittade noll individer av ~990 per år."""
+    from core.event_handlers import handle_destroy_job
+    w = make_world(n_employers=1, size=2)
+    w.individuals = pd.DataFrame([{
+        "individual_id": "2062_i000000", "status": "employed", "job_id": None,
+        "w_res": 1.0, "chi": 0.3, "xi": 0.2, "r_i": 0.1, "x_occ": 0.1, "y_occ": 0.1,
+        "next_search_time": np.nan, "propensity_start_education": 0.0,
+    }])
+    w.prepare()
+    jid = w.jobs.at[0, "job_id"]
+    w.jobs.at[0, "individual_id"] = "2062_i000000"
+    w.individuals.at[0, "job_id"] = jid
+    w.set_job_filled(jid, True)
+    w.event_logger.events = []
+    handle_destroy_job({"time": 500.0, "agent_id": None, "event_type": "destroy_job",
+                        "params": {"job_id": jid}}, w)
+    rader = [extra for _, extra in w.event_logger.events
+             if extra.get("event_detail") == "job_destroyed_holder_displaced"]
+    assert len(rader) == 1
+    assert rader[0].get("agent_id") == 0

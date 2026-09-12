@@ -83,6 +83,23 @@ class EventLogger:
             else:
                 agent_type = "unknown"
 
+        # EN KONVENTION FÖR agent_id. Fram till 0092 skrev extra-dicten över
+        # agent_id med DataFrame-indexet, medan händelsens egen agent_id
+        # slogs upp och skrevs som individual_id. Loggen hade därför två
+        # former för samma person -- 2062_i003443 på ansökan, 3443 på
+        # match_completed -- och varje läsare som jämförde dem fick ingen
+        # träff. Bär extra ett agent_id går det genom samma uppslagning.
+        if extra and extra.get("agent_id") is not None and event.get("agent_id") is None:
+            extra = dict(extra)
+            event = {**event, "agent_id": extra.pop("agent_id")}
+            agent_type = None
+            if event["agent_id"] in getattr(world, "individuals", pd.DataFrame()).index:
+                agent_type = "individual"
+            elif event["agent_id"] in getattr(world, "employers", pd.DataFrame()).index:
+                agent_type = "employer"
+            else:
+                agent_type = "unknown"
+
         if agent_type == "individual":
             agent = world.individuals.loc[event["agent_id"]] if event["agent_id"] in world.individuals.index else None
             agent_id = agent.get("individual_id", event["agent_id"]) if agent is not None else event["agent_id"]
