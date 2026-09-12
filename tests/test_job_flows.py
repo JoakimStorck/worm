@@ -1733,3 +1733,29 @@ def test_the_promise_is_discharged_at_the_start():
     start = [e for e in w._pushed if e["event_type"] == "start_job"][0]
     handle_start_job(start, w)
     assert pd.isna(w.individuals.at[0, "accepted_job_id"])
+
+
+def test_the_configured_fill_rate_does_not_add_to_unemployment():
+    """KALIBRERINGSINVARIANT. Jämvikten vid partiell anpassning lämnar ett
+    stående underskott D/T = (delta/12)/(fill + delta/12), och eftersom
+    u = u_min + V/L exakt hamnar underskottet rakt på arbetslösheten: med
+    fill 0.25 var u_min 8.8 procent mot konfigurerade 6.5. Takten ska väljas
+    så att underskottet är försumbart -- annars mäter u en
+    anpassningshastighet och inte en arbetsmarknad."""
+    import yaml
+    from pathlib import Path
+    sim = yaml.safe_load(
+        (Path(__file__).resolve().parent.parent / "scenarios"
+         / "_simulation_defaults.yml").read_text(encoding="utf-8"))["simulation"]
+    delta = float(sim["job_destruction_rate"])
+    fill = float(sim["vacancy_fill_rate"])
+    andel = (delta / 12.0) / (fill + delta / 12.0)
+    assert andel < 0.01, f"stående underskott {andel:.1%} av jobbstocken"
+
+    # Och mekanismen ska följa formeln, inte bara konfigurationen
+    w = make_world(n_employers=40, size=25, simulation={"vacancy_fill_rate": fill,
+                                                        "job_destruction_rate": delta})
+    w._schedule_destruction(w.jobs["job_id"].tolist(), 0.0)
+    stock = run_months(w, 48)
+    assert np.mean(stock[-12:]) == pytest.approx(
+        theoretical_stock(1000, delta, fill), rel=0.03)

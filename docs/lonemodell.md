@@ -352,11 +352,25 @@ Kedjorna visade också yrkeshopp långt utanför medianen -- u_R_occ 2.7, 2.0,
 `share_u_R_occ_above_1` rapporteras nu, eftersom en median inte säger något
 om svansen och det är svansen som avgör om geometrin binder rörligheten.
 
-### 4.6 Nivåfrågorna
+### 4.6 Nivåfrågorna (uppdaterat efter 0098–0100)
 
-u 14 procent mot 7,5 och vakanstid 59 dagar mot 30–40 är samma tal två gånger:
-u = u_min + V/L exakt. u_min ≈ 6 procent är strukturellt; resten är
-vakansstocken, alltså 4.1–4.4.
+u = u_min + V/L exakt, och efter 0098 är u 12,9 procent: u_min 8,8 och
+V/L 4,1. Båda termerna var mekaniska, inte ekonomiska.
+
+*u_min.* Konfigurationen säger 6,5 procent, men refyllnadstakten
+`vacancy_fill_rate` 0,25 per månad mot δ = 0,1 per år lämnade ett stående
+underskott på (δ/12)/(fill + δ/12) = 3,2 procent av jobbstocken, alltså 336
+positioner som aldrig fanns. Det lades rakt på arbetslösheten. 0100 sätter
+takten till 1,0 (underskott 0,8 procent) och u_min ska då landa kring 7,3.
+Den fördröjning som verkligen hör hemma här — arbetsgivarens beslut att
+ersätta en förlorad position — är inte modellerad och hör till arbetsgivaren
+som agent.
+
+*V/L.* Vakansvaraktigheten är 115 dagar mot svenska 30–40, och består av
+annonseringsfönstret 40 dagar plus uppsägningstiden ~40 plus de positioner
+ingen tar. Därtill räknar V tillsatta men ej tillträdda positioner, vilket
+SCB:s vakansbegrepp inte gör; rapporterat utan pending är talet ungefär
+hälften. Fönstret och uppsägningstiden är modellval med egen empiri.
 
 ---
 

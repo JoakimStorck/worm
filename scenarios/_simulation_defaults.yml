@@ -159,7 +159,23 @@ simulation:
   #     och Beveridgekurvan en bokföringsidentitet (v linjär i u).
   job_flows: true
   job_destruction_rate: 0.10   # andel av positionerna som upphör per år
-  vacancy_fill_rate: 0.25      # andel av arbetsgivarens underskott som postas per månad
+  # Andel av arbetsgivarens underskott som postas per månad. Vid partiell
+  # anpassning är jämvikten fill*(T - J) = (delta/12)*J, alltså ett STÅENDE
+  # underskott av positioner som aldrig finns:
+  #
+  #     D/T = (delta/12) / (fill + delta/12)
+  #     fill 0.25 -> 3.2 %  av 10 400 jobb = 336 positioner
+  #     fill 1.00 -> 0.8 %                  =  86 positioner
+  #
+  # Och u = u_min + V/L exakt, där u_min = (L - J)/L. Underskottet lades
+  # alltså rakt på arbetslösheten: 6.5 procent i konfigurationen blev 8.8
+  # mätt (0098). Takten var aldrig motiverad -- den är ingen ekonomisk
+  # fördröjning utan en godtycklig anpassningshastighet, och den enda
+  # fördröjning som hör hemma här är arbetsgivarens beslut att ersätta en
+  # förlorad position, som inte är modellerad (arbetsgivaren som agent,
+  # fråga 3, pausad). 1.0 betyder att en förstörd position är utlyst inom
+  # en månad, och kvar av underskottet är den månadens eftersläpning.
+  vacancy_fill_rate: 1.0
   employer_growth_rate: 0.0    # måltalets tillväxt per år (0 = stationärt)
 
   # Samla ALLA event-tider på samma ställe – alla tider med enhet!

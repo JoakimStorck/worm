@@ -38,6 +38,9 @@ avståndsfördelningar, inte kalibrerade mot data.
       ingen pendlingskostnad, försprång `internal_notice_lead_days` med default 0.
       Test: en tredjedel av bytena interna, koncentrerade till stora arbetsgivare.
       Efter 0089 och 0090.
+- [ ] **Skriptet ska vägra starta med ocommittade ändringar** (`kor_0077.sh`):
+      `git diff --quiet || exit 1`. Frö 3 i 0089-körningen gjordes på ett
+      smutsigt träd och rapporten varnade först i efterhand.
 - [ ] **v utan pending.** Vakansstocken räknar tillsatta ej tillträdda; SCB gör
       inte det. Rapportera V_open = V − pending som v, behåll V i identiteten.
 - [ ] **Kalibrera `on_the_job_search_factor`** mot ~10 % byten och 3–5 års
