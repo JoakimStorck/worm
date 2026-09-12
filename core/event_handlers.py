@@ -97,12 +97,16 @@ def handle_start_job(event, world):
                 == individuals.at[idx, 'individual_id']
         )
         if still_holds:
+            if 'accepted_job_id' in individuals.columns:
+                individuals.at[idx, 'accepted_job_id'] = None
             world.event_logger.log_event(world, event, extra={
                 'event_detail': 'job_gone_before_start_kept_previous', 'job_id': job_id})
             return
 
         individuals.at[idx, 'status'] = 'unemployed'
         individuals.at[idx, 'job_id'] = np.nan
+        if 'accepted_job_id' in individuals.columns:
+            individuals.at[idx, 'accepted_job_id'] = None
         world.schedule_search(idx, world.search_interval(idx, float(event['time'])))
         world.event_logger.log_event(world, event, extra={
             'event_detail': 'job_gone_before_start', 'job_id': job_id})
@@ -152,6 +156,9 @@ def handle_start_job(event, world):
     # ovan, som redan fanns; 0079:s egen frigörning här var dubbelarbete.
     if 'notice_job_id' in individuals.columns:
         individuals.at[idx, 'notice_job_id'] = None
+    # Löftet är infriat (0098).
+    if 'accepted_job_id' in individuals.columns:
+        individuals.at[idx, 'accepted_job_id'] = None
 
     world.set_job_filled(job_id, True)
     # Ingen fallback med boolesk skanning: saknas positionen i indexet är det
@@ -454,13 +461,27 @@ def handle_close_vacancy(event, world):
     def _behörig(k):
         if k not in ind.index:
             return False
+        # "tar det den först erbjuds": har hon redan tackat ja någon annanstans
+        # är hon inte längre tillgänglig. Fram till 0098 prövades det BARA för
+        # den anställda, eftersom notice_job_id skrivs vid uppsägning och den
+        # arbetslösa inte säger upp sig. Den arbetslösa som vann flera
+        # vakanser innan den första hunnit tillträdas passerade därför spärren
+        # varje gång och tillträdde dem i tur och ordning:
+        #
+        #   individ 004359, år 9:  VANN fyra vakanser dag 216-253 som arbetslös
+        #                          tillträdde tre av dem dag 259, 266, 333
+        #                          den andra till -9.7 procent
+        #
+        # 0095 fångade det inte: överskottet prövas mot hennes läge vid
+        # STÄNGNINGEN, och då var hon fortfarande arbetslös med låg
+        # reservation. Löftet, inte statusen, är det som gör henne otillgänglig.
+        if 'accepted_job_id' in ind.columns and pd.notna(ind.at[k, 'accepted_job_id']):
+            return False
         st = ind.at[k, 'status']
         if st == 'unemployed':
             return pd.isna(ind.at[k, 'job_id'])
         if st != 'employed':
             return False
-        # "tar det den först erbjuds": har hon redan tackat ja någon annanstans
-        # är hon inte längre tillgänglig
         if 'notice_job_id' not in ind.columns:
             return True
         return pd.isna(ind.at[k, 'notice_job_id'])
@@ -539,6 +560,14 @@ def handle_close_vacancy(event, world):
     # så rekryteringstiden låg tidigare inne i vakansvaraktigheten för alla.
     world.set_job_pending(job_id)
     lag = start_delay_days(world, idx)
+
+    # LÖFTET. En accepterad position är ett löfte tills det tillträds, och
+    # ett löfte i taget. Kolumnen gäller alla, oavsett status, och rensas vid
+    # tillträdet eller om positionen försvinner innan dess.
+    if 'accepted_job_id' not in ind.columns:
+        ind['accepted_job_id'] = pd.Series([None] * len(ind), index=ind.index,
+                                           dtype="object")
+    ind.at[idx, 'accepted_job_id'] = job_id
 
     # EGEN UPPSÄGNING som konsekvens av erbjudandet, inte som orsak till
     # arbetslöshet. Hon behåller sitt gamla jobb under uppsägningstiden -- den

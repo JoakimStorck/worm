@@ -447,6 +447,13 @@ class World:
             # parametern. Nu äger individen sin nästa sökning; en händelse vars
             # 'due' inte längre är hennes next_search_time är ersatt och kastas.
             self.individuals['next_search_time'] = np.nan
+        if 'accepted_job_id' not in self.individuals.columns:
+            # ETT LÖFTE I TAGEN (0098): den accepterade men ännu ej tillträdda
+            # positionen. Skapas här och inte vid första acceptansen, så att
+            # _behörig kan lita på att kolumnen finns.
+            self.individuals['accepted_job_id'] = pd.Series(
+                [None] * len(self.individuals), index=self.individuals.index,
+                dtype="object")
         # Lönen och revisionens utgångspunkt hör till individens SCHEMA, inte
         # till någon enskild funktion. De skapades tidigare i
         # _seed_wages_for_matched, som utgick med 0069, och då fanns ingen

@@ -1683,3 +1683,53 @@ def test_when_everyone_declines_the_vacancy_stays_unfilled():
               if e.get("event_detail") == "vacancy_closed_unfilled"]
     assert len(ofylld) == 1 and ofylld[0].get("all_declined") is True
     assert [e for e in w._pushed if e["event_type"] == "start_job"] == []
+
+
+def test_one_promise_at_a_time_also_for_the_unemployed():
+    """REGRESSION: löftet prövades bara för den anställda, eftersom
+    notice_job_id skrivs vid uppsägning och den arbetslösa inte säger upp sig.
+    Den arbetslösa som vann flera vakanser innan den första hunnit tillträdas
+    tillträdde dem i tur och ordning -- individ 004359 vann fyra på 37 dagar
+    och tog tre, den andra till -9.7 procent. 0095 fångade det inte: hennes
+    läge vid stängningen var fortfarande arbetslös med låg reservation."""
+    from core.event_handlers import handle_close_vacancy
+
+    w, jid = _world_with_applicants([0.2, 0.9, 0.5])
+    for i in range(3):
+        w.individuals.at[i, "w_res"] = 0.7
+    w.prepare()
+    w.individuals["job_id"] = w.individuals["job_id"].astype(object)
+    handle_close_vacancy({"time": 40.0, "agent_id": None, "event_type": "close_vacancy",
+                          "params": {"job_id": jid}}, w)
+    assert w.individuals.at[1, "accepted_job_id"] == jid, "löftet ska registreras"
+
+    # En andra vakans stänger innan hon tillträtt den första: hon är inte
+    # längre tillgänglig, och positionen går till näste i q-ordning.
+    andra = w.jobs.iloc[1]["job_id"]
+    w.jobs.loc[w.jobs["job_id"] == andra, "active"] = True
+    for i in (1, 2):
+        w.file_application(andra, i, 0.0, q=0.9 if i == 1 else 0.5,
+                           w_neg=0.8, surplus=0.1, commute_km=5.0)
+    w._pushed.clear()
+    handle_close_vacancy({"time": 41.0, "agent_id": None, "event_type": "close_vacancy",
+                          "params": {"job_id": andra}}, w)
+    starter = [e for e in w._pushed if e["event_type"] == "start_job"]
+    assert len(starter) == 1
+    assert starter[0]["agent_id"] == 2, "den med ett löfte ska inte vara behörig"
+
+
+
+
+def test_the_promise_is_discharged_at_the_start():
+    """Löftet (0098) gäller till tillträdet och inte längre: efter det är hon
+    tillgänglig på marknaden igen, nu som anställd."""
+    from core.event_handlers import handle_close_vacancy, handle_start_job
+    w, gammalt, nytt = _byte_world()
+    w.prepare()
+    w.file_application(nytt, 0, 0.0, q=1.0, w_neg=1.5, surplus=0.3, commute_km=2.0)
+    handle_close_vacancy({"time": 40.0, "agent_id": None, "event_type": "close_vacancy",
+                          "params": {"job_id": nytt}}, w)
+    assert w.individuals.at[0, "accepted_job_id"] == nytt
+    start = [e for e in w._pushed if e["event_type"] == "start_job"][0]
+    handle_start_job(start, w)
+    assert pd.isna(w.individuals.at[0, "accepted_job_id"])
