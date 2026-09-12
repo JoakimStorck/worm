@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from pathlib import Path
+
 from core.analysis.eventlog import (parse_line, transitions_table, timeseries_table,
                                     summary_row, coverage, export, load_tables)
 
@@ -835,3 +837,24 @@ def test_first_step_gap_is_the_next_move_for_the_same_individual(tmp_path):
     assert row["share_first_step_within_year"] == pytest.approx(1.0)
     # två anställningar ur arbetslöshet (A, B), ett steg taget
     assert row["share_unemployed_hires_that_step"] == pytest.approx(0.5)
+
+
+def test_archived_runs_are_found_by_name(tmp_path, monkeypatch):
+    """kor_0077.sh flyttar körningar från andra commits till output/arkiv/, så
+    en sökväg som fungerade i går ger FileNotFoundError i dag. Katalognamnet
+    är unikt: verktyget letar upp det, och säger vilka körningar som finns om
+    det inte hittas."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    from individual_history import _resolve_run_dir
+
+    ark = tmp_path / "output" / "arkiv" / "run_20260912_185257"
+    ark.mkdir(parents=True)
+    (ark / "eventlog.csv").write_text("0.00, simulation_completed, agent_type system\n",
+                                      encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    assert _resolve_run_dir("output/run_20260912_185257") == str(
+        Path("output") / "arkiv" / "run_20260912_185257")
+    with pytest.raises(SystemExit) as fel:
+        _resolve_run_dir("output/run_finns_inte")
+    assert "run_20260912_185257" in str(fel.value)

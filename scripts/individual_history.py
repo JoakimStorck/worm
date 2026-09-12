@@ -19,6 +19,7 @@ jobbet genom förstörelse. Yrkestitlar hämtas ur data/worm.sqlite3
 (onet_occupations) om den finns, annars visas koden.
 """
 import argparse
+import glob
 import os
 import random
 import sqlite3
@@ -29,6 +30,32 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.analysis.eventlog import read_events, _b, _f  # noqa: E402
 
 WINDOW_DAYS = 45.0   # 40 dagars annonsering plus marginal
+
+
+def _resolve_run_dir(given):
+    """Hittar körningen även när den arkiverats.
+
+    kor_0077.sh flyttar körningar från andra commits till output/arkiv/, så
+    en sökväg som fungerade i går ger FileNotFoundError i dag. Katalognamnet
+    är unikt, så det räcker att leta upp det: först som angiven, sedan under
+    output/arkiv/, sedan var som helst under output/."""
+    if os.path.isfile(os.path.join(given, "eventlog.csv")):
+        return given
+    namn = os.path.basename(os.path.normpath(given))
+    for kandidat in (os.path.join("output", "arkiv", namn),
+                     os.path.join("output", namn)):
+        if os.path.isfile(os.path.join(kandidat, "eventlog.csv")):
+            return kandidat
+    träffar = sorted(glob.glob(os.path.join("output", "**", namn, "eventlog.csv"),
+                               recursive=True))
+    if träffar:
+        return os.path.dirname(träffar[0])
+    nara = sorted(os.path.basename(os.path.dirname(p))
+                  for p in glob.glob(os.path.join("output", "**", "eventlog.csv"),
+                                     recursive=True))
+    raise SystemExit(f"Ingen eventlog.csv för {given}.\n"
+                     + ("Körningar som finns: " + ", ".join(nara[-8:]) if nara
+                        else "Inga körningar hittades under output/."))
 
 
 def _titles(db_path):
@@ -171,7 +198,7 @@ def main():
     ap.add_argument("--db", default="data/worm.sqlite3")
     args = ap.parse_args()
 
-    events = read_events(args.run_dir)
+    events = read_events(_resolve_run_dir(args.run_dir))
     titles = _titles(args.db)
 
     events_by_agent = defaultdict(list)
