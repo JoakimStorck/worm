@@ -290,6 +290,43 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                 g = g.replace([np.inf, -np.inf], np.nan).dropna()
                 if len(g):
                     row["job_to_job_wage_gain"] = round(float(g.median()), 4)
+            # DET FÖRSTA STEGET. Svepet 0089 visade att bytena inte styrs av
+            # söktakten: halverad sökning gav 17 procent färre byten, och
+            # träffsäkerheten per sökning fördubblades. Tolkning: stegen är
+            # i huvudsak det första steget efter arbetslöshet -- den som
+            # anställts ur arbetslöshet till en lön under Pi har överskott mot
+            # nästan varje vakans och flyttar vid nästa sökning. Två mått
+            # prövar det: ingångslönen relativt YRKETS Pi efter ursprung, och
+            # tiden från anställning ur arbetslöshet till nästa byte.
+            if "w_occ" in körning.columns and "job_to_job" in körning.columns:
+                jt = körning["job_to_job"].fillna(False).astype(bool)
+                for namn, m in (("from_unemployment", ~jt), ("job_to_job", jt)):
+                    wr = (pd.to_numeric(körning.loc[m, "w_neg"], errors="coerce") /
+                          pd.to_numeric(körning.loc[m, "w_occ"], errors="coerce"))
+                    wr = wr.replace([np.inf, -np.inf], np.nan).dropna()
+                    if len(wr):
+                        row[f"entry_wage_ratio_{namn}"] = round(float(wr.median()), 4)
+                # Tid till nästa byte, per individ: från varje anställning ur
+                # arbetslöshet till individens nästa job_to_job-tillträde.
+                k = körning.sort_values("time")
+                nxt = []
+                for aid, grp in k.groupby("agent_id", sort=False):
+                    t = grp["time"].to_numpy()
+                    j = grp["job_to_job"].fillna(False).astype(bool).to_numpy()
+                    for i in range(len(t)):
+                        if j[i]:
+                            continue
+                        senare = np.nonzero(j[i + 1:])[0]
+                        if len(senare):
+                            nxt.append(t[i + 1 + senare[0]] - t[i])
+                if nxt:
+                    nxt = np.asarray(nxt, dtype=float)
+                    row["days_to_first_step_median"] = round(float(np.median(nxt)), 1)
+                    row["share_first_step_within_year"] = round(
+                        float(np.mean(nxt <= 365.25)), 4)
+                    n_fu = int((~jt).sum())
+                    if n_fu:
+                        row["share_unemployed_hires_that_step"] = round(len(nxt) / n_fu, 4)
             # SÖKINTENSITETEN, efter status. Sedan 0088 bär varje sökning sin
             # status; sökningar per personår är det tal parametrarna påstår
             # (365/28 = 13 arbetslös, 13/on_the_job_search_factor anställd)

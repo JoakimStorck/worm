@@ -590,3 +590,32 @@ def test_boolean_log_fields_are_parsed_as_booleans(tmp_path):
     row = summary_row(str(d))
     assert row["share_hires_from_employment"] == pytest.approx(0.5)
     assert row["n_job_to_job"] == 1
+
+
+def test_first_step_measures_follow_each_individual(tmp_path):
+    """Svepet 0089: bytena styrs inte av söktakten. Måtten som prövar
+    tolkningen -- ingångslön ur arbetslöshet relativt yrkets Pi, och tiden från
+    anställning ur arbetslöshet till individens NÄSTA byte -- måste följa
+    individen, inte tabellen: agent 1 anställs ur arbetslöshet dag 50 till
+    0.85 Pi och byter dag 300; agent 2 anställs dag 60 och byter aldrig."""
+    def st(t, aid, jtj, w_neg, w_occ, extra=""):
+        return (f"{t:.2f}, start_job, agent_id {aid}, job_id J{aid}, u_R 0.5, u_R_occ 0.5, "
+                f"from_onet 49-9041.00, to_onet 51-2011.00, occ_change 1, w_field 1.0, "
+                f"w_occ {w_occ}, w_neg {w_neg}, q_hire 0.8, job_to_job {jtj}{extra}")
+    lines = [
+        "0.00, new_month, agent_type system, month 1, employed 900, unemployed 100, "
+        "unmatched_jobs 0, not_in_labour_force 0, active_jobs 900, posted 0",
+        st(0.0, 3, "False", 0.9, 1.0, ", is_bootstrap True"),
+        st(50.0, 1, "False", 0.85, 1.0),
+        st(60.0, 2, "False", 0.80, 1.0),
+        st(300.0, 1, "True", 1.02, 1.0, ", w_prev 0.85"),
+        "3652.50, simulation_completed, agent_type system",
+    ]
+    d = tmp_path / "run_s"; d.mkdir()
+    (d / "eventlog.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    row = summary_row(str(d))
+    assert row["entry_wage_ratio_from_unemployment"] == pytest.approx(0.825)
+    assert row["entry_wage_ratio_job_to_job"] == pytest.approx(1.02)
+    assert row["days_to_first_step_median"] == pytest.approx(250.0)
+    assert row["share_first_step_within_year"] == pytest.approx(1.0)
+    assert row["share_unemployed_hires_that_step"] == pytest.approx(0.5)

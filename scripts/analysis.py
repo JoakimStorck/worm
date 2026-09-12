@@ -185,6 +185,28 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
                   "restpoolen undan: arbetsgivaren möter inte arbetskraften "
                   "utan dem som ännu inte matchats.")
             A("\n")
+        eu = _kol("entry_wage_ratio_from_unemployment")
+        ej = _kol("entry_wage_ratio_job_to_job")
+        d1 = _kol("days_to_first_step_median")
+        s1 = _kol("share_first_step_within_year")
+        st = _kol("share_unemployed_hires_that_step")
+        if len(eu) and len(ej):
+            A(f"Ingångslön relativt yrkets $\\Pi_o$: **{eu.median():.3f}** ur arbetslöshet, "
+              f"**{ej.median():.3f}** vid byte."
+              + (f" Av dem som anställs ur arbetslöshet byter {100*st.median():.0f} % "
+                 f"senare under körningen, median {d1.median():.0f} dagar efter tillträdet, "
+                 f"{100*s1.median():.0f} % inom ett år." if len(d1) else "")
+              + " Är rabatten ur arbetslöshet stor och nästa steg snabbt är stegen "
+                "det första steget efter arbetslöshet, och bytesfrekvensen sätts av "
+                "ingångslönen -- inte av söktakten (svepet 0089).\n")
+        se = _kol("searches_per_year_employed")
+        su = _kol("searches_per_year_unemployed")
+        if len(se) and len(su):
+            A(f"Sökningar per personår: **{se.median():.2f}** anställda, "
+              f"**{su.median():.2f}** arbetslösa. Faktorn sätts mot AKU:s "
+              "ombytessökande, ungefär en sökepisod per anställd och år "
+              "(nivån ska verifieras mot AM0401); amerikansk nivå är ~2.6 "
+              "(Faberman m.fl. 2022).\n")
         va = _kol("vacancy_age_median")
         vp = _kol("vacancy_age_p90")
         if len(va):

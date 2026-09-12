@@ -131,9 +131,19 @@ simulation:
   # jobbet -- Jovanovics inlärningsargument. Bara uppgången parametriseras:
   # avtagandet faller ut ur att reservationen är nuvarande lön, så den som
   # klättrat har färre jobb som slår den. switching_cost_share är
-  # bytesfriktionen som andel av nuvarande lön. Alla tre kalibreras mot den
-  # observerade andelen jobbyten per år, kring tio procent i Sverige.
-  on_the_job_search_factor: 5.0
+  # bytesfriktionen som andel av nuvarande lön.
+  #
+  # FAKTORN sätts mot sökfrekvensen, inte mot bytena (0090). Faktor 5 gav
+  # 2.2 sökningar per anställd och år, vilket är amerikansk nivå (Faberman
+  # m.fl. 2022: ~20 procent av anställda sökte senaste fyra veckorna). AKU:s
+  # ombytessökande ligger lägre, kring en sökepisod per år. Faktor 10 ger
+  # 1.1 (svepet 0089: 5/8/9/10 -> 2.20/1.39/1.24/1.11, exakt 365/(28 x f)
+  # minus rampen). Svepet visade också att bytena INTE styrs av faktorn:
+  # halverad sökning gav 17 procent färre byten. Bytena bärs av det första
+  # steget efter arbetslöshet, alltså av ingångslönens rabatt, och den
+  # kalibreras för sig (reservationens fall). Rampen är ett modellval, se
+  # individmodell.md 6.
+  on_the_job_search_factor: 10.0
   on_the_job_search_ramp_days: 180
   switching_cost_share: 0.05
 
