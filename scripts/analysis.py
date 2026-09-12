@@ -199,6 +199,18 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
               + " Är rabatten ur arbetslöshet stor och nästa steg snabbt är stegen "
                 "det första steget efter arbetslöshet, och bytesfrekvensen sätts av "
                 "ingångslönen -- inte av söktakten (svepet 0089).\n")
+        md = {k: _kol(f"move_{k}_mean") for k in
+              ("d_occ", "d_eta", "d_fit", "d_revision", "gain")}
+        if len(md["gain"]):
+            A("Bytespremien delad i sina tre källor, mellan två anställningar för "
+              "samma individ ($\\log w = \\log \\Pi_o + \\eta + \\theta\\log p$): "
+              f"yrkets pris **{100*md['d_occ'].median():+.1f} %**, arbetsgivareffekten "
+              f"**{100*md['d_eta'].median():+.1f} %**, passformen "
+              f"**{100*md['d_fit'].median():+.1f} %**. Revisionen gav under "
+              f"anställningen **{100*md['d_revision'].median():+.1f} %**, och kvar som "
+              f"bytespremie blir **{100*md['gain'].median():+.1f} %**. Växer passformen "
+              "inuti anställningen utan att revisionen betalar den är `beta_q` spaken; "
+              "dominerar arbetsgivareffekten är det `employer_wage_sd` och urvalet.\n")
         se = _kol("searches_per_year_employed")
         su = _kol("searches_per_year_unemployed")
         if len(se) and len(su):

@@ -350,6 +350,50 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                         float(np.mean([s == "unemployed" for s in status_vid_ansokan])), 4)
                     row["share_moves_application_matched"] = round(
                         len(status_vid_ansokan) / len(jtj), 4)
+                # VARFÖR BYTET LÖNAR SIG. w = Pi_o * exp(eta) * p^theta, och
+                # alla tre logaritmerna finns i loggen: w_occ är Pi_o,
+                # w_field/w_occ är exp(eta), w_neg/w_field är p^theta. Mellan
+                # två på varandra följande anställningar för SAMMA individ
+                # blir därför
+                #
+                #     dlog w_neg = dlog Pi_o + d eta + d(theta log p)
+                #
+                # en exakt uppdelning: yrkets pris, arbetsgivareffekten och
+                # passformen. Och w_prev (lönen hon HADE vid bytet) mot
+                # w_neg vid förra anställningen är revisionens bidrag under
+                # anställningen. Bytespremien log(w_neg/w_prev) är alltså
+                # de tre komponenterna MINUS vad revisionen redan gav.
+                # Det är måttet som skiljer spakarna: växer passformen medan
+                # revisionen står still är beta_q spaken, inte friktionen.
+                kol = {"w_neg", "w_field", "w_occ"}
+                if kol <= set(körning.columns):
+                    delar = {"d_occ": [], "d_eta": [], "d_fit": [],
+                             "d_revision": [], "gain": []}
+                    for _, grp in ordered.groupby("agent_id", sort=False):
+                        g = grp[grp["w_neg"].notna()]
+                        for a, b in zip(g.itertuples(), g.iloc[1:].itertuples()):
+                            if not bool(getattr(b, "job_to_job", False)):
+                                continue
+                            try:
+                                lo = np.log([a.w_occ, b.w_occ, a.w_field, b.w_field,
+                                             a.w_neg, b.w_neg])
+                            except (TypeError, ValueError):
+                                continue
+                            if not np.all(np.isfinite(lo)):
+                                continue
+                            l_ao, l_bo, l_af, l_bf, l_aw, l_bw = lo
+                            delar["d_occ"].append(l_bo - l_ao)
+                            delar["d_eta"].append((l_bf - l_bo) - (l_af - l_ao))
+                            delar["d_fit"].append((l_bw - l_bf) - (l_aw - l_af))
+                            w_prev = getattr(b, "w_prev", np.nan)
+                            if w_prev == w_prev and w_prev > 0:
+                                delar["d_revision"].append(float(np.log(w_prev)) - l_aw)
+                                delar["gain"].append(l_bw - float(np.log(w_prev)))
+                    if delar["d_occ"]:
+                        row["n_move_decomp"] = len(delar["d_occ"])
+                        for namn, v in delar.items():
+                            if v:
+                                row[f"move_{namn}_mean"] = round(float(np.mean(v)), 4)
             # Yrkesavståndet i svansen: medianen 0.66 döljer enskilda hopp
             # över halva skivan (u_R_occ 2.7 i kedjorna).
             if "u_R_occ" in körning.columns:

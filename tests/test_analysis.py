@@ -758,3 +758,39 @@ def test_individual_history_reads_legacy_agent_id_forms(tmp_path):
                         capture_output=True, text=True, check=True).stdout
     assert "-> VANN" in ut
     assert "förlorade mot" not in ut
+
+
+def test_move_premium_splits_into_its_three_sources(tmp_path):
+    """log w = log Pi_o + eta + theta log p, och alla tre står i loggen:
+    w_occ, w_field/w_occ, w_neg/w_field. Mellan två anställningar för samma
+    individ ska uppdelningen vara exakt, och w_prev ska ge revisionens del.
+    Provet: Pi_o 1.0 -> 1.1, eta 0 -> 0.05 (i log), passform 0.9 -> 1.0 av
+    fältlönen, och lönen hon hade vid bytet 2 procent över ingångslönen."""
+    import numpy as np
+    a_occ, b_occ = 1.0, 1.1
+    a_field, b_field = 1.0, 1.1 * np.exp(0.05)
+    a_neg, b_neg = 0.9 * a_field, 1.0 * b_field
+    w_prev = a_neg * 1.02
+    lines = [
+        "0.00, new_month, agent_type system, month 1, employed 900, unemployed 100, "
+        "unmatched_jobs 0, not_in_labour_force 0, active_jobs 900, posted 0",
+        f"100.00, start_job, agent_id A, job_id J1, from_onet 43-4051.00, "
+        f"to_onet 51-2011.00, occ_change 1, u_R 0.5, u_R_occ 0.5, w_occ {a_occ}, "
+        f"w_field {a_field}, w_neg {a_neg}, q_hire 0.8, job_to_job False",
+        f"900.00, start_job, agent_id A, job_id J2, from_onet 51-2011.00, "
+        f"to_onet 29-2099.05, occ_change 1, u_R 0.5, u_R_occ 0.5, w_occ {b_occ}, "
+        f"w_field {b_field}, w_neg {b_neg}, q_hire 0.9, job_to_job True, "
+        f"w_prev {w_prev}",
+        "3652.50, simulation_completed, agent_type system",
+    ]
+    d = tmp_path / "run_d"; d.mkdir()
+    (d / "eventlog.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    row = summary_row(str(d))
+    assert row["n_move_decomp"] == 1
+    assert row["move_d_occ_mean"] == pytest.approx(np.log(1.1), abs=1e-4)
+    assert row["move_d_eta_mean"] == pytest.approx(0.05, abs=1e-4)
+    assert row["move_d_fit_mean"] == pytest.approx(np.log(1.0 / 0.9), abs=1e-4)
+    assert row["move_d_revision_mean"] == pytest.approx(np.log(1.02), abs=1e-4)
+    # Identiteten: de tre delarna minus revisionen är bytespremien
+    assert (row["move_d_occ_mean"] + row["move_d_eta_mean"] + row["move_d_fit_mean"]
+            - row["move_d_revision_mean"]) == pytest.approx(row["move_gain_mean"], abs=1e-3)
