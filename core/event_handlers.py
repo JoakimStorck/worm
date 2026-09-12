@@ -103,11 +103,7 @@ def handle_start_job(event, world):
 
         individuals.at[idx, 'status'] = 'unemployed'
         individuals.at[idx, 'job_id'] = np.nan
-        timing = world.cfg_reader.get_event_timing('start_job_search')
-        interval = (np.random.exponential(timing.get('mean', 28.0))
-                    if timing.get('dist', 'exponential') == 'exponential' else 30.0)
-        world._push_event({"time": float(event['time'] + interval), "agent_id": idx,
-                           "event_type": "start_job_search", "params": {}})
+        world.schedule_search(idx, world.search_interval(idx, float(event['time'])))
         world.event_logger.log_event(world, event, extra={
             'event_detail': 'job_gone_before_start', 'job_id': job_id})
         return
@@ -307,6 +303,10 @@ def handle_start_job(event, world):
         }
         world._push_event(change_event)
 
+    # Rampen vid VARJE tillträde, inte bara uppstartens. Den som just bytt
+    # sökte förr igen ur kedjan hon hade som sökande -- ofta före tillträdet.
+    world.schedule_search(idx, world.search_interval(idx, float(event['time']), first=True))
+
     # INGEN EXOGEN AVGÅNG. Här låg fram till 0084 en quit_job normalfördelad
     # kring sju år, schemalagd vid VARJE tillträde -- också uppstartens, som
     # sedan 0069 går genom den här funktionen. 0079 tog bort den ur
@@ -329,43 +329,48 @@ def handle_start_job_search(event, world):
     idx = event['agent_id']
     from core.matching_core import apply_once
 
+    # Är händelsen fortfarande hennes? Varje statusbyte skriver en ny
+    # next_search_time och lägger en ny händelse; den gamla ligger kvar i
+    # kön och kastas här. Ingen kedja kan dö och ingen kan dubbleras.
+    due = event['params'].get('due')
+    if due is None:
+        raise KeyError(f"start_job_search utan 'due' för {idx}: alla sökhändelser "
+                       "går genom World.schedule_search")
+    if float(due) != float(world.individuals.at[idx, 'next_search_time']):
+        world.event_logger.log_event(world, event, extra={'event_detail': 'search_superseded'})
+        return
+
+    status = world.individuals.at[idx, 'status']
+    t_now = float(event['time'])
+
     # Statusvakt, möte, val och ansökan ligger i matching_core.apply_once och
     # delas med uppstarten. Kvar här är det HÄNDELSESPECIFIKA: loggningen och
     # omschemaläggningen. Två kodvägar som gör samma sak har glidit isär fem
     # gånger i den här serien; uppstarten återimplementerar därför ingenting.
-    job_id, w_neg, q_hire, surplus, commute_km = apply_once(
-        world, idx, float(event['time']))
+    job_id, w_neg, q_hire, surplus, commute_km = apply_once(world, idx, t_now)
 
     if job_id is not None:
+        # Reservationen faller INTE här: hon har inte fått avslag.
         world.event_logger.log_event(world, event, extra={
-            'event_detail': 'application_filed', 'job_id': job_id,
+            'event_detail': 'application_filed', 'status': status, 'job_id': job_id,
             'surplus': round(surplus, 4), 'w_neg': round(w_neg, 4),
             'q_hire': round(q_hire, 4), 'commute_km': round(commute_km, 3)})
-
-        # Hon fortsätter söka medan ansökan ligger ute. En ansökan i taget
-        # kostade henne hela fönstret per försök. Reservationen faller INTE
-        # här: hon har inte fått avslag.
-        _reschedule_search(world, idx, float(event['time']),
-                           decay_reservation=False)
-    elif ('status' not in world.individuals.columns
-          or world.individuals.at[idx, 'status'] == 'unemployed'):
+    elif status == 'unemployed':
         current_prop = world.individuals.at[idx, 'propensity_start_education']
         new_prop = min(current_prop + 0.1, 1.0)
         world.individuals.at[idx, 'propensity_start_education'] = new_prop
         _decay_reservation(world, idx)
-
         world.event_logger.log_event(world, event, extra={
-            'event_detail': 'match_failed', 'new_propensity': round(new_prop, 3)})
+            'event_detail': 'match_failed', 'status': status,
+            'new_propensity': round(new_prop, 3)})
+    else:
+        # Den anställdes torra sökning loggas nu -- förr slutade hon söka här.
+        world.event_logger.log_event(world, event, extra={
+            'event_detail': 'match_failed', 'status': status})
 
-        timing = world.cfg_reader.get_event_timing('start_job_search')
-        interval = (np.random.exponential(timing.get('mean', 28.0))
-                    if timing.get('dist', 'exponential') == 'exponential' else 30.0)
-        world._push_event({
-            "time": float(event['time'] + interval),
-            "agent_id": idx,
-            "event_type": "start_job_search",
-            "params": {},
-        })
+    # Alltid nästa sökning, ur status. Hon söker vidare medan ansökan ligger
+    # ute; en ansökan i taget kostade henne hela fönstret per försök.
+    world.schedule_search(idx, world.search_interval(idx, t_now))
 
 
 def _decay_reservation(world, idx):
@@ -376,35 +381,6 @@ def _decay_reservation(world, idx):
     if 'w_res' in world.individuals.columns and decay < 1.0:
         w_res = float(world.individuals.at[idx, 'w_res'])
         world.individuals.at[idx, 'w_res'] = max(w_res * decay, floor)
-
-
-def _reschedule_search(world, idx, t_now, decay_reservation=True):
-    """Tillbaka i sökandet.
-
-    ANVÄNDS BARA när hon inte redan har en levande sökkedja. Sedan
-    parallella ansökningar infördes får hon en ny sökning direkt vid ANSÖKAN,
-    så ett avslag ska inte ge en till: annars får varje ansökan två kedjor i
-    stället för en, och med fem ansökningar före en anställning blir det
-    2**5 sökhändelser per person. Kön växer exponentiellt och körningen
-    stannar av.
-    """
-    sim = world.cfg_reader.config.get('simulation', {})
-    if decay_reservation:
-        decay = float(sim.get('reservation_decay_per_search', 1.0))
-        floor = float(sim.get('reservation_floor', 0.0))
-        if 'w_res' in world.individuals.columns and decay < 1.0:
-            w_res = float(world.individuals.at[idx, 'w_res'])
-            world.individuals.at[idx, 'w_res'] = max(w_res * decay, floor)
-    timing = world.cfg_reader.get_event_timing('start_job_search')
-    mult = 1.0
-    if ('status' in world.individuals.columns
-            and world.individuals.at[idx, 'status'] == 'employed'):
-        mult = float(world.cfg_reader.config.get('simulation', {})
-                     .get('on_the_job_search_factor', 5.0))
-    interval = (np.random.exponential(timing.get('mean', 28.0) * mult)
-                if timing.get('dist', 'exponential') == 'exponential' else 30.0)
-    world._push_event({"time": float(t_now + interval), "agent_id": idx,
-                       "event_type": "start_job_search", "params": {}})
 
 
 def start_delay_days(world, idx):
@@ -665,6 +641,9 @@ def handle_end_education(event, world):
             rho = float(sim.get('rho_reservation', 0.7))
             ind.at[idx, 'w_res'] = rho * float(ind.at[idx, 'w_res'])
     _become_unemployed(world, idx, event['time'])
+    # Den färdigutbildade sökte förr aldrig igen: hennes kedja dog när status
+    # blev in_education.
+    world.schedule_search(idx, world.search_interval(idx, float(event['time'])))
     world.event_logger.log_event(world, event, extra={
         'event_detail': 'education_finished',
         'move': round(float(event['params'].get('move', 0.0)), 4)})
@@ -724,13 +703,7 @@ def handle_career_break(event, world):
     pass
     world.event_logger.log_event(world, event, extra={'event_detail': 'career_break'})
     break_duration = event['params'].get('duration', 0.5 * 365.25)
-    end_event = {
-        "time": event['time'] + break_duration,
-        "agent_id": idx,
-        "event_type": "start_job_search",
-        "params": {}
-    }
-    world._push_event(end_event)
+    world.schedule_search(idx, float(event['time'] + break_duration))
 
 def handle_destroy_job(event, world):
     """Positionen upphör att existera (till skillnad från quit_job, där
@@ -755,11 +728,7 @@ def handle_destroy_job(event, world):
         if 'w_res' in ind.columns:
             rho = world.cfg_reader.config.get('simulation', {}).get('rho_reservation', 0.7)
             ind.at[idx, 'w_res'] = rho * float(ind.at[idx, 'w_res'])
-        timing = world.cfg_reader.get_event_timing('start_job_search') or {}
-        interval = (np.random.exponential(timing.get('mean', 28.0))
-                    if timing.get('dist', 'exponential') == 'exponential' else 0.0)
-        world._push_event({"time": float(event['time'] + interval), "agent_id": idx,
-                           "event_type": "start_job_search", "params": {}})
+        world.schedule_search(idx, world.search_interval(idx, float(event['time'])))
         world.event_logger.log_event(world, event,
                                      extra={"event_detail": "job_destroyed_holder_displaced",
                                             "job_id": job_id})

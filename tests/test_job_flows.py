@@ -1544,3 +1544,60 @@ def test_freed_position_is_stamped_with_the_event_time():
     assert float(w.jobs.at[0, "vacant_since"]) == 731.5
     with pytest.raises(TypeError):
         w.set_job_filled(jid, False)
+
+
+def _sok_events(w):
+    return [e for e in w._pushed if e["event_type"] == "start_job_search"]
+
+
+def test_employed_dry_search_continues_the_search():
+    """REGRESSION: den anställdes sökkedja dog vid första torra sökning.
+    handle_start_job_search lade en ny sökning bara om ansökan lämnats eller
+    om hon var arbetslös. En anställd som inte fann något över sin reservation
+    sökte aldrig igen förrän hon förlorade jobbet, och den effektiva
+    sökintensiteten var en följd av historien, inte av parametern."""
+    from core.event_handlers import handle_start_job_search
+    w, gammalt, nytt = _byte_world()
+    w.prepare()
+    w.jobs["active"] = False                      # inget att söka
+    w.jobs.loc[w.jobs["job_id"] == gammalt, "active"] = True
+    w.schedule_search(0, 100.0)
+    w._pushed.clear()
+    handle_start_job_search({"time": 100.0, "agent_id": 0, "event_type": "start_job_search",
+                             "params": {"due": 100.0}}, w)
+    nya = _sok_events(w)
+    assert len(nya) == 1, "torr sökning från anställning ska ge nästa sökning"
+    assert nya[0]["time"] > 100.0
+    assert nya[0]["params"]["due"] == float(w.individuals.at[0, "next_search_time"])
+
+
+def test_start_job_supersedes_the_old_search_and_applies_the_ramp():
+    """REGRESSION: rampen gällde bara uppstarten, och den nyanställdes nästa
+    sökning kom ur kedjan hon hade som sökande -- ofta före tillträdet. Nu
+    skriver tillträdet next_search_time = t + ramp + intervall, och den gamla
+    händelsen kastas när den fyrar."""
+    from core.event_handlers import (handle_close_vacancy, handle_start_job,
+                                     handle_start_job_search)
+    w, gammalt, nytt = _byte_world()
+    w.prepare()
+    ramp = float(w.cfg_reader.config["simulation"].get("on_the_job_search_ramp_days", 180.0))
+    w.schedule_search(0, 50.0)                    # den gamla, som sökande
+    w.file_application(nytt, 0, 0.0, q=1.0, w_neg=0.9, surplus=0.3, commute_km=2.0)
+    handle_close_vacancy({"time": 40.0, "agent_id": None, "event_type": "close_vacancy",
+                          "params": {"job_id": nytt}}, w)
+    start = [e for e in w._pushed if e["event_type"] == "start_job"][0]
+    handle_start_job(start, w)
+    t_start = float(start["time"])
+    nst = float(w.individuals.at[0, "next_search_time"])
+    assert nst >= t_start + ramp, "rampen ska gälla vid varje tillträde"
+
+    # Den gamla händelsen (due=50) fyrar nu -- och ska kastas
+    w._pushed.clear()
+    handle_start_job_search({"time": 50.0 + t_start, "agent_id": 0,
+                             "event_type": "start_job_search", "params": {"due": 50.0}}, w)
+    assert not _sok_events(w), "en ersatt sökhändelse får inte schemalägga något"
+
+    # Utan 'due' är händelsen inte skapad av schedule_search: fel, inte tyst
+    with pytest.raises(KeyError):
+        handle_start_job_search({"time": nst, "agent_id": 0,
+                                 "event_type": "start_job_search", "params": {}}, w)

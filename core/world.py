@@ -438,6 +438,15 @@ class World:
         gånger. bootstrap_matching anropar den, och simulate() gör det igen.
         """
         self._init_job_flows()
+        if 'next_search_time' not in self.individuals.columns:
+            # EN söktidpunkt per individ. Fram till 0087 var sökningen kedjor av
+            # händelser som startades på fyra ställen och dog på ett: den
+            # anställdes kedja slutade vid första torra sökning, och varje
+            # separation lade en ny kedja utan att fråga om en levde.
+            # Sökintensiteten var en följd av personens historia, inte av
+            # parametern. Nu äger individen sin nästa sökning; en händelse vars
+            # 'due' inte längre är hennes next_search_time är ersatt och kastas.
+            self.individuals['next_search_time'] = np.nan
         # Lönen och revisionens utgångspunkt hör till individens SCHEMA, inte
         # till någon enskild funktion. De skapades tidigare i
         # _seed_wages_for_matched, som utgick med 0069, och då fanns ingen
@@ -456,6 +465,43 @@ class World:
         if "onet_code" in self.individuals.columns and not hasattr(self, "circles"):
             self.init_competence()
 
+    def search_interval(self, idx, t_now, first=False):
+        """Nästa söktidpunkt för individen, ur status.
+
+        Arbetslös: exponentiellt intervall med medel search_interval (28 d).
+        Anställd: samma gånger on_the_job_search_factor; vid tillträde
+        (first=True) läggs rampen on_the_job_search_ramp_days framför -- den
+        gällde tidigare bara uppstartens bestånd. Utanför arbetskraften eller i
+        utbildning: None, ingen sökning schemaläggs."""
+        status = self.individuals.at[idx, 'status']
+        sim = self.cfg_reader.config.get('simulation', {})
+        timing = self.cfg_reader.get_event_timing('start_job_search')
+        if status == 'unemployed':
+            mult, forsta = 1.0, 0.0
+        elif status == 'employed':
+            mult = float(sim.get('on_the_job_search_factor', 5.0))
+            forsta = float(sim.get('on_the_job_search_ramp_days', 180.0)) if first else 0.0
+        else:
+            return None
+        if timing['dist'] == 'exponential':
+            interval = np.random.exponential(timing['mean'] * mult)
+        elif timing['dist'] == 'uniform':
+            interval = np.random.uniform(timing['min'], timing['max']) * mult
+        else:
+            raise ValueError(f"okänd fördelning för start_job_search: {timing['dist']}")
+        return float(t_now + forsta + interval)
+
+    def schedule_search(self, idx, t_next):
+        """Sätter individens nästa sökning och lägger händelsen. Ett anrop
+        ersätter alltid det föregående: händelsen bär 'due', och
+        handle_start_job_search kastar den om due != next_search_time."""
+        if t_next is None:
+            return
+        self.individuals.at[idx, 'next_search_time'] = float(t_next)
+        self._push_event({"time": float(t_next), "agent_id": idx,
+                          "event_type": "start_job_search",
+                          "params": {"due": float(t_next)}})
+
     def _init_events(self):
         self.prepare()
         if self._job_flow_cfg()['enabled']:
@@ -473,29 +519,11 @@ class World:
         # egen takt: on_the_job_search_factor gånger den arbetslösas intervall.
         # Sökningen från anställning är det som gör att en position kan bli
         # ledig utan att någon blir arbetslös.
-        sim = self.cfg_reader.config.get('simulation', {})
-        faktor = float(sim.get('on_the_job_search_factor', 5.0))
-        ramp = float(sim.get('on_the_job_search_ramp_days', 180.0))
-        for status, mult, forsta in (('unemployed', 1.0, 0.0),
-                                     ('employed', faktor, ramp)):
-            mask = self.individuals['status'] == status
-            if not mask.any():
-                continue
-            timing = self.cfg_reader.get_event_timing('start_job_search')
-            for idx in self.individuals.index[mask]:
-                if timing['dist'] == 'exponential':
-                    interval = np.random.exponential(timing['mean'] * mult)
-                elif timing['dist'] == 'uniform':
-                    interval = np.random.uniform(timing['min'], timing['max']) * mult
-                else:
-                    interval = 0.0
-                event = {
-                    "time": float(self.current_time + forsta + interval),
-                    "agent_id": idx,
-                    "event_type": "start_job_search",
-                    "params": {}
-                }
-                self._push_event(event)
+        # Samma funktion som körningen: uppstartens bestånd får rampen som
+        # ett tillträde vid t = 0 (first=True).
+        mask = self.individuals['status'].isin(('unemployed', 'employed'))
+        for idx in self.individuals.index[mask]:
+            self.schedule_search(idx, self.search_interval(idx, 0.0, first=True))
 
         # Schemalägg kalenderhändelser (new_month, new_year)
         self.schedule_calendar_events()

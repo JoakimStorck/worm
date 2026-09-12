@@ -148,7 +148,12 @@ def test_reservation_wage_decays_on_failed_search():
     w.individuals = pd.DataFrame([{"individual_id": "i0", "status": "unemployed",
                                    "w_res": 1.0, "propensity_start_education": 0.0,
                                    "x_occ": 0.3, "y_occ": 0.1, "r_i": 0.0,
-                                   "x": 0.0, "y": 0.0}])
+                                   "x": 0.0, "y": 0.0, "next_search_time": 1.0}])
+    # Sedan 0088 äger individen sin söktidpunkt; händelsen måste vara hennes.
+    w.search_interval = lambda idx, t, first=False: t + 28.0
+    def _sched(idx, t_next):
+        w.individuals.at[idx, "next_search_time"] = 1.0    # håll testets due
+    w.schedule_search = _sched
     # Inga lediga positioner: varje sökning misslyckas
     w.jobs = pd.DataFrame({"job_id": ["J0"], "individual_id": ["i1"], "active": [True],
                            "x_occ": [0.3], "y_occ": [0.1], "r_o": [0.27],
@@ -159,12 +164,12 @@ def test_reservation_wage_decays_on_failed_search():
 
     for _ in range(3):
         handle_start_job_search({"time": 1.0, "agent_id": 0,
-                                 "event_type": "start_job_search", "params": {}}, w)
+                                 "event_type": "start_job_search", "params": {"due": 1.0}}, w)
     assert w.individuals.at[0, "w_res"] == pytest.approx(0.729)     # 0.9^3
 
     for _ in range(30):
         handle_start_job_search({"time": 1.0, "agent_id": 0,
-                                 "event_type": "start_job_search", "params": {}}, w)
+                                 "event_type": "start_job_search", "params": {"due": 1.0}}, w)
     assert w.individuals.at[0, "w_res"] == pytest.approx(0.2)       # golvet håller
 
 

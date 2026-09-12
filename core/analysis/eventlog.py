@@ -290,6 +290,21 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                 g = g.replace([np.inf, -np.inf], np.nan).dropna()
                 if len(g):
                     row["job_to_job_wage_gain"] = round(float(g.median()), 4)
+            # SÖKINTENSITETEN, efter status. Sedan 0088 bär varje sökning sin
+            # status; sökningar per personår är det tal parametrarna påstår
+            # (365/28 = 13 arbetslös, 13/on_the_job_search_factor anställd)
+            # och det som förr var okänt, eftersom kedjor dog och dubblerades.
+            sok = [r for r in events if r.get("event") == "start_job_search"
+                   and r.get("event_detail") in ("application_filed", "match_failed")
+                   and "status" in r]
+            if sok and _ar > 0 and len(ts):
+                for st in ("employed", "unemployed"):
+                    n_st = sum(1 for r in sok if r.get("status") == st)
+                    stock = float(ts[st].mean()) if st in ts.columns else 0.0
+                    if stock > 0:
+                        row[f"searches_per_year_{st}"] = round(n_st / _ar / stock, 3)
+            row["n_search_superseded"] = sum(
+                1 for r in events if r.get("event_detail") == "search_superseded")
             # RESTPOOLEN: vem vinner urvalen
             mc = [r for r in events if r.get("event_detail") == "match_completed"]
             if mc:

@@ -29,10 +29,11 @@ avståndsfördelningar, inte kalibrerade mot data.
 - [ ] **Omskolningen saknar utlösare** sedan 0085 tog bort den exogena avgången.
       Ska utlösas ur torr sökning (`propensity_start_education` växer redan där),
       efter beslut om nivå och inriktning (individmodell.md 11).
-- [ ] **Sökkedjan har ingen ägare.** Den anställdes kedja dör vid första torra
-      sökning; `destroy_job` och "job gone before start" pushar nya kedjor utan
-      att fråga om en lever. En `next_search_time` per individ. Utred först: mät
-      sökningar per personår efter status ur loggen.
+- [ ] **v utan pending.** Vakansstocken räknar tillsatta ej tillträdda; SCB gör
+      inte det. Rapportera V_open = V − pending som v, behåll V i identiteten.
+- [ ] **Kalibrera `on_the_job_search_factor`** mot ~10 % byten och 3–5 års
+      duration, nu när intensiteten ägs av individen (0088). Joakim: anställda
+      söker ungefär en gång per år eller mer sällan.
 - [ ] **Aktiv cirkel släcks inte** i `handle_destroy_job`; `_become_unemployed`
       gör rätt och ska användas.
 - [ ] **Crosswalk O*NET--SNI** (`onet_sni_longform.csv`) är inofficiell och

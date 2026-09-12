@@ -244,12 +244,17 @@ erbjudandefördelningen, vilket är vad 0,93 över Π betyder. Spridningen
 kollapsar först, 0,30 → 0,22, därför att alla samlas vid samma tak, och
 återhämtar sig sedan långsamt genom revisionen.
 
-### 4.2 Restpoolen tränger undan
+### 4.2 Restpoolen tränger undan -- INTE BELAGT (0086)
 
-Arbetsgivaren väljer högst q. En anställd sökande har en mogen cirkel, en
-arbetslös en diffunderad; anställda vinner, och de arbetslösa som aldrig väljs
-ackumuleras. Arbetslösheten växer trots att sökande per vakans nästan
-fördubblats.
+Diagnosen löd: arbetsgivaren väljer högst q, anställda har mogna cirklar och
+vinner, arbetslösa ackumuleras. Den vilade på måttet "100 procent av
+tillsättningarna till anställda", som var en konstant ur bool("False")
+(0086). Rätt mätt går 46 procent till anställda och 54 till arbetslösa,
+trots median q 0.79 mot 0.59: 23 procent av vakanserna har en enda sökande,
+och den är då oftast arbetslös. Arbetslösheten växte inte av
+undanträngning utan av den exogena avgången (0085). Skillnaden i q kvarstår
+som observation; Becsis restpool är fortfarande rätt begrepp för den, men
+den är inte orsaken till nivån i u. Stycket nedan behålls som bakgrund.
 
 Becsi (2026) formaliserar precis det: arbetsgivaren möter inte arbetskraften
 utan **restpoolen**, de som ännu inte matchats, och typer utanför
@@ -306,6 +311,17 @@ alla fem frön. Divergensen var den exogena avgången. Måtten i avsnitt 4.2
 år, vakansernas ålder) var dessutom felmätta i 0082--0085, se 0086:
 restpoolens undanträngning är inte belagd, och byten per år är okänt tills
 körningen efter 0086 finns.
+
+### 4.5c Vakansernas ålder och vad v mäter (0087)
+
+Rätt mätt är vakansåldern vid tillsättning median 80 dagar, p90 85:
+fönstret 40 plus uppsägningstiden ~40. Nästan varje vakans får sin första
+ansökan inom dagar. Varaktigheten är alltså inte söktid utan två
+administrativa fördröjningar, och V/L = 5.6 procent följer ur dem. Därtill
+räknar V positioner som är tillsatta men inte tillträdda (pending); SCB:s
+vakansbegrepp gör det inte. En jämförelse med v = 2 procent kräver V utan
+pending, som är ungefär hälften. Det är en rapporteringsfråga, inte en
+mekanism.
 
 ### 4.6 Nivåfrågorna
 
