@@ -37,7 +37,7 @@ def test_stock_converges_near_theory():
 @pytest.mark.parametrize("size,n_emp", [(1, 1000), (3, 334), (25, 40)])
 def test_stock_independent_of_employer_size(size, n_emp):
     """REGRESSION. Två fel gjorde detta storleksberoende:
-    floor() nollade underskott under 1/fill_rate, och mallen för nya jobb
+    floor() nollade underskott under 1/fill_rate, och mallen för new_events jobb
     byggdes ur aktiva jobb så en arbetsgivare utan aktiva jobb dog permanent.
     Med enmansföretag kollapsade stocken till under halva målet."""
     target = size * n_emp
@@ -57,7 +57,7 @@ def test_employer_with_no_active_jobs_can_repost():
 
 
 def test_small_deficits_are_not_rounded_away():
-    """REGRESSION: floor(0.25*3)=0 gav noll nya jobb varje månad."""
+    """REGRESSION: floor(0.25*3)=0 gav noll new_events jobb varje månad."""
     w = make_world(n_employers=200, size=4)
     w.jobs.loc[w.jobs.index[::4], "active"] = False    # underskott 1 hos alla 200
     # floor(1 * 0.25) = 0 -> gamla koden postade aldrig något
@@ -313,7 +313,7 @@ def test_pending_clears_when_job_is_filled_or_freed():
 
 
 def test_posted_jobs_are_searchable():
-    """REGRESSION: mallen för nya jobb kopierar ALLA kolumner. Utan att
+    """REGRESSION: mallen för new_events jobb kopierar ALLA kolumner. Utan att
     pending nollställs föds ett nyskapat jobb osökbart -- det räknas som
     vakans men kan aldrig tillsättas. Över fem år gav det 3 688 döda vakanser
     i Mora medan sysselsättningen föll från 9 900 till 6 505."""
@@ -572,7 +572,7 @@ def test_become_unemployed_always_frees_the_job():
 def _world_with_geometry():
     """Värld med en liten yrkestabell i minnet.
 
-    Mallyrket A är krävande (r = 0.84), det yrke nya jobb faktiskt får är B
+    Mallyrket A är krävande (r = 0.84), det yrke new_events jobb faktiskt får är B
     och kravlöst (r = 0.00). Ärvs kravet från mallen blir varje nypostat
     diskjobb ett kirurgjobb.
     """
@@ -761,7 +761,7 @@ def test_employer_does_not_drift_to_monoculture():
         w.post_vacancies_batch(30.0 * m)
     born = w.jobs[w.jobs["job_id"].str.startswith("N")]
     assert len(born) >= 40
-    assert born["onet_code"].nunique() >= 2, "alla nya jobb fick samma yrke"
+    assert born["onet_code"].nunique() >= 2, "alla new_events jobb fick samma yrke"
 
 
 def test_missing_occupation_source_is_a_hard_error():
@@ -1345,9 +1345,9 @@ def _bokforing(w):
 
 def test_identity_holds_through_a_job_change():
     """INVARIANTEN FÖRST. Mellan erbjudande och tillträde håller hon sitt
-    GAMLA jobb medan det nya är utlovat. Frigörs den gamla positionen för
+    GAMLA jobb medan det new_events är utlovat. Frigörs den gamla positionen för
     tidigt hamnar den i V utan att någon blivit arbetslös; sätts hon som
-    innehavare av det nya innan uppsägningstiden gått ut innehar hon två
+    innehavare av det new_events innan uppsägningstiden gått ut innehar hon två
     positioner. Båda bryter U = L - J + V."""
     from core.event_handlers import handle_close_vacancy, handle_start_job
 
@@ -1357,7 +1357,7 @@ def test_identity_holds_through_a_job_change():
     assert U0 == L0 - J0 + V0 - V0 + (L0 - J0)  # trivialt sant vid start: U = L - J
     assert U0 == L0 - J0
 
-    # Hon ansöker om det nya jobbet medan hon är anställd
+    # Hon ansöker om det new_events jobbet medan hon är anställd
     w.file_application(nytt, 0, 0.0, q=1.0, w_neg=0.9, surplus=0.3, commute_km=2.0)
     L, J, V = _bokforing(w)
     assert (L, J, V) == (L0, J0, V0), "ansökan får inte röra bokföringen"
@@ -1444,7 +1444,7 @@ def test_quit_job_is_not_scheduled_as_an_exogenous_event():
 
 def test_job_to_job_is_recorded_at_the_change():
     """REGRESSION: kontrollen låg efter `individuals.at[idx, "job_id"] = job_id`
-    och jämförde alltså det nya jobbet med sig självt. _job_to_job var alltid
+    och jämförde alltså det new_events jobbet med sig självt. _job_to_job var alltid
     falsk: inga byten registrerades trots att de skedde, job_to_job_rate blev
     noll, kolumnen job_to_job_wage_gain skapades aldrig, och rapporten
     kraschade på den. Ett mått som alltid säger noll ser ut som ett resultat."""
@@ -1519,16 +1519,16 @@ def test_posted_vacancy_is_born_now_not_with_the_templates_age():
     """REGRESSION: mallen kopierar alla kolumner, och vacant_since följde
     med. Nypostade jobb föddes med den gamla positionens tidsstämpel --
     oftast 0.0 från starten -- så vakansernas medianålder vid tillsättning
-    blev 1 956 dagar: inte samma positioner som stod öppna, utan nya jobb
+    blev 1 956 dagar: inte samma positioner som stod öppna, utan new_events jobb
     som var fem år gamla vid födseln."""
     w = make_world(n_employers=1, size=4, simulation={"vacancy_fill_rate": 1.0})
     w.jobs["active"] = False
     w.jobs["individual_id"] = np.nan
     w.jobs["vacant_since"] = 0.0
     assert w.post_vacancies_batch(900.0) == 4
-    nya = w.jobs[w.jobs["created_time"] == 900.0]
-    assert len(nya) == 4
-    assert (nya["vacant_since"] == 900.0).all()
+    new_events = w.jobs[w.jobs["created_time"] == 900.0]
+    assert len(new_events) == 4
+    assert (new_events["vacant_since"] == 900.0).all()
 
 
 def test_freed_position_is_stamped_with_the_event_time():
@@ -1546,7 +1546,7 @@ def test_freed_position_is_stamped_with_the_event_time():
         w.set_job_filled(jid, False)
 
 
-def _sok_events(w):
+def _search_events(w):
     return [e for e in w._pushed if e["event_type"] == "start_job_search"]
 
 
@@ -1565,10 +1565,10 @@ def test_employed_dry_search_continues_the_search():
     w._pushed.clear()
     handle_start_job_search({"time": 100.0, "agent_id": 0, "event_type": "start_job_search",
                              "params": {"due": 100.0}}, w)
-    nya = _sok_events(w)
-    assert len(nya) == 1, "torr sökning från anställning ska ge nästa sökning"
-    assert nya[0]["time"] > 100.0
-    assert nya[0]["params"]["due"] == float(w.individuals.at[0, "next_search_time"])
+    new_events = _search_events(w)
+    assert len(new_events) == 1, "torr sökning från anställning ska ge nästa sökning"
+    assert new_events[0]["time"] > 100.0
+    assert new_events[0]["params"]["due"] == float(w.individuals.at[0, "next_search_time"])
 
 
 def test_start_job_supersedes_the_old_search_and_applies_the_ramp():
@@ -1595,7 +1595,7 @@ def test_start_job_supersedes_the_old_search_and_applies_the_ramp():
     w._pushed.clear()
     handle_start_job_search({"time": 50.0 + t_start, "agent_id": 0,
                              "event_type": "start_job_search", "params": {"due": 50.0}}, w)
-    assert not _sok_events(w), "en ersatt sökhändelse får inte schemalägga något"
+    assert not _search_events(w), "en ersatt sökhändelse får inte schemalägga något"
 
     # Utan 'due' är händelsen inte skapad av schedule_search: fel, inte tyst
     with pytest.raises(KeyError):

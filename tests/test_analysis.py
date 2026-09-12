@@ -619,3 +619,49 @@ def test_first_step_measures_follow_each_individual(tmp_path):
     assert row["days_to_first_step_median"] == pytest.approx(250.0)
     assert row["share_first_step_within_year"] == pytest.approx(1.0)
     assert row["share_unemployed_hires_that_step"] == pytest.approx(0.5)
+
+
+def test_individual_history_tells_one_individuals_story(tmp_path):
+    """scripts/individual_history.py läser en individs alla händelser i ordning:
+    uppstart, förstörelse, torr sökning, förlorad ansökan med vinnarens q,
+    vunnen ansökan, anställning ur arbetslöshet mot Pi_o, byte med vinst."""
+    import subprocess, sys
+    lines = [
+        "0.00, new_month, agent_type system, month 1, employed 900, unemployed 100, "
+        "unmatched_jobs 0, not_in_labour_force 0, active_jobs 900, posted 0",
+        "0.00, start_job, agent_id 7, job_id J0, to_onet 51-2011.00, w_field 1.0, w_occ 1.0, "
+        "w_neg 0.9, q_hire 0.8, is_bootstrap True, job_to_job False",
+        "300.00, destroy_job, event_detail job_destroyed_holder_displaced, agent_id 7, job_id J0",
+        "320.00, start_job_search, event_detail match_failed, status unemployed, agent_id 7",
+        "350.00, start_job_search, event_detail application_filed, status unemployed, agent_id 7, "
+        "job_id J1, surplus 0.1, w_neg 0.85, q_hire 0.7, commute_km 4.0",
+        "390.00, close_vacancy, event_detail match_completed, job_id J1, agent_id 9, "
+        "n_applicants 3, q_hire 0.95, winner_employed True",
+        "400.00, start_job_search, event_detail application_filed, status unemployed, agent_id 7, "
+        "job_id J2, surplus 0.2, w_neg 0.88, q_hire 0.75, commute_km 2.0",
+        "440.00, close_vacancy, event_detail match_completed, job_id J2, agent_id 7, "
+        "n_applicants 1, q_hire 0.75, winner_employed False",
+        "450.00, start_job, agent_id 7, job_id J2, to_onet 51-2011.00, w_field 1.0, w_occ 0.95, "
+        "w_neg 0.88, q_hire 0.75, job_to_job False, n_applicants 1",
+        "800.00, start_job_search, event_detail application_filed, status employed, agent_id 7, "
+        "job_id J3, surplus 0.15, w_neg 1.02, q_hire 0.9, commute_km 8.0",
+        "840.00, close_vacancy, event_detail quit_job, agent_id 7, job_id J2, to_job_id J3, "
+        "notice_days 30.0",
+        "840.00, close_vacancy, event_detail match_completed, job_id J3, agent_id 7, "
+        "n_applicants 4, q_hire 0.9, winner_employed True",
+        "870.00, start_job, agent_id 7, job_id J3, to_onet 51-2011.00, w_field 1.05, w_occ 1.0, "
+        "w_neg 1.02, q_hire 0.9, job_to_job True, w_prev 0.88, n_applicants 4",
+        "3652.50, simulation_completed, agent_type system",
+    ]
+    d = tmp_path / "run_k"; d.mkdir()
+    (d / "eventlog.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    ut = subprocess.run([sys.executable, "scripts/individual_history.py", str(d), "--agent", "7",
+                         "--db", str(tmp_path / "finns_inte")],
+                        capture_output=True, text=True, check=True).stdout
+    assert "1 byten, 3 ansökningar av 4 sökningar" in ut
+    assert "FÖRLORAR JOBBET: J0" in ut
+    assert "1 sökning(ar) utan ansökan" in ut
+    assert "förlorade mot 9 (q 0.95)" in ut
+    assert "ANSTÄLLS ur arbetslöshet: J2" in ut and "0.926 × Π_o" in ut
+    assert "SÄGER UPP SIG från J2 för J3" in ut
+    assert "BYTE: J3" in ut and "vinst +15.9 %" in ut

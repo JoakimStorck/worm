@@ -299,44 +299,44 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
             # prövar det: ingångslönen relativt YRKETS Pi efter ursprung, och
             # tiden från anställning ur arbetslöshet till nästa byte.
             if "w_occ" in körning.columns and "job_to_job" in körning.columns:
-                jt = körning["job_to_job"].fillna(False).astype(bool)
-                for namn, m in (("from_unemployment", ~jt), ("job_to_job", jt)):
-                    wr = (pd.to_numeric(körning.loc[m, "w_neg"], errors="coerce") /
+                is_jtj = körning["job_to_job"].fillna(False).astype(bool)
+                for namn, m in (("from_unemployment", ~is_jtj), ("job_to_job", is_jtj)):
+                    wage_ratio = (pd.to_numeric(körning.loc[m, "w_neg"], errors="coerce") /
                           pd.to_numeric(körning.loc[m, "w_occ"], errors="coerce"))
-                    wr = wr.replace([np.inf, -np.inf], np.nan).dropna()
-                    if len(wr):
-                        row[f"entry_wage_ratio_{namn}"] = round(float(wr.median()), 4)
+                    wage_ratio = wage_ratio.replace([np.inf, -np.inf], np.nan).dropna()
+                    if len(wage_ratio):
+                        row[f"entry_wage_ratio_{namn}"] = round(float(wage_ratio.median()), 4)
                 # Tid till nästa byte, per individ: från varje anställning ur
                 # arbetslöshet till individens nästa job_to_job-tillträde.
-                k = körning.sort_values("time")
-                nxt = []
-                for aid, grp in k.groupby("agent_id", sort=False):
+                ordered = körning.sort_values("time")
+                gaps = []
+                for aid, grp in ordered.groupby("agent_id", sort=False):
                     t = grp["time"].to_numpy()
                     j = grp["job_to_job"].fillna(False).astype(bool).to_numpy()
                     for i in range(len(t)):
                         if j[i]:
                             continue
-                        senare = np.nonzero(j[i + 1:])[0]
-                        if len(senare):
-                            nxt.append(t[i + 1 + senare[0]] - t[i])
-                if nxt:
-                    nxt = np.asarray(nxt, dtype=float)
-                    row["days_to_first_step_median"] = round(float(np.median(nxt)), 1)
+                        later_moves = np.nonzero(j[i + 1:])[0]
+                        if len(later_moves):
+                            gaps.append(t[i + 1 + later_moves[0]] - t[i])
+                if gaps:
+                    gaps = np.asarray(gaps, dtype=float)
+                    row["days_to_first_step_median"] = round(float(np.median(gaps)), 1)
                     row["share_first_step_within_year"] = round(
-                        float(np.mean(nxt <= 365.25)), 4)
-                    n_fu = int((~jt).sum())
-                    if n_fu:
-                        row["share_unemployed_hires_that_step"] = round(len(nxt) / n_fu, 4)
+                        float(np.mean(gaps <= 365.25)), 4)
+                    n_from_unemp = int((~is_jtj).sum())
+                    if n_from_unemp:
+                        row["share_unemployed_hires_that_step"] = round(len(gaps) / n_from_unemp, 4)
             # SÖKINTENSITETEN, efter status. Sedan 0088 bär varje sökning sin
             # status; sökningar per personår är det tal parametrarna påstår
             # (365/28 = 13 arbetslös, 13/on_the_job_search_factor anställd)
             # och det som förr var okänt, eftersom kedjor dog och dubblerades.
-            sok = [r for r in events if r.get("event") == "start_job_search"
+            searches = [r for r in events if r.get("event") == "start_job_search"
                    and r.get("event_detail") in ("application_filed", "match_failed")
                    and "status" in r]
-            if sok and _ar > 0 and len(ts):
+            if searches and _ar > 0 and len(ts):
                 for st in ("employed", "unemployed"):
-                    n_st = sum(1 for r in sok if r.get("status") == st)
+                    n_st = sum(1 for r in searches if r.get("status") == st)
                     stock = float(ts[st].mean()) if st in ts.columns else 0.0
                     if stock > 0:
                         row[f"searches_per_year_{st}"] = round(n_st / _ar / stock, 3)
@@ -420,12 +420,12 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                 # tr med sin flagga men sker vid t = 0 och är inte ett flöde
                 # över tiden; med dem i nämnaren blev varaktigheten en
                 # tredjedel för kort.
-                n_fl = int((~tr["is_bootstrap"].fillna(False).astype(bool)).sum()) \
+                n_flow = int((~tr["is_bootstrap"].fillna(False).astype(bool)).sum()) \
                     if "is_bootstrap" in tr.columns else len(tr)
-                if yrs > 0 and n_fl:
+                if yrs > 0 and n_flow:
                     row["mean_vacancies"] = round(float(ts["vacancies"].mean()), 1)
                     row["vacancy_days"] = round(
-                        float(ts["vacancies"].mean()) / (n_fl / yrs) * 365.25, 1)
+                        float(ts["vacancies"].mean()) / (n_flow / yrs) * 365.25, 1)
 
             if "r_req" in cps.columns and cps["r_req"].notna().any():
                 # Det avslöjande måttet: låg q i jobb med högt krav.

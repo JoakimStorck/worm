@@ -477,19 +477,19 @@ class World:
         sim = self.cfg_reader.config.get('simulation', {})
         timing = self.cfg_reader.get_event_timing('start_job_search')
         if status == 'unemployed':
-            mult, forsta = 1.0, 0.0
+            factor, lead = 1.0, 0.0
         elif status == 'employed':
-            mult = float(sim.get('on_the_job_search_factor', 5.0))
-            forsta = float(sim.get('on_the_job_search_ramp_days', 180.0)) if first else 0.0
+            factor = float(sim.get('on_the_job_search_factor', 5.0))
+            lead = float(sim.get('on_the_job_search_ramp_days', 180.0)) if first else 0.0
         else:
             return None
         if timing['dist'] == 'exponential':
-            interval = np.random.exponential(timing['mean'] * mult)
+            interval = np.random.exponential(timing['mean'] * factor)
         elif timing['dist'] == 'uniform':
-            interval = np.random.uniform(timing['min'], timing['max']) * mult
+            interval = np.random.uniform(timing['min'], timing['max']) * factor
         else:
             raise ValueError(f"okänd fördelning för start_job_search: {timing['dist']}")
-        return float(t_now + forsta + interval)
+        return float(t_now + lead + interval)
 
     def schedule_search(self, idx, t_next):
         """Sätter individens nästa sökning och lägger händelsen. Ett anrop
