@@ -591,8 +591,16 @@ def handle_close_vacancy(event, world):
                    "commute_km": win['commute_km'],
                    "n_applicants": len(lediga)},
     })
+    _alder_beslut = np.nan
+    _pos_j = world.job_index().get(job_id)
+    if _pos_j is not None and 'vacant_since' in world.jobs.columns:
+        _alder_beslut = round(float(t_now) - float(
+            world.jobs.iat[_pos_j, world.jobs.columns.get_loc('vacant_since')]), 1)
     _extra = {
         'event_detail': 'match_completed', 'job_id': job_id,
+        # Åldern VID BESLUTET. vacancy_age_days på start_job mäter till
+        # tillträdet och bär därmed också uppsägningstiden (0102).
+        'vacancy_age_at_decision': _alder_beslut,
         'agent_id': idx, 'n_applicants': len(lediga),
         'surplus': round(win['surplus'], 4), 'w_neg': round(win['w_neg'], 4),
         'q_hire': round(win['q'], 4), 'commute_km': round(win['commute_km'], 3),

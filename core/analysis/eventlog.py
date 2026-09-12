@@ -429,6 +429,25 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                     stock = float(ts[st].mean()) if st in ts.columns else 0.0
                     if stock > 0:
                         row[f"searches_per_year_{st}"] = round(n_st / _ar / stock, 3)
+            # VAKANSENS 117 DAGAR, DELAD. Stocken är flöde gånger varaktighet,
+            # och varaktigheten består av fyra poster som ska summera till
+            # samma tal: väntan på första sökanden, fönstret, tiden fram till
+            # tillträdet, och de dagar som tillbringas i positioner som ALDRIG
+            # tillsätts. Den sista går inte att mäta per vakans -- de har ingen
+            # sluthändelse -- men den faller ut som rest: totala vakansdagar
+            # minus de dagar de tillsatta positionerna stod öppna.
+            vantan = [_f(r, "wait_first_applicant_days") for r in events
+                      if r.get("event_detail") == "advert_opened"]
+            vantan = [v for v in vantan if v == v]
+            if vantan:
+                row["wait_first_applicant_median"] = round(float(np.median(vantan)), 1)
+                row["wait_first_applicant_mean"] = round(float(np.mean(vantan)), 1)
+                row["n_adverts_opened"] = len(vantan)
+            beslut = [_f(r, "vacancy_age_at_decision") for r in events
+                      if r.get("event_detail") == "match_completed"]
+            beslut = [b for b in beslut if b == b]
+            if beslut:
+                row["vacancy_age_at_decision_median"] = round(float(np.median(beslut)), 1)
             row["n_offers_declined"] = sum(
                 1 for r in events if r.get("event_detail") == "offer_declined")
             row["n_all_declined"] = sum(
@@ -529,6 +548,18 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                             float(ts["open_vacancies"].mean()), 1)
                         row["open_vacancy_days"] = round(
                             float(ts["open_vacancies"].mean()) / (n_flow / yrs) * 365.25, 1)
+                    # Resten av vakansdagarna: de som tillbringas i positioner
+                    # som ALDRIG tillsätts. De har ingen sluthändelse och går
+                    # inte att mäta per vakans, men faller ut som rest -- totala
+                    # vakansdagar minus de dagar de tillsatta stod öppna.
+                    if "vacancy_age_days" in tr.columns:
+                        alder = pd.to_numeric(
+                            tr.loc[~tr["is_bootstrap"].fillna(False).astype(bool),
+                                   "vacancy_age_days"], errors="coerce").dropna()
+                        totala = float(ts["vacancies"].mean()) * yrs * 365.25
+                        if totala > 0 and len(alder):
+                            row["vacancy_days_share_unfilled"] = round(
+                                max(0.0, 1.0 - float(alder.sum()) / totala), 4)
 
             if "r_req" in cps.columns and cps["r_req"].notna().any():
                 # Det avslöjande måttet: låg q i jobb med högt krav.

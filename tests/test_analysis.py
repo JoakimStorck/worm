@@ -897,3 +897,52 @@ def test_promised_positions_are_counted_as_not_open():
     st = analyze_world(w)
     assert st["unmatched_jobs"] == 10
     assert st["open_vacancies"] == 7
+
+
+def test_the_vacancy_life_is_split_into_its_parts(tmp_path):
+    """Stocken är flöde gånger varaktighet, så varaktighetens poster sätter
+    vakansgraden. Provet: en annons öppnas efter 23 dagars väntan, beslutet
+    faller vid 63 (fönstret 40), tillträdet vid 80. Och med en medelstock på
+    10 vakanser i ett år, alltså 3 652 vakansdagar, medan den enda tillsatta
+    positionen stod öppen i 80 -- resten av dagarna tillbringas i positioner
+    som aldrig tillsätts."""
+    lines = [
+        "0.00, new_month, agent_type system, month 1, employed 900, unemployed 100, "
+        "unmatched_jobs 10, open_vacancies 10, not_in_labour_force 0, active_jobs 1000, posted 0",
+        "23.00, open_advert, event_detail advert_opened, job_id J1, "
+        "wait_first_applicant_days 23.0",
+        "63.00, close_vacancy, event_detail match_completed, job_id J1, agent_id A, "
+        "n_applicants 2, q_hire 0.8, winner_employed False, vacancy_age_at_decision 63.0",
+        "80.00, start_job, agent_id A, job_id J1, from_onet 43-4051.00, to_onet 51-2011.00, "
+        "occ_change 1, u_R 0.5, u_R_occ 0.5, w_field 1.0, w_occ 1.0, w_neg 0.9, q_hire 0.8, "
+        "job_to_job False, vacancy_age_days 80.0",
+        "365.25, new_month, agent_type system, month 12, employed 900, unemployed 100, "
+        "unmatched_jobs 10, open_vacancies 10, not_in_labour_force 0, active_jobs 1000, posted 0",
+        "365.25, simulation_completed, agent_type system",
+    ]
+    d = tmp_path / "run_l"; d.mkdir()
+    (d / "eventlog.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    row = summary_row(str(d))
+    assert row["wait_first_applicant_median"] == pytest.approx(23.0)
+    assert row["n_adverts_opened"] == 1
+    assert row["vacancy_age_at_decision_median"] == pytest.approx(63.0)
+    # 10 vakanser i ett år = 3 652.5 vakansdagar, varav 80 i en tillsatt position
+    assert row["vacancy_days_share_unfilled"] == pytest.approx(1 - 80 / 3652.5, abs=1e-3)
+
+
+def test_the_advert_records_how_long_the_vacancy_waited():
+    """Väntan på första sökanden går inte att räkna i efterhand: en vakans
+    utan sökande får ingen händelse alls. Den loggas när annonsen öppnas."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from conftest import make_world
+    w = make_world(n_employers=1, size=2)
+    w.prepare()
+    w.event_logger.events = []
+    jid = w.jobs.at[0, "job_id"]
+    w.jobs.at[0, "vacant_since"] = 100.0
+    w.file_application(jid, 0, 123.0, q=0.8, w_neg=1.0, surplus=0.1, commute_km=1.0)
+    rader = [e for _, e in w.event_logger.events if e.get("event_detail") == "advert_opened"]
+    assert len(rader) == 1
+    assert rader[0]["wait_first_applicant_days"] == pytest.approx(23.0)

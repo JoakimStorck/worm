@@ -732,6 +732,19 @@ class World:
             self._push_event({"time": float(t_now) + days, "agent_id": idx,
                               "event_type": "close_vacancy",
                               "params": {"job_id": job_id}})
+            # VÄNTAN PÅ FÖRSTA SÖKANDEN (0102). Vakansens ålder vid tillträdet
+            # är 80 dagar och fönstret 40 av dem; resten är väntan på att någon
+            # alls ska söka plus tiden fram till tillträdet. Den första posten
+            # loggas här, vid annonsens öppning, eftersom den inte går att
+            # räkna ut i efterhand: en vakans utan sökande har ingen händelse.
+            pos = self.job_index().get(job_id)
+            if pos is not None and 'vacant_since' in self.jobs.columns:
+                vs = float(self.jobs.iat[pos, self.jobs.columns.get_loc('vacant_since')])
+                self.event_logger.log_event(
+                    self, {"time": float(t_now), "agent_id": None,
+                           "event_type": "open_advert"},
+                    extra={"event_detail": "advert_opened", "job_id": job_id,
+                           "wait_first_applicant_days": round(float(t_now) - vs, 1)})
         return True
 
     def applicant_counts(self):

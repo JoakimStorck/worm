@@ -227,6 +227,18 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
               f"och varaktigheten **{vo.median():.0f} dagar**. Skillnaden mot talen ovan "
               "är uppsägningstiden. Identiteten $U = L - J + V$ använder alla obesatta "
               "positioner och är oberörd.\n")
+        vf = _kol("wait_first_applicant_median")
+        vb = _kol("vacancy_age_at_decision_median")
+        vu = _kol("vacancy_days_share_unfilled")
+        if len(vf) and len(vb):
+            A(f"Vakansens liv, delat: **{vf.median():.0f} dagar** väntan på den första "
+              f"sökanden, sedan annonsfönstret, och **{vb.median():.0f} dagar** totalt "
+              "fram till beslutet; resten fram till tillträdet är tillträdesfördröjning "
+              "och uppsägningstid."
+              + (f" Av alla vakansdagar tillbringas **{100*vu.median():.0f} %** i "
+                 "positioner som aldrig tillsätts." if len(vu) else "")
+              + " Stocken är flöde gånger varaktighet, så det är dessa poster och "
+                "ingenting annat som sätter vakansgraden.\n")
         va = _kol("vacancy_age_median")
         vp = _kol("vacancy_age_p90")
         if len(va):
