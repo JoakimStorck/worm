@@ -59,6 +59,22 @@ def _occupation(kod, titles):
     return f"{t} [{kod}]"
 
 
+def _same_agent(a, b):
+    """Samma individ? Loggar FÖRE 0092 har två former för agent_id --
+    individual_id (2062_i003443) på ansökan och DataFrame-indexet (3443) på
+    match_completed -- så individens EGNA vinster lästes som förluster mot en
+    okänd. Numerisk svans jämförs därför också, så att gamla körningar går att
+    läsa utan att simuleras om. Nya loggar har en form och träffar direkt."""
+    if a is None or b is None:
+        return False
+    a, b = str(a).strip(), str(b).strip()
+    if a == b:
+        return True
+    tail_a = a.rsplit("_i", 1)[-1].lstrip("0") or "0"
+    tail_b = b.rsplit("_i", 1)[-1].lstrip("0") or "0"
+    return tail_a.isdigit() and tail_b.isdigit() and tail_a == tail_b
+
+
 def _vacancy_outcome(application, vacancy_outcomes):
     """Vad hände med vakansen efter ansökan: vann / förlorade mot / ingen /
     förstörd. vacancy_outcomes: job_id -> lista av (tid, line)."""
@@ -67,7 +83,7 @@ def _vacancy_outcome(application, vacancy_outcomes):
         if t < t_out <= t + WINDOW_DAYS:
             d = r.get("event_detail")
             if d == "match_completed":
-                if r.get("agent_id") == application.get("agent_id"):
+                if _same_agent(r.get("agent_id"), application.get("agent_id")):
                     return "VANN", r
                 return f"förlorade mot {r.get('agent_id')} (q {r.get('q_hire')})", r
             if d == "vacancy_closed_unfilled":

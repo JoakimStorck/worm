@@ -726,3 +726,35 @@ def test_wage_losing_moves_and_stale_applications_are_counted(tmp_path):
     assert row["share_moves_application_matched"] == pytest.approx(1.0)
     assert row["share_moves_applied_while_unemployed"] == pytest.approx(0.5)
     assert row["share_u_R_occ_above_1"] == pytest.approx(0.25)
+
+
+def test_individual_history_reads_legacy_agent_id_forms(tmp_path):
+    """REGRESSION: 0092 skulle ge verktyget en id-jämförelse som klarar
+    loggens två former, men skrivningen av filen uteblev -- en assert i mitt
+    eget skript föll och individual_history.py blev orört, medan
+    commit-meddelandet påstod motsatsen. Utskriften sade fortfarande
+    'förlorade mot 3443' om individens egen vinst. Provet använder en logg i
+    gammal form: individual_id på ansökan, DataFrame-index på
+    match_completed."""
+    import subprocess, sys
+    lines = [
+        "0.00, new_month, agent_type system, month 1, employed 900, unemployed 100, "
+        "unmatched_jobs 0, not_in_labour_force 0, active_jobs 900, posted 0",
+        "285.00, start_job_search, agent_type individual, agent_id 2062_i003443, "
+        "event_detail application_filed, status unemployed, job_id N1, surplus 0.069, "
+        "w_neg 1.0143, q_hire 0.824, commute_km 4.133",
+        "315.00, close_vacancy, agent_type system, agent_id 3443, "
+        "event_detail match_completed, job_id N1, n_applicants 4, q_hire 0.824, "
+        "winner_employed False",
+        "345.00, start_job, agent_type individual, agent_id 2062_i003443, job_id N1, "
+        "u_R 0.5, u_R_occ 0.53, from_onet 43-4051.00, to_onet 29-2099.05, occ_change 1, "
+        "w_field 1.1, w_occ 1.1, w_neg 1.0143, q_hire 0.824, job_to_job False",
+        "3652.50, simulation_completed, agent_type system",
+    ]
+    d = tmp_path / "run_legacy"; d.mkdir()
+    (d / "eventlog.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    ut = subprocess.run([sys.executable, "scripts/individual_history.py", str(d),
+                         "--agent", "2062_i003443", "--db", str(tmp_path / "finns_inte")],
+                        capture_output=True, text=True, check=True).stdout
+    assert "-> VANN" in ut
+    assert "förlorade mot" not in ut
