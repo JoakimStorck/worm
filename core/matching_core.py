@@ -50,6 +50,49 @@ def search_config(world):
     )
 
 
+def _with_current_reservation(world, idx, rad, st, cfg):
+    """Individens jämförelsepunkt just nu, som en rad med w_res satt.
+
+    RESERVATIONEN ÄR NUVARANDE SITUATION, inte kolumnen w_res. Den anställdes
+    alternativ är att stanna: lönen hon har minus dess pendling, plus en
+    bytesfriktion. Utan friktionen byter hon för en krona; med en för hög
+    byter ingen. Uttryckt som andel av nuvarande lön biter den lika på alla
+    nivåer. För den arbetslösa är kolumnen w_res rätt.
+
+    EGEN FUNKTION sedan 0095, eftersom samma jämförelse nu görs på två
+    ställen: när hon söker och när ett erbjudande kommer. Två kopior av den
+    här formeln vore den sjunde gången i serien som två kodvägar för samma
+    sak glidit isär.
+    """
+    if st != 'employed':
+        return rad
+    sim = world.cfg_reader.config.get('simulation', {})
+    frik = float(sim.get('switching_cost_share', 0.05))
+    w_nu = rad.get('w_neg')
+    if w_nu is None or pd.isna(w_nu):
+        return rad
+    pos = world.job_index().get(rad.get('job_id'))
+    km_nu = 0.0
+    if pos is not None and {'x', 'y'} <= set(world.jobs.columns):
+        km_nu = float(np.hypot(world.jobs['x'].iat[pos] - float(rad['x']),
+                               world.jobs['y'].iat[pos] - float(rad['y']))) / 1000.0
+    rad = rad.copy()
+    rad['w_res'] = float(w_nu) * (1.0 + frik) - cfg['commute_cost_per_km'] * km_nu
+    return rad
+
+
+def current_surplus(world, idx, w_off, commute_km):
+    """Överskottet av ett erbjudande MOT HENNES LÄGE NU: S = w - c*km - w_res,
+    samma uttryck som search_once använder, med reservationen ur
+    _with_current_reservation."""
+    ind = world.individuals
+    st = ind.at[idx, 'status'] if 'status' in ind.columns else 'unemployed'
+    cfg = search_config(world)
+    rad = _with_current_reservation(world, idx, ind.loc[idx], st, cfg)
+    w_res = float(rad.get('w_res') or 0.0)
+    return float(w_off) - float(cfg['commute_cost_per_km']) * float(commute_km) - w_res
+
+
 def apply_once(world, idx, t_now):
     """En sökomgång för en arbetslös: möte, val, ANSÖKAN.
 
@@ -71,26 +114,7 @@ def apply_once(world, idx, t_now):
         return (None,) * 5
 
     cfg = search_config(world)
-    rad = ind.loc[idx]
-    if st == 'employed':
-        # RESERVATIONEN ÄR NUVARANDE SITUATION, inte w_res. Den anställdes
-        # alternativ är att stanna: lönen hon har minus dess pendling, plus en
-        # bytesfriktion. Utan friktionen byter hon för en krona; med en för
-        # hög byter ingen. Uttryckt som andel av nuvarande lön biter den lika
-        # på alla nivåer.
-        sim = world.cfg_reader.config.get('simulation', {})
-        frik = float(sim.get('switching_cost_share', 0.05))
-        w_nu = ind.at[idx, 'w_neg']       # kolumnen garanteras av World.prepare
-        if pd.notna(w_nu):
-            pos = world.job_index().get(ind.at[idx, 'job_id'])
-            km_nu = 0.0
-            if pos is not None and {'x', 'y'} <= set(world.jobs.columns):
-                km_nu = float(np.hypot(
-                    world.jobs['x'].iat[pos] - float(rad['x']),
-                    world.jobs['y'].iat[pos] - float(rad['y']))) / 1000.0
-            rad = rad.copy()
-            rad['w_res'] = (float(w_nu) * (1.0 + frik)
-                            - cfg['commute_cost_per_km'] * km_nu)
+    rad = _with_current_reservation(world, idx, ind.loc[idx], st, cfg)
     job_pos, surplus, w_neg, q_hire, km = search_once(
         rad, world.jobs,
         np.flatnonzero(world.vacant_mask()),

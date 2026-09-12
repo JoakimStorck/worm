@@ -414,6 +414,11 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                     stock = float(ts[st].mean()) if st in ts.columns else 0.0
                     if stock > 0:
                         row[f"searches_per_year_{st}"] = round(n_st / _ar / stock, 3)
+            row["n_offers_declined"] = sum(
+                1 for r in events if r.get("event_detail") == "offer_declined")
+            row["n_all_declined"] = sum(
+                1 for r in events if r.get("event_detail") == "vacancy_closed_unfilled"
+                and str(r.get("all_declined", "")).lower() == "true")
             row["n_search_superseded"] = sum(
                 1 for r in events if r.get("event_detail") == "search_superseded")
             # RESTPOOLEN: vem vinner urvalen

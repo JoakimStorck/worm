@@ -491,7 +491,42 @@ def handle_close_vacancy(event, world):
             _decay_reservation(world, a['idx'])   # kedjan lever redan
         return
 
-    win = max(lediga, key=lambda a: a['q'])
+    # BESLUTET FATTAS VID ERBJUDANDET, INTE VID ANSÖKAN (0095). Buden är
+    # utvärderade när ansökan lämnades. Hon kan ha hunnit få ett annat jobb
+    # sedan dess -- och _behörig fångar bara den som sagt upp sig, alltså den
+    # som var ANSTÄLLD när hon tackade ja. Den arbetslösa som vann två
+    # vakanser passerade spärren båda gångerna och tillträdde båda, den andra
+    # gången ofta till lägre lön: 23 procent av bytena var beslut fattade i
+    # ett annat tillstånd och 14 procent sänkte lönen (0094).
+    #
+    # Arbetsgivaren går nu nedåt i q-ordning till den förste som fortfarande
+    # vill ha jobbet. Överskottet räknas mot hennes läge NU, med samma uttryck
+    # som sökningen använder (current_surplus). Lönen omförhandlas INTE: budet
+    # är arbetsgivarens erbjudande och hon svarar ja eller nej. Det gör
+    # avslagen försiktiga -- en anställd som fick sitt bud som arbetslös
+    # bedöms mot ett erbjudande som inte tagit hänsyn till hennes nya läge --
+    # och det är ett modellval, inte en förenkling: omförhandling vid
+    # erbjudandet är en egen mekanism med egen empiri.
+    from core.matching_core import current_surplus
+    win = None
+    for a in sorted(lediga, key=lambda a: -a['q']):
+        s_nu = current_surplus(world, a['idx'], a['w_neg'], a.get('commute_km') or 0.0)
+        if s_nu > 0.0:
+            win = a
+            break
+        world.event_logger.log_event(world, event, extra={
+            'event_detail': 'offer_declined', 'job_id': job_id, 'agent_id': a['idx'],
+            'surplus_at_application': round(float(a.get('surplus') or 0.0), 4),
+            'surplus_now': round(float(s_nu), 4),
+            'status': ind.at[a['idx'], 'status']})
+    if win is None:
+        world.event_logger.log_event(world, event, extra={
+            'event_detail': 'vacancy_closed_unfilled', 'job_id': job_id,
+            'n_applicants': len(apps), 'n_eligible': len(lediga),
+            'all_declined': True})
+        for a in lediga:
+            _decay_reservation(world, a['idx'])
+        return
     idx = win['idx']
 
     # TRE TIDER, var och en med sitt skäl. Annonstiden (40 dagar) är redan

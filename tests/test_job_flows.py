@@ -1046,8 +1046,12 @@ def test_rejection_does_not_start_a_second_search_chain():
     from core.event_handlers import handle_close_vacancy
 
     w, jid = _world_with_applicants([0.2, 0.9, 0.5])
+    # 0.7 och inte 1.0: sedan 0095 avslår hon ett erbjudande som inte ger
+    # överskott mot hennes läge nu, och budet här är w_neg 0.8 med 5 km. Med
+    # w_res 1.0 skulle alla tre avslå och provets "en anställning" utebli av
+    # ett annat skäl än det provet handlar om.
     for i in range(3):
-        w.individuals.at[i, "w_res"] = 1.0
+        w.individuals.at[i, "w_res"] = 0.7
     w._pushed.clear()
     handle_close_vacancy({"time": 40.0, "agent_id": 0, "event_type": "close_vacancy",
                           "params": {"job_id": jid}}, w)
@@ -1057,9 +1061,9 @@ def test_rejection_does_not_start_a_second_search_chain():
     # men reservationen ska ha fallit för förlorarna, inte för vinnaren
     decay = w.cfg_reader.config["simulation"].get("reservation_decay_per_search", 1.0)
     if decay < 1.0:
-        assert w.individuals.at[0, "w_res"] < 1.0
-        assert w.individuals.at[2, "w_res"] < 1.0
-        assert w.individuals.at[1, "w_res"] == 1.0
+        assert w.individuals.at[0, "w_res"] < 0.7
+        assert w.individuals.at[2, "w_res"] < 0.7
+        assert w.individuals.at[1, "w_res"] == 0.7
 
 
 def test_applicant_counts_are_maintained_incrementally():
@@ -1627,3 +1631,55 @@ def test_destroyed_job_logs_who_lost_it():
              if extra.get("event_detail") == "job_destroyed_holder_displaced"]
     assert len(rader) == 1
     assert rader[0].get("agent_id") == 0
+
+
+def test_a_stale_offer_is_declined_and_the_runner_up_gets_the_job():
+    """REGRESSION: buden utvärderades vid ansökan och band i 40 dagar plus
+    uppsägningstid. Den arbetslösa som vann två vakanser tillträdde båda --
+    _behörig fångar bara den som sagt upp sig, och uppsägning skrivs bara när
+    hon är anställd. 23 procent av bytena var beslut fattade i ett annat
+    tillstånd, 14 procent sänkte lönen (0094). Nu avslår hon, och
+    arbetsgivaren går vidare till näste i q-ordning."""
+    from core.event_handlers import handle_close_vacancy
+
+    w, jid = _world_with_applicants([0.2, 0.9, 0.5])
+    for i in range(3):
+        w.individuals.at[i, "w_res"] = 0.7
+    # Den med högst q (1) har hunnit ta ett bättre jobb: lön 1.2 slår budet 0.8
+    w.individuals["w_neg"] = [np.nan, 1.2, np.nan]
+    w.individuals["x"] = 0.0
+    w.individuals["y"] = 0.0
+    w.individuals["job_id"] = w.individuals["job_id"].astype(object)
+    w.individuals.at[1, "status"] = "employed"
+    w.individuals.at[1, "job_id"] = w.jobs.iloc[1]["job_id"]
+    w._pushed.clear()
+    w.event_logger.events = []
+    handle_close_vacancy({"time": 40.0, "agent_id": None, "event_type": "close_vacancy",
+                          "params": {"job_id": jid}}, w)
+
+    avslag = [e for _, e in w.event_logger.events if e.get("event_detail") == "offer_declined"]
+    assert len(avslag) == 1 and avslag[0]["agent_id"] == 1
+    starter = [e for e in w._pushed if e["event_type"] == "start_job"]
+    assert len(starter) == 1
+    assert starter[0]["agent_id"] == 2, "näste i q-ordning ska få jobbet"
+
+
+def test_when_everyone_declines_the_vacancy_stays_unfilled():
+    """Ingen tvingas, och positionen tillsätts inte: raden säger all_declined
+    så att kanalen går att räkna i analysen."""
+    from core.event_handlers import handle_close_vacancy
+
+    w, jid = _world_with_applicants([0.2, 0.9, 0.5])
+    for i in range(3):
+        w.individuals.at[i, "w_res"] = 1.0        # budet 0.8 räcker inte för någon
+    w._pushed.clear()
+    w.event_logger.events = []
+    handle_close_vacancy({"time": 40.0, "agent_id": None, "event_type": "close_vacancy",
+                          "params": {"job_id": jid}}, w)
+
+    assert len([e for _, e in w.event_logger.events
+                if e.get("event_detail") == "offer_declined"]) == 3
+    ofylld = [e for _, e in w.event_logger.events
+              if e.get("event_detail") == "vacancy_closed_unfilled"]
+    assert len(ofylld) == 1 and ofylld[0].get("all_declined") is True
+    assert [e for e in w._pushed if e["event_type"] == "start_job"] == []

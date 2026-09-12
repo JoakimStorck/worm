@@ -323,7 +323,7 @@ vakansbegrepp gör det inte. En jämförelse med v = 2 procent kräver V utan
 pending, som är ungefär hälften. Det är en rapporteringsfråga, inte en
 mekanism.
 
-### 4.5d Beslutet fattas vid ansökan, aldrig vid erbjudandet (0092)
+### 4.5d Beslutet fattas vid erbjudandet (0092 diagnos, 0095 åtgärd)
 
 Individkedjorna (0091) visade byten med NEGATIV lönevinst, upp till
 -12 procent. Mönstret är detsamma varje gång: ansökan lämnas som arbetslös,
@@ -336,8 +336,13 @@ utvärderade vid ansökningstillfället och binder henne i fyrtio dagar plus
 uppsägningstid.
 
 Det är precis den marginal Becsi (2026) gör till primitiv: att avslå ett
-funnet alternativ ska vara ett val med en kostnad, inte en omöjlighet.
-Mekanismen hör dit och byggs med avvisningskostnaden (fråga 4).
+funnet alternativ ska vara ett val, inte en omöjlighet. 0095 ger henne
+valet: arbetsgivaren går nedåt i q-ordning till den förste vars överskott
+mot NUVARANDE läge är positivt, räknat med samma uttryck som sökningen
+(`current_surplus`). Avslaget är gratis -- Becsis kostnader k (arbetsgivaren
+avvisar en funnen kandidat) och m (arbetaren avvisar ett erbjudande) är en
+egen mekanism och en egen fråga. Lönen omförhandlas inte vid erbjudandet;
+det är ett modellval och gör avslagen försiktiga.
 
 Måtten som säger hur stor kanalen är: `share_moves_wage_loss`,
 `share_moves_applied_while_unemployed` och `share_moves_application_matched`.
