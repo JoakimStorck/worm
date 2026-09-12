@@ -621,11 +621,26 @@ def test_first_step_measures_follow_each_individual(tmp_path):
     assert row["share_unemployed_hires_that_step"] == pytest.approx(0.5)
 
 
+def _run_individual_history(*args):
+    """Kör scripts/individual_history.py oavsett var pytest startades.
+
+    Provet anropade skriptet med en RELATIV sökväg, så det fungerade från
+    repo-roten och föll med exit 2 (python hittar ingen fil) när sviten körs
+    inifrån tests/, vilket kor_0077.sh gör. Sökvägen räknas nu ut ur
+    __file__, och arbetskatalogen sätts till repo-roten så att skriptets
+    eget sys.path-tillägg och default för --db stämmer."""
+    import subprocess
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    return subprocess.run(
+        [sys.executable, str(root / "scripts" / "individual_history.py"), *args],
+        capture_output=True, text=True, check=True, cwd=str(root)).stdout
+
 def test_individual_history_tells_one_individuals_story(tmp_path):
     """scripts/individual_history.py läser en individs alla händelser i ordning:
     uppstart, förstörelse, torr sökning, förlorad ansökan med vinnarens q,
     vunnen ansökan, anställning ur arbetslöshet mot Pi_o, byte med vinst."""
-    import subprocess, sys
     lines = [
         "0.00, new_month, agent_type system, month 1, employed 900, unemployed 100, "
         "unmatched_jobs 0, not_in_labour_force 0, active_jobs 900, posted 0",
@@ -655,9 +670,8 @@ def test_individual_history_tells_one_individuals_story(tmp_path):
     ]
     d = tmp_path / "run_k"; d.mkdir()
     (d / "eventlog.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    ut = subprocess.run([sys.executable, "scripts/individual_history.py", str(d), "--agent", "7",
-                         "--db", str(tmp_path / "finns_inte")],
-                        capture_output=True, text=True, check=True).stdout
+    ut = _run_individual_history(str(d), "--agent", "7",
+                                 "--db", str(tmp_path / "finns_inte"))
     assert "1 byten, 3 ansökningar av 4 sökningar" in ut
     assert "FÖRLORAR JOBBET: J0" in ut
     assert "1 sökning(ar) utan ansökan" in ut
@@ -736,7 +750,6 @@ def test_individual_history_reads_legacy_agent_id_forms(tmp_path):
     'förlorade mot 3443' om individens egen vinst. Provet använder en logg i
     gammal form: individual_id på ansökan, DataFrame-index på
     match_completed."""
-    import subprocess, sys
     lines = [
         "0.00, new_month, agent_type system, month 1, employed 900, unemployed 100, "
         "unmatched_jobs 0, not_in_labour_force 0, active_jobs 900, posted 0",
@@ -753,9 +766,8 @@ def test_individual_history_reads_legacy_agent_id_forms(tmp_path):
     ]
     d = tmp_path / "run_legacy"; d.mkdir()
     (d / "eventlog.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    ut = subprocess.run([sys.executable, "scripts/individual_history.py", str(d),
-                         "--agent", "2062_i003443", "--db", str(tmp_path / "finns_inte")],
-                        capture_output=True, text=True, check=True).stdout
+    ut = _run_individual_history(str(d), "--agent", "2062_i003443",
+                                 "--db", str(tmp_path / "finns_inte"))
     assert "-> VANN" in ut
     assert "förlorade mot" not in ut
 
