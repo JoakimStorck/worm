@@ -191,7 +191,7 @@ def test_world_integration_circles_follow_career():
     # Sammanfattningen har flyttat mot det nya jobbet
     assert w.individuals.at[0, "x_occ"] < 0.3
 
-    _become_unemployed(w, 0)
+    _become_unemployed(w, 0, 100.0)
     assert w._active_key[0] == EMPTY
     for _ in range(120):
         w.evolve_competence(1 / 12)

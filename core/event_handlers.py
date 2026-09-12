@@ -5,7 +5,7 @@ import pandas as pd
 from core.occupations.utils import (search_once, vacant_job_indices,
                                     retraining_target)
 
-def _become_unemployed(world, idx, free_job=True):
+def _become_unemployed(world, idx, t_now, free_job=True):
     """Sätter en individ till arbetslös och frigör hennes eventuella position.
 
     Att skriva status utan att frigöra jobbet har varit samma återkommande fel
@@ -22,7 +22,7 @@ def _become_unemployed(world, idx, free_job=True):
             jobs = world.jobs
             if pos is not None:
                 jobs.iat[pos, jobs.columns.get_loc('individual_id')] = np.nan
-                world.set_job_filled(held, False)
+                world.set_job_filled(held, False, t_now)
             ind.at[idx, 'job_id'] = np.nan
     world.clear_active_occupation(idx)
     ind.at[idx, 'status'] = 'unemployed'
@@ -131,7 +131,7 @@ def handle_start_job(event, world):
         prev_pos = world.job_index().get(prev)
         if prev_pos is not None:
             jobs.iat[prev_pos, jobs.columns.get_loc('individual_id')] = np.nan
-            world.set_job_filled(prev, False)
+            world.set_job_filled(prev, False, event['time'])
 
     # Källyrket läses INNAN det skrivs över: u_R_occ mäts från det yrke hon
     # kom från. Att uppdatera först gav u_R_occ = 0 för varje övergång.
@@ -609,7 +609,7 @@ def handle_start_education(event, world):
         pos = world.job_index().get(held)
         if pos is not None:
             world.jobs.iat[pos, world.jobs.columns.get_loc('individual_id')] = np.nan
-            world.set_job_filled(held, False)
+            world.set_job_filled(held, False, event['time'])
         ind.at[idx, 'job_id'] = np.nan
 
     ind.at[idx, 'status'] = 'in_education'
@@ -664,7 +664,7 @@ def handle_end_education(event, world):
         if 'w_res' in ind.columns:
             rho = float(sim.get('rho_reservation', 0.7))
             ind.at[idx, 'w_res'] = rho * float(ind.at[idx, 'w_res'])
-    _become_unemployed(world, idx)
+    _become_unemployed(world, idx, event['time'])
     world.event_logger.log_event(world, event, extra={
         'event_detail': 'education_finished',
         'move': round(float(event['params'].get('move', 0.0)), 4)})
@@ -715,7 +715,7 @@ def handle_career_break(event, world):
     job_id = individuals.at[idx, 'job_id']
     if pd.notna(job_id):
         _clear_holder(world, job_id)
-        world.set_job_filled(job_id, False)
+        world.set_job_filled(job_id, False, event['time'])
         individuals.at[idx, 'job_id'] = np.nan
 
     individuals.at[idx, 'status'] = 'career_break'

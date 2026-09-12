@@ -307,7 +307,7 @@ def test_pending_clears_when_job_is_filled_or_freed():
     jid = w.jobs.at[0, "job_id"]
     w.set_job_pending(jid)
     assert bool(w.jobs.at[0, "pending"])
-    w.set_job_filled(jid, False)          # rekryteringen avbryts
+    w.set_job_filled(jid, False, 10.0)    # rekryteringen avbryts
     assert not bool(w.jobs.at[0, "pending"])
     assert bool(w.vacant_mask()[0]), "positionen ska vara sökbar igen"
 
@@ -557,7 +557,7 @@ def test_become_unemployed_always_frees_the_job():
     w.jobs.loc[w.jobs.index[0], "individual_id"] = "i0"
     w.set_job_filled(jid, True)
 
-    _become_unemployed(w, 0)
+    _become_unemployed(w, 0, 100.0)
 
     assert w.individuals.at[0, "status"] == "unemployed"
     assert pd.isna(w.individuals.at[0, "job_id"])
@@ -1529,3 +1529,18 @@ def test_posted_vacancy_is_born_now_not_with_the_templates_age():
     nya = w.jobs[w.jobs["created_time"] == 900.0]
     assert len(nya) == 4
     assert (nya["vacant_since"] == 900.0).all()
+
+
+def test_freed_position_is_stamped_with_the_event_time():
+    """REGRESSION, tredje försöket på samma mått. set_job_filled stämplade
+    vacant_since med world.current_time, som sattes till 0 i __init__ och
+    aldrig flyttades -- den hörde till den döda tick()-slingan. Varje frigjord
+    position fick ålder lika med klockan vid nästa tillsättning: median 1 134
+    dagar efter 0086. Tiden är händelsens och ska skickas in; utan den kastas."""
+    w = make_world(n_employers=2, size=2)
+    jid = w.jobs.at[0, "job_id"]
+    w.set_job_filled(jid, True)
+    w.set_job_filled(jid, False, 731.5)
+    assert float(w.jobs.at[0, "vacant_since"]) == 731.5
+    with pytest.raises(TypeError):
+        w.set_job_filled(jid, False)

@@ -642,12 +642,21 @@ class World:
             self._vm_n = n
         return self._vm
 
-    def set_job_filled(self, job_id, filled):
+    def set_job_filled(self, job_id, filled, t_now=None):
         """Håller vakansmasken i synk när en position tillsätts eller frigörs.
 
         Går via vacant_mask(), som bygger om masken när tabellen ändrat längd.
         Direkt åtkomst till _vm gav IndexError när en nypostad position
-        förstördes innan någon sökning hunnit utlösa ombyggnaden."""
+        förstördes innan någon sökning hunnit utlösa ombyggnaden.
+
+        En frigjord position kräver tiden. Fram till 0086 stämplades
+        vacant_since med self.current_time, som sattes till 0 i __init__ och
+        aldrig flyttades: den hörde till den döda tick()-slingan, inte till
+        händelsekön. Varje frigjord position fick därför ålder lika med
+        klockan vid tillsättningen, och medianåldern blev 1 134 dagar."""
+        if not filled and t_now is None:
+            raise TypeError("set_job_filled(..., False) kräver t_now: "
+                            "vacant_since stämplas med händelsens tid")
         pos = self.job_index().get(job_id)
         if pos is not None:
             vm = self.vacant_mask()
@@ -655,7 +664,7 @@ class World:
                 vm[pos] = not filled
             if not filled and 'vacant_since' in self.jobs.columns:
                 self.jobs.iat[pos, self.jobs.columns.get_loc('vacant_since')] = \
-                    float(self.current_time)
+                    float(t_now)
         if pos is not None and "pending" in self.jobs.columns:
             # Rensas i båda riktningarna: rekryteringen är avslutad antingen
             # genom tillträde eller genom att positionen frigjorts.
