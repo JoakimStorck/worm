@@ -555,3 +555,38 @@ def test_ladder_and_residual_pool_are_measured():
     assert row["q_applicants_employed"] > row["q_applicants_unemployed"]
     # Vakansåldern kräver mer än tjugo rader för att inte bli brus
     assert "vacancy_age_median" not in row
+
+
+def test_boolean_log_fields_are_parsed_as_booleans(tmp_path):
+    """REGRESSION: parse_line ger strängar, och bool("False") är True. Med
+    bool(r.get(...)) var winner_employed sant för VARJE tillsättning och
+    job_to_job sant för VARJE anställning under körning. Rapporten sade
+    därför 100 procent av tillsättningarna till anställda och 28.5 procent
+    byten per år -- det senare var alla anställningar, inte bytena -- i
+    0082 till 0085, och restpoolsdiagnosen byggde på det."""
+    lines = [
+        "0.00, new_month, agent_type system, month 1, employed 900, unemployed 100, "
+        "unmatched_jobs 0, not_in_labour_force 0, active_jobs 900, posted 0",
+        # två tillsättningar: en till arbetslös, en till anställd
+        "40.00, close_vacancy, event_detail match_completed, job_id J1, agent_id 1, "
+        "winner_employed False, q_median_unemployed 0.5",
+        "40.00, close_vacancy, event_detail match_completed, job_id J2, agent_id 2, "
+        "winner_employed True, q_median_employed 0.8",
+        # tre tillträden: ett byte, ett från arbetslöshet, ett uppstart
+        "50.00, start_job, agent_id 1, job_id J1, u_R 0.5, u_R_occ 0.5, from_onet 49-9041.00, "
+        "to_onet 51-2011.00, occ_change 1, w_field 1.0, w_neg 0.7, q_hire 0.8, job_to_job False",
+        "50.00, start_job, agent_id 2, job_id J2, u_R 0.5, u_R_occ 0.5, from_onet 49-9041.00, "
+        "to_onet 51-2011.00, occ_change 1, w_field 1.0, w_neg 0.9, q_hire 0.8, job_to_job True, "
+        "w_prev 0.8",
+        "0.00, start_job, agent_id 3, job_id J3, u_R 0.5, u_R_occ 0.5, from_onet 49-9041.00, "
+        "to_onet 51-2011.00, occ_change 1, w_field 1.0, w_neg 0.9, q_hire 0.8, is_bootstrap True, "
+        "job_to_job False",
+    ]
+    d = tmp_path / "run_b"; d.mkdir()
+    (d / "eventlog.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    tr = transitions_table([parse_line(l) for l in lines])
+    assert tr["job_to_job"].tolist() == [False, True, False]
+    assert tr["is_bootstrap"].tolist() == [False, False, True]
+    row = summary_row(str(d))
+    assert row["share_hires_from_employment"] == pytest.approx(0.5)
+    assert row["n_job_to_job"] == 1

@@ -66,6 +66,21 @@ def _f(rec, key, default=np.nan):
         return default
 
 
+def _b(rec, key, default=False):
+    """Boolesk loggpost. parse_line ger STRÄNGAR, och bool("False") är True:
+    med bool(r.get(...)) var winner_employed sant för varje tillsättning och
+    job_to_job sant för varje anställning under körning. Två av stegens tre
+    mått var därmed konstanter -- 100 procent till anställda, byten lika med
+    alla anställningar -- och restpoolsdiagnosen i lonemodell.md 4.2 byggde
+    på dem."""
+    v = rec.get(key)
+    if v is None:
+        return default
+    if isinstance(v, bool):
+        return v
+    return str(v).strip().lower() in ("true", "1", "yes")
+
+
 # ---------------------------------------------------------------------------
 def transitions_table(events):
     """En rad per tillträde.
@@ -94,8 +109,8 @@ def transitions_table(events):
             "q_hire": _f(r, "q_hire"),
             "commute_km": _f(r, "commute_km"),
             "n_applicants": _f(r, "n_applicants"),
-            "is_bootstrap": bool(r.get("is_bootstrap", False)),
-            "job_to_job": bool(r.get("job_to_job", False)),
+            "is_bootstrap": _b(r, "is_bootstrap"),
+            "job_to_job": _b(r, "job_to_job"),
             "w_prev": _f(r, "w_prev"),
             "vacancy_age_days": _f(r, "vacancy_age_days"),
             "w_occ": _f(r, "w_occ"),
@@ -278,7 +293,7 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
             # RESTPOOLEN: vem vinner urvalen
             mc = [r for r in events if r.get("event_detail") == "match_completed"]
             if mc:
-                we = [bool(r.get("winner_employed", False)) for r in mc]
+                we = [_b(r, "winner_employed") for r in mc]
                 row["share_hires_from_employment"] = round(float(np.mean(we)), 4)
                 for namn in ("employed", "unemployed"):
                     v = [_f(r, f"q_median_{namn}") for r in mc]
@@ -349,10 +364,16 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
             # U = L - J + V ger u = u_min + V/L exakt.
             if len(ts) and "vacancies" in ts.columns:
                 yrs = float(ts["year"].iloc[-1]) if "year" in ts.columns else 0.0
-                if yrs > 0 and len(tr):
+                # Flödet är KÖRNINGENS tillsättningar. Uppstartens ligger i
+                # tr med sin flagga men sker vid t = 0 och är inte ett flöde
+                # över tiden; med dem i nämnaren blev varaktigheten en
+                # tredjedel för kort.
+                n_fl = int((~tr["is_bootstrap"].fillna(False).astype(bool)).sum()) \
+                    if "is_bootstrap" in tr.columns else len(tr)
+                if yrs > 0 and n_fl:
                     row["mean_vacancies"] = round(float(ts["vacancies"].mean()), 1)
                     row["vacancy_days"] = round(
-                        float(ts["vacancies"].mean()) / (len(tr) / yrs) * 365.25, 1)
+                        float(ts["vacancies"].mean()) / (n_fl / yrs) * 365.25, 1)
 
             if "r_req" in cps.columns and cps["r_req"].notna().any():
                 # Det avslöjande måttet: låg q i jobb med högt krav.

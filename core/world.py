@@ -274,6 +274,12 @@ class World:
                     # år lade det 3 688 döda vakanser i Mora medan
                     # sysselsättningen föll från 9 900 till 6 505.
                     "pending": False,
+                    # Samma sak för vacant_since: ur mallen ärvde det nya
+                    # jobbet den GAMLA positionens tidsstämpel, oftast 0.0
+                    # från starten. Vakansernas medianålder vid tillsättning
+                    # blev 1 956 dagar -- inte för att samma positioner stod
+                    # öppna, utan för att nypostade jobb föddes fem år gamla.
+                    "vacant_since": float(t_now),
                     "created_time": float(t_now), "destroyed_time": np.nan,
                 })
                 if geom is not None:

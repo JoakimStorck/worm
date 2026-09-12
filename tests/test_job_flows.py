@@ -1513,3 +1513,19 @@ def test_applying_does_not_overwrite_the_current_wage():
 
     # Och därför är hennes reservation nästa gång fortfarande den gamla lönen
     assert w.n_open_applications() == 1
+
+
+def test_posted_vacancy_is_born_now_not_with_the_templates_age():
+    """REGRESSION: mallen kopierar alla kolumner, och vacant_since följde
+    med. Nypostade jobb föddes med den gamla positionens tidsstämpel --
+    oftast 0.0 från starten -- så vakansernas medianålder vid tillsättning
+    blev 1 956 dagar: inte samma positioner som stod öppna, utan nya jobb
+    som var fem år gamla vid födseln."""
+    w = make_world(n_employers=1, size=4, simulation={"vacancy_fill_rate": 1.0})
+    w.jobs["active"] = False
+    w.jobs["individual_id"] = np.nan
+    w.jobs["vacant_since"] = 0.0
+    assert w.post_vacancies_batch(900.0) == 4
+    nya = w.jobs[w.jobs["created_time"] == 900.0]
+    assert len(nya) == 4
+    assert (nya["vacant_since"] == 900.0).all()

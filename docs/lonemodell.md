@@ -299,6 +299,14 @@ och har ingen utlösare nu. Den ska få en ur den torra sökningen, där
 `propensity_start_education` redan växer, när frågan om nivå och inriktning
 i utbildningen är avgjord.
 
+Efter 0085 konvergerar modellen: vakansstocken toppar år två kring 850--900
+och faller till ~630 vid år tio, arbetslösheten från ~2 000 till ~1 650, i
+alla fem frön. Divergensen var den exogena avgången. Måtten i avsnitt 4.2
+(100 procent av tillsättningarna till anställda) och i *Stegen* (byten per
+år, vakansernas ålder) var dessutom felmätta i 0082--0085, se 0086:
+restpoolens undanträngning är inte belagd, och byten per år är okänt tills
+körningen efter 0086 finns.
+
 ### 4.6 Nivåfrågorna
 
 u 14 procent mot 7,5 och vakanstid 59 dagar mot 30–40 är samma tal två gånger:

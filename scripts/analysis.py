@@ -297,7 +297,9 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
     A("## Körningar\n")
     show = [c for c in ("run", "scenario", "seed", "commit", "years", "u_pct",
                         "v_pct", "median_u_R", "n_cps_sample") if c in df.columns]
-    A(df[show].to_markdown(index=False, floatfmt=".2f") + "\n")
+    # disable_numparse: tabulate läste commit-hashen 19534e35 som talet
+    # 1.9534e39 och skrev ut fyrtio siffror i tabellen.
+    A(df[show].to_markdown(index=False, floatfmt=".2f", disable_numparse=True) + "\n")
 
     path = os.path.join(out, "report.md")
     with open(path, "w", encoding="utf-8") as f:
