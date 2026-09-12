@@ -858,3 +858,42 @@ def test_archived_runs_are_found_by_name(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as fel:
         _resolve_run_dir("output/run_finns_inte")
     assert "run_20260912_185257" in str(fel.value)
+
+
+def test_open_vacancies_exclude_the_promised_positions(tmp_path):
+    """SCB:s vakans är en ledig befattning som rekryteringen ännu inte löst.
+    En position där någon tackat ja men tillträder om en månad står obesatt i
+    modellen och ingår i V -- och i identiteten U = L - J + V, som inte ska
+    röras -- men den är inte ledig. v_open är jämförelsetalet: här 40 obesatta
+    av 1000 aktiva, varav 15 utlovade, alltså v 4.0 och v_open 2.5."""
+    lines = [
+        "0.00, new_month, agent_type system, month 1, employed 900, unemployed 100, "
+        "unmatched_jobs 40, open_vacancies 25, not_in_labour_force 0, active_jobs 1000, posted 0",
+        "3652.50, simulation_completed, agent_type system",
+    ]
+    d = tmp_path / "run_v"; d.mkdir()
+    (d / "eventlog.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    ts = timeseries_table([parse_line(l) for l in lines])
+    assert float(ts["v"].iloc[0]) == pytest.approx(4.0)
+    assert float(ts["v_open"].iloc[0]) == pytest.approx(2.5)
+    row = summary_row(str(d))
+    assert row["v_pct"] == pytest.approx(4.0)
+    assert row["v_open_pct"] == pytest.approx(2.5)
+
+
+def test_promised_positions_are_counted_as_not_open():
+    """analyze_world ska skilja obesatt från ledig: en position med pending är
+    tillsatt, tillträdet återstår bara."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from conftest import make_world
+    from core.statistics.basic_stats import analyze_world
+    w = make_world(n_employers=2, size=5)
+    w.prepare()
+    w.jobs["individual_id"] = np.nan
+    w.jobs["pending"] = False
+    w.jobs.loc[w.jobs.index[:3], "pending"] = True
+    st = analyze_world(w)
+    assert st["unmatched_jobs"] == 10
+    assert st["open_vacancies"] == 7

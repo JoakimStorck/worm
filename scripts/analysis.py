@@ -219,6 +219,14 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
               "ombytessökande, ungefär en sökepisod per anställd och år "
               "(nivån ska verifieras mot AM0401); amerikansk nivå är ~2.6 "
               "(Faberman m.fl. 2022).\n")
+        vo = _kol("open_vacancy_days")
+        vop = _kol("v_open_pct")
+        if len(vo) and len(vop):
+            A(f"Utan de UTLOVADE positionerna -- tillsatta men ej tillträdda, som "
+              f"SCB:s vakansbegrepp inte räknar -- är vakansgraden **{vop.median():.2f} %** "
+              f"och varaktigheten **{vo.median():.0f} dagar**. Skillnaden mot talen ovan "
+              "är uppsägningstiden. Identiteten $U = L - J + V$ använder alla obesatta "
+              "positioner och är oberörd.\n")
         va = _kol("vacancy_age_median")
         vp = _kol("vacancy_age_p90")
         if len(va):

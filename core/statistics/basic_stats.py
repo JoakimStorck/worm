@@ -22,6 +22,19 @@ def analyze_world(world):
                           else int(world.jobs['individual_id'].isna().sum()),
         "individuals_not_in_labour_force": len(world.individuals[(world.individuals['status'] == 'not_in_labor_force')]),   
     }
+    # V MOT SCB:s VAKANSBEGREPP. unmatched_jobs räknar alla obesatta aktiva
+    # positioner, också de som är UTLOVADE: någon har tackat ja men inte
+    # tillträtt, och under uppsägningstiden (~30 dagar av de 80 en vakans
+    # lever) står positionen kvar som obesatt. SCB:s vakans är en ledig
+    # befattning som rekryteringen ännu inte löst; en tillsatt befattning med
+    # tillträde om en månad är inte ledig. Identiteten U = L - J + V använder
+    # unmatched_jobs och rörs inte -- open_vacancies är jämförelsetalet.
+    if 'active' in world.jobs.columns and 'pending' in world.jobs.columns:
+        stats["open_vacancies"] = int((world.jobs['individual_id'].isna()
+                                       & world.jobs['active']
+                                       & ~world.jobs['pending'].fillna(False).astype(bool)).sum())
+    else:
+        stats["open_vacancies"] = stats["unmatched_jobs"]
     return stats
 
 def hist_as_dict(data, bins=20, range=None):

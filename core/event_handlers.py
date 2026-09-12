@@ -836,6 +836,8 @@ def handle_new_month(event, world):
         "employed": employed,
         "unemployed": unemployed,
         "unmatched_jobs": unmatched_jobs,
+        # Utan de utlovade: jämförelsetalet mot SCB:s vakansgrad (0101).
+        "open_vacancies": stats.get('open_vacancies', unmatched_jobs),
         "not_in_labour_force": not_in_labour_force,
         "active_jobs": n_jobs,
         "posted": n_posted,

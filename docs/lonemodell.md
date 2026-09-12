@@ -366,11 +366,20 @@ Den fördröjning som verkligen hör hemma här — arbetsgivarens beslut att
 ersätta en förlorad position — är inte modellerad och hör till arbetsgivaren
 som agent.
 
-*V/L.* Vakansvaraktigheten är 115 dagar mot svenska 30–40, och består av
-annonseringsfönstret 40 dagar plus uppsägningstiden ~40 plus de positioner
-ingen tar. Därtill räknar V tillsatta men ej tillträdda positioner, vilket
-SCB:s vakansbegrepp inte gör; rapporterat utan pending är talet ungefär
-hälften. Fönstret och uppsägningstiden är modellval med egen empiri.
+*V/L.* Efter 0100 är u 10,8 = u_min 6,5 + V/L 4,3, och hela den kvarvarande
+skillnaden mot referensens 7,5 ligger i vakansstocken. Varaktigheten är 117
+dagar (Little) mot svenska 30–40, och vakansens ålder vid tillsättning är 80:
+annonseringsfönstret 40, beslutet 10, uppsägningstiden 30. Skillnaden mellan
+117 och 80 är de positioner ingen tar och som utlyses om.
+
+Men jämförelsen var fel ställd. V räknar alla obesatta aktiva positioner,
+också de UTLOVADE — någon har tackat ja, tillträdet är om en månad. SCB:s
+vakans är en ledig befattning som rekryteringen ännu inte löst, och en
+tillsatt befattning med tillträde om en månad är inte ledig. 0101 rapporterar
+`v_open_pct` och `open_vacancy_days` vid sidan av; identiteten U = L − J + V
+använder alla obesatta positioner och rörs inte. Fönstret på 40 dagar och
+uppsägningstiden är modellval med egen empiri, och ska inte kalibreras mot en
+felställd jämförelse.
 
 ---
 

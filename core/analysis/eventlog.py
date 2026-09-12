@@ -163,11 +163,14 @@ def timeseries_table(events):
             "time": r["time"], "year": r["time"] / 365.25,
             "month": int(_f(r, "month", 0)),
             "employed": emp, "unemployed": unemp, "vacancies": vac,
+            "open_vacancies": _f(r, "open_vacancies", vac),
             "active_jobs": J, "posted": _f(r, "posted"),
             "not_in_labour_force": _f(r, "not_in_labour_force"),
             "labour_force": L,
             "u": 100 * unemp / L if L else np.nan,
             "v": 100 * vac / J if J else np.nan,
+            # SCB:s vakansgrad räknar lediga befattningar, inte utlovade.
+            "v_open": 100 * _f(r, "open_vacancies", vac) / J if J else np.nan,
             "tightness": vac / unemp if unemp else np.nan,
             # U = L - J + V ska hålla exakt; avvikelsen är ett larm.
             "identity_residual": unemp - (L - J + vac),
@@ -231,6 +234,8 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
             "vacancies": last["vacancies"], "active_jobs": last["active_jobs"],
             "labour_force": last["labour_force"],
             "u_pct": round(float(last["u"]), 3), "v_pct": round(float(last["v"]), 3),
+            "v_open_pct": round(float(last["v_open"]), 3)
+            if "v_open" in ts.columns and pd.notna(last["v_open"]) else np.nan,
             "tightness": round(float(last["tightness"]), 4),
             "u_min_pct": round(100 * float(last["labour_force"] - last["active_jobs"])
                                / float(last["labour_force"]), 3)
@@ -515,6 +520,15 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                     row["mean_vacancies"] = round(float(ts["vacancies"].mean()), 1)
                     row["vacancy_days"] = round(
                         float(ts["vacancies"].mean()) / (n_flow / yrs) * 365.25, 1)
+                    # Samma Little, men på de LEDIGA befattningarna: tiden från
+                    # utlysning till att rekryteringen är löst, vilket är den
+                    # varaktighet SCB:s vakansstatistik mäter. Skillnaden mot
+                    # vacancy_days är uppsägningstiden.
+                    if "open_vacancies" in ts.columns:
+                        row["mean_open_vacancies"] = round(
+                            float(ts["open_vacancies"].mean()), 1)
+                        row["open_vacancy_days"] = round(
+                            float(ts["open_vacancies"].mean()) / (n_flow / yrs) * 365.25, 1)
 
             if "r_req" in cps.columns and cps["r_req"].notna().any():
                 # Det avslöjande måttet: låg q i jobb med högt krav.
