@@ -308,25 +308,25 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                         row[f"entry_wage_ratio_{namn}"] = round(float(wage_ratio.median()), 4)
                 # Tid till nästa byte, per individ: från varje anställning ur
                 # arbetslöshet till individens nästa job_to_job-tillträde.
-                ordered = körning.sort_values("time")
-                gaps = []
-                for aid, grp in ordered.groupby("agent_id", sort=False):
-                    t = grp["time"].to_numpy()
-                    j = grp["job_to_job"].fillna(False).astype(bool).to_numpy()
-                    for i in range(len(t)):
-                        if j[i]:
-                            continue
-                        later_moves = np.nonzero(j[i + 1:])[0]
-                        if len(later_moves):
-                            gaps.append(t[i + 1 + later_moves[0]] - t[i])
-                if gaps:
-                    gaps = np.asarray(gaps, dtype=float)
+                # Samma sak här: slingan över alla par per individ var
+                # kvadratisk i antalet tillträden per person. Tiden till
+                # NÄSTA byte är differensen mot nästa job_to_job-rad, och
+                # den fås genom att backfylla bytenas tidpunkter inom
+                # individen.
+                ordered = körning.sort_values(["agent_id", "time"])
+                is_move = ordered["job_to_job"].fillna(False).astype(bool)
+                t_move = ordered["time"].where(is_move)
+                nasta = t_move.groupby(ordered["agent_id"], sort=False).bfill()
+                gaps = (nasta - ordered["time"])[~is_move.to_numpy()]
+                gaps = gaps[gaps.notna() & (gaps > 0)].to_numpy(dtype=float)
+                if len(gaps):
                     row["days_to_first_step_median"] = round(float(np.median(gaps)), 1)
                     row["share_first_step_within_year"] = round(
                         float(np.mean(gaps <= 365.25)), 4)
                     n_from_unemp = int((~is_jtj).sum())
                     if n_from_unemp:
-                        row["share_unemployed_hires_that_step"] = round(len(gaps) / n_from_unemp, 4)
+                        row["share_unemployed_hires_that_step"] = round(
+                            len(gaps) / n_from_unemp, 4)
             # FÖRLORANDE BYTEN OCH GAMLA ANSÖKNINGAR. Individkedjorna (0091)
             # visade byten med NEGATIV lönevinst: ansökan lämnas som
             # arbetslös, erbjudandet kommer efter att hon tagit ett annat
@@ -367,33 +367,43 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                 # revisionen står still är beta_q spaken, inte friktionen.
                 kol = {"w_neg", "w_field", "w_occ"}
                 if kol <= set(körning.columns):
-                    delar = {"d_occ": [], "d_eta": [], "d_fit": [],
-                             "d_revision": [], "gain": []}
-                    for _, grp in ordered.groupby("agent_id", sort=False):
-                        g = grp[grp["w_neg"].notna()]
-                        for a, b in zip(g.itertuples(), g.iloc[1:].itertuples()):
-                            if not bool(getattr(b, "job_to_job", False)):
-                                continue
-                            try:
-                                lo = np.log([a.w_occ, b.w_occ, a.w_field, b.w_field,
-                                             a.w_neg, b.w_neg])
-                            except (TypeError, ValueError):
-                                continue
-                            if not np.all(np.isfinite(lo)):
-                                continue
-                            l_ao, l_bo, l_af, l_bf, l_aw, l_bw = lo
-                            delar["d_occ"].append(l_bo - l_ao)
-                            delar["d_eta"].append((l_bf - l_bo) - (l_af - l_ao))
-                            delar["d_fit"].append((l_bw - l_bf) - (l_aw - l_af))
-                            w_prev = getattr(b, "w_prev", np.nan)
-                            if w_prev == w_prev and w_prev > 0:
-                                delar["d_revision"].append(float(np.log(w_prev)) - l_aw)
-                                delar["gain"].append(l_bw - float(np.log(w_prev)))
-                    if delar["d_occ"]:
-                        row["n_move_decomp"] = len(delar["d_occ"])
-                        for namn, v in delar.items():
-                            if v:
-                                row[f"move_{namn}_mean"] = round(float(np.mean(v)), 4)
+                    # VEKTORISERAT. En itertuples-slinga över par per individ
+                    # tog tio sekunder per körning, femtio för fem -- mätt,
+                    # inte gissat: 33 000 tillträden i 12 000 grupper.
+                    # groupby.shift(1) ger föregående anställning för samma
+                    # individ i ett svep, 0.05 sekunder.
+                    par = körning.sort_values(["agent_id", "time"])
+                    fore = par.groupby("agent_id", sort=False)[
+                        ["w_occ", "w_field", "w_neg"]].shift(1)
+                    m = (par["job_to_job"].fillna(False).astype(bool).to_numpy()
+                         & fore["w_neg"].notna().to_numpy()
+                         & par["w_neg"].notna().to_numpy())
+                    if m.any():
+                        with np.errstate(divide="ignore", invalid="ignore"):
+                            b = np.log(par.loc[m, ["w_occ", "w_field", "w_neg"]]
+                                       .to_numpy(dtype=float))
+                            a = np.log(fore.loc[m].to_numpy(dtype=float))
+                        ok = np.all(np.isfinite(a), axis=1) & np.all(np.isfinite(b), axis=1)
+                        a, b = a[ok], b[ok]
+                        if len(a):
+                            d_occ = b[:, 0] - a[:, 0]
+                            d_eta = (b[:, 1] - b[:, 0]) - (a[:, 1] - a[:, 0])
+                            d_fit = (b[:, 2] - b[:, 1]) - (a[:, 2] - a[:, 1])
+                            row["n_move_decomp"] = int(len(a))
+                            row["move_d_occ_mean"] = round(float(d_occ.mean()), 4)
+                            row["move_d_eta_mean"] = round(float(d_eta.mean()), 4)
+                            row["move_d_fit_mean"] = round(float(d_fit.mean()), 4)
+                            if "w_prev" in par.columns:
+                                with np.errstate(divide="ignore", invalid="ignore"):
+                                    lw_prev = np.log(pd.to_numeric(
+                                        par.loc[m, "w_prev"], errors="coerce")
+                                        .to_numpy(dtype=float)[ok])
+                                giltig = np.isfinite(lw_prev)
+                                if giltig.any():
+                                    row["move_d_revision_mean"] = round(
+                                        float((lw_prev - a[:, 2])[giltig].mean()), 4)
+                                    row["move_gain_mean"] = round(
+                                        float((b[:, 2] - lw_prev)[giltig].mean()), 4)
             # Yrkesavståndet i svansen: medianen 0.66 döljer enskilda hopp
             # över halva skivan (u_R_occ 2.7 i kedjorna).
             if "u_R_occ" in körning.columns:

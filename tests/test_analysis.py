@@ -794,3 +794,32 @@ def test_move_premium_splits_into_its_three_sources(tmp_path):
     # Identiteten: de tre delarna minus revisionen är bytespremien
     assert (row["move_d_occ_mean"] + row["move_d_eta_mean"] + row["move_d_fit_mean"]
             - row["move_d_revision_mean"]) == pytest.approx(row["move_gain_mean"], abs=1e-3)
+
+
+def test_first_step_gap_is_the_next_move_for_the_same_individual(tmp_path):
+    """Vektoriseringen i 0096 får inte ändra vad måttet ÄR: tiden från en
+    anställning ur arbetslöshet till samma individs NÄSTA byte, och ingen
+    annans. A anställs dag 100 och byter dag 300 (200 dagar); B anställs dag
+    150 och byter aldrig; C byter dag 500 utan föregående anställning i
+    urvalet. Medianen ska vara 200 med ett enda mellanrum."""
+    def sj(t, aid, jtj, w=1.0, extra=""):
+        return (f"{t:.2f}, start_job, agent_id {aid}, job_id J{aid}{int(t)}, "
+                f"from_onet 43-4051.00, to_onet 51-2011.00, occ_change 1, u_R 0.5, "
+                f"u_R_occ 0.5, w_field 1.0, w_occ 1.0, w_neg {w}, q_hire 0.8, "
+                f"job_to_job {jtj}{extra}")
+    lines = [
+        "0.00, new_month, agent_type system, month 1, employed 900, unemployed 100, "
+        "unmatched_jobs 0, not_in_labour_force 0, active_jobs 900, posted 0",
+        sj(100.0, "A", "False"),
+        sj(150.0, "B", "False"),
+        sj(300.0, "A", "True", 1.1, ", w_prev 1.0"),
+        sj(500.0, "C", "True", 1.2, ", w_prev 1.0"),
+        "3652.50, simulation_completed, agent_type system",
+    ]
+    d = tmp_path / "run_g"; d.mkdir()
+    (d / "eventlog.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    row = summary_row(str(d))
+    assert row["days_to_first_step_median"] == pytest.approx(200.0)
+    assert row["share_first_step_within_year"] == pytest.approx(1.0)
+    # två anställningar ur arbetslöshet (A, B), ett steg taget
+    assert row["share_unemployed_hires_that_step"] == pytest.approx(0.5)
