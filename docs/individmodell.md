@@ -282,8 +282,51 @@ reservationen är nuvarande överskott, och bytesfriktionen tillkommer. Byter
 hon frigörs den gamla positionen efter **uppsägningstid**, inte vid
 matchningen.
 
-`quit_job`, `internal_job_change` och `start_internal_training` ersätts av
-denna enda mekanism. Ofrivilliga separationer kvarstår som jobbförstörelse.
+*Läget efter 0088.* Sökningen från anställning finns sedan 0049; sedan 0088
+äger individen sin nästa söktidpunkt (`next_search_time`, en per person),
+med rampen `on_the_job_search_ramp_days` vid varje tillträde. Rampen är ett
+MODELLVAL, inte en kalibrering: empiriskt är separationsrisken som högst
+under det första året (Farber, Jovanovic), men WORM har ingen inlärning av
+matchkvalitet, och rampen hindrar att den nyanställde byter igen av samma
+skäl som hon nyss bytte. Puckeln ovan förutsätter inlärning och väntar.
+`on_the_job_search_factor` kalibreras mot ~10 procent ARBETSGIVARBYTEN per
+år (SCB: 10--12 i högkonjunktur, 6--8 i lågkonjunktur); den implicerade
+sökfrekvensen per anställd läses av mot AKU:s ombytessökande som
+överidentifierande test.
+
+### Interna byten: notisen
+
+En tredjedel av jobbytena i AKU är byte av yrke inom nuvarande
+arbetsgivare. Arbetsgivare gör det på två sätt -- söker internt först och
+annonserar bara om ingen tar positionen, eller annonserar externt och låter
+interna och externa söka samtidigt -- och ingetdera är konsekvent. Det
+gemensamma är att de egna anställda får veta att positionen finns. Det
+modelleras som en NOTIS, inte som en policy:
+
+- När en position postas hos arbetsgivare E får varje anställd hos E ett
+  extra sökdrag mot just den positionen vid t + `internal_notice_lead_days`.
+  Draget rör inte hennes `next_search_time`.
+- Mötessannolikheten i draget är 1 (det är vad en notis är), pendlings-
+  kostnaden noll. Reservation, överskott och bytesfriktion är hennes vanliga.
+- Ansökan går i samma kö och samma urval (högst q bland behöriga) som
+  externa. Försprånget `internal_notice_lead_days` är parametern: noll ger
+  "annonsera externt, alla söker"; längre än tiden till första externa
+  ansökan ger "sök internt först".
+
+Två utfall är TEST, inte parametrar: andelen interna byten av alla byten
+ska hamna kring en tredjedel, och de ska koncentreras till stora
+arbetsgivare -- små har sällan en position att gå till, och arbetsgivarens
+positioner ligger i olika yrken så att q sällan räcker. Båda mäts med AKU:s
+definition (byte av SSYK4 inom arbetsgivare) ur loggen. Träffas inte
+tredjedelen med försprång noll kalibreras försprånget, som då är tolkbart:
+hur länge arbetsgivare tittar internt innan de annonserar.
+
+Ordning: efter att stegen är kalibrerad (0089) och v/u_min rättade (0090).
+Läggs notisen in före det flyttar en del av de externa bytena in i
+företaget och faktorn måste sättas om.
+
+`quit_job` (borttagen 0085), `internal_job_change` och
+`start_internal_training` ersätts av denna enda mekanism plus notisen. Ofrivilliga separationer kvarstår som jobbförstörelse.
 Inflödet till arbetslöshet blir därmed förstörelse och ofrivilliga
 uppsägningar — det inflöde Littles lag ska räknas på, och det är lägre än
 vad modellen hittills antagit.

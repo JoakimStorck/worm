@@ -29,6 +29,11 @@ avståndsfördelningar, inte kalibrerade mot data.
 - [ ] **Omskolningen saknar utlösare** sedan 0085 tog bort den exogena avgången.
       Ska utlösas ur torr sökning (`propensity_start_education` växer redan där),
       efter beslut om nivå och inriktning (individmodell.md 11).
+- [ ] **Interna byten som notis** (individmodell.md 6, "Interna byten: notisen"):
+      extra sökdrag mot arbetsgivarens nypostade position, mötessannolikhet 1,
+      ingen pendlingskostnad, försprång `internal_notice_lead_days` med default 0.
+      Test: en tredjedel av bytena interna, koncentrerade till stora arbetsgivare.
+      Efter 0089 och 0090.
 - [ ] **v utan pending.** Vakansstocken räknar tillsatta ej tillträdda; SCB gör
       inte det. Rapportera V_open = V − pending som v, behåll V i identiteten.
 - [ ] **Kalibrera `on_the_job_search_factor`** mot ~10 % byten och 3–5 års
