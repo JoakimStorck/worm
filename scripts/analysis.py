@@ -239,6 +239,18 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
                  "positioner som aldrig tillsätts." if len(vu) else "")
               + " Stocken är flöde gånger varaktighet, så det är dessa poster och "
                 "ingenting annat som sätter vakansgraden.\n")
+        sd = _kol("start_delay_median")
+        sdu = _kol("start_delay_median_unemployed")
+        sde = _kol("start_delay_median_employed")
+        she = _kol("share_hires_employed")
+        if len(sd):
+            A(f"Från beslut till tillträde: median **{sd.median():.0f} dagar** — "
+              + (f"{sdu.median():.0f} för den som kommer ur arbetslöshet, " if len(sdu) else "")
+              + (f"{sde.median():.0f} för den som har uppsägningstid, och " if len(sde) else "")
+              + (f"{100*she.median():.0f} % av tillsättningarna är av det senare slaget. "
+                 if len(she) else "")
+              + "Väntan, fönstret, fördröjningen och de aldrig tillsatta ska summera till "
+                "vakansens varaktighet; gör de inte det är en av posterna fel.\n")
         va = _kol("vacancy_age_median")
         vp = _kol("vacancy_age_p90")
         if len(va):

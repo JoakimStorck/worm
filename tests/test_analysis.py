@@ -946,3 +946,34 @@ def test_the_advert_records_how_long_the_vacancy_waited():
     rader = [e for _, e in w.event_logger.events if e.get("event_detail") == "advert_opened"]
     assert len(rader) == 1
     assert rader[0]["wait_first_applicant_days"] == pytest.approx(23.0)
+
+
+def test_the_start_delay_is_measured_with_the_status_it_came_from(tmp_path):
+    """Vakansens ålder vid tillträdet är exakt 80.1 dagar i median över
+    femton körningar -- ett moduvärde, inte en median över en blandad
+    population. start_delay_days ska ge tio dagar för den arbetslösa och
+    fyrtio för den som har uppsägningstid, och två tredjedelar av
+    tillsättningarna går till arbetslösa, så medianen borde vara tio.
+    Fördröjningen loggas därför vid källan, med statusen den räknades ur."""
+    lines = [
+        "0.00, new_month, agent_type system, month 1, employed 900, unemployed 100, "
+        "unmatched_jobs 10, open_vacancies 10, not_in_labour_force 0, active_jobs 1000, posted 0",
+        "40.00, close_vacancy, event_detail match_completed, job_id J1, agent_id A, "
+        "n_applicants 2, q_hire 0.8, winner_employed False, vacancy_age_at_decision 40.0, "
+        "start_delay_days 10.0, delay_status unemployed",
+        "40.00, close_vacancy, event_detail match_completed, job_id J2, agent_id B, "
+        "n_applicants 2, q_hire 0.8, winner_employed True, vacancy_age_at_decision 40.0, "
+        "start_delay_days 40.0, delay_status employed",
+        "40.00, close_vacancy, event_detail match_completed, job_id J3, agent_id C, "
+        "n_applicants 2, q_hire 0.8, winner_employed False, vacancy_age_at_decision 40.0, "
+        "start_delay_days 10.0, delay_status unemployed",
+        "365.25, simulation_completed, agent_type system",
+    ]
+    d = tmp_path / "run_sd"; d.mkdir()
+    (d / "eventlog.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    row = summary_row(str(d))
+    assert row["start_delay_median"] == pytest.approx(10.0)
+    assert row["start_delay_mean"] == pytest.approx(20.0)
+    assert row["start_delay_median_unemployed"] == pytest.approx(10.0)
+    assert row["start_delay_median_employed"] == pytest.approx(40.0)
+    assert row["share_hires_employed"] == pytest.approx(1 / 3, abs=1e-4)

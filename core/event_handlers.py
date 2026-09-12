@@ -605,6 +605,16 @@ def handle_close_vacancy(event, world):
         'surplus': round(win['surplus'], 4), 'w_neg': round(win['w_neg'], 4),
         'q_hire': round(win['q'], 4), 'commute_km': round(win['commute_km'], 3),
         'winner_employed': bool(ind.at[idx, 'status'] == 'employed'),
+        # FÖRDRÖJNINGEN, MÄTT (0103). Vakansens ålder vid tillträdet är exakt
+        # 80.1 dagar i median över femton körningar -- ett moduvärde, inte en
+        # median över en blandad population, och 80 = fönstret 40 plus
+        # fyrtio. Men start_delay_days ska ge tio dagar för den arbetslösa
+        # och fyrtio bara för den som har något att säga upp, och 63 procent
+        # av tillsättningarna går till arbetslösa. Antingen är det måttet
+        # eller mekanismen som är fel; fördröjningen och statusen den
+        # beräknades ur loggas därför vid källan.
+        'start_delay_days': round(float(lag), 1),
+        'delay_status': str(ind.at[idx, 'status']),
     }
     _extra.update(_pool)
     world.event_logger.log_event(world, event, extra=_extra)

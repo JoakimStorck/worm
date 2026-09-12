@@ -203,6 +203,27 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
 
     row = {"run": os.path.basename(run_dir.rstrip("/"))}
 
+    # FÖRDRÖJNINGEN FRÅN BESLUT TILL TILLTRÄDE, efter status (0103). Vakansens
+    # ålder vid tillträdet är exakt 80.1 dagar i median över femton körningar
+    # -- ett moduvärde, inte en median över en blandad population, och 80 är
+    # fönstret 40 plus fyrtio. Men start_delay_days ger tio dagar för den
+    # arbetslösa och fyrtio bara för den som har något att säga upp, och två
+    # tredjedelar av tillsättningarna går till arbetslösa. Måttet ligger på
+    # toppnivå och inte i Stegen-blocket, som hoppas över helt när
+    # CPS-urvalet är tomt: det är en vakansfråga, inte en mobilitetsfråga.
+    lags = [(_f(r, "start_delay_days"), r.get("delay_status"))
+            for r in events if r.get("event_detail") == "match_completed"]
+    lags = [(v, st) for v, st in lags if v == v]
+    if lags:
+        varden = np.array([v for v, _ in lags], dtype=float)
+        row["start_delay_median"] = round(float(np.median(varden)), 1)
+        row["start_delay_mean"] = round(float(varden.mean()), 1)
+        for st in ("employed", "unemployed"):
+            d_st = np.array([v for v, s_ in lags if s_ == st], dtype=float)
+            if len(d_st):
+                row[f"start_delay_median_{st}"] = round(float(np.median(d_st)), 1)
+                row[f"share_hires_{st}"] = round(len(d_st) / len(lags), 4)
+
     # Härkomst: utan den blandar en samlad tabell körningar från olika
     # kodversioner, och en jämförelse mäter kodhistorik.
     mp = os.path.join(run_dir, "run_meta.json")
