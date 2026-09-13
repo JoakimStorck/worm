@@ -214,6 +214,20 @@ class Circles:
         O = (np.exp(-(dx ** 2 + dy ** 2) / (2.0 * s2))
              * (2.0 * np.sqrt(r2[:, None] * r2[None, :]) / s2))
 
+        if K == 2:
+            # SNABBVÄG FÖR TVÅ CIRKLAR, exakt samma ordning som argsort ger
+            # (vid lika värden behåller båda den första cirkeln först). Det är
+            # det vanligaste fallet -- alla bär EDU-cirkeln plus sitt yrke --
+            # och argsort längs axel 0 över en 2 x J-matris kostade 0.075 ms
+            # mot 0.013 för en jämförelse: 5.8 gånger, på den enskilt dyraste
+            # raden i profilen (14.9 s av 160).
+            forst = contrib[0] >= contrib[1]
+            c_s = np.where(forst, contrib[0], contrib[1]), \
+                np.where(forst, contrib[1], contrib[0])
+            O01 = O[0, 1]
+            novel = 1.0 - O01 * np.minimum(c_s[0], 1.0)
+            return c_s[0] + c_s[1] * novel
+
         ordning = np.argsort(-contrib, axis=0)              # K x J
         c_s = np.take_along_axis(contrib, ordning, axis=0)
         novel = np.ones(J)

@@ -706,7 +706,7 @@ def test_log_writes_one_form_of_agent_id(tmp_path):
     # start_job_search: agenten står på händelsen
     lg.log_event(Stub(), {"time": 2.0, "agent_id": 3443, "event_type": "start_job_search"},
                  extra={"event_detail": "application_filed", "job_id": "J1"})
-    lg.file.close()
+    lg.close()          # tömmer bufferten (0108)
     rader = [parse_line(l) for l in path.read_text(encoding="utf-8").splitlines()]
     assert [r["agent_id"] for r in rader] == ["2062_i003443", "2062_i003443"]
     assert rader[0]["agent_type"] == "individual"
@@ -1074,3 +1074,29 @@ def test_vacancy_census_gives_the_stock_by_age_and_requirement(tmp_path):
     assert row["vacancy_r_req_0-40"] == pytest.approx(0.30)
     assert row["vacancy_r_req_180-inf"] == pytest.approx(0.90)
     assert row["vacancy_applications_per_job_90-180"] == pytest.approx(2.0)
+
+
+def test_the_logger_cache_follows_a_growing_table(tmp_path):
+    """Kolumnarrayerna i loggen (0108) cachas per tabell och måste byggas om
+    när tabellen ändras -- annars loggas en individ som inte finns, eller fel
+    individ. Provet växer tabellen mellan två händelser."""
+    import pandas as pd
+    from core.log import EventLogger
+
+    class Stub:
+        employers = pd.DataFrame()
+
+        def __init__(self, n):
+            self.individuals = pd.DataFrame({
+                "individual_id": [f"2062_i{i:06d}" for i in range(n)],
+                "chi": 0.3, "xi": 0.2, "r_i": 0.1})
+
+    path = tmp_path / "e.csv"
+    lg = EventLogger(str(path))
+    lg.log_event(Stub(3), {"time": 1.0, "agent_id": 2, "event_type": "start_job_search"},
+                 extra={"event_detail": "application_filed"})
+    lg.log_event(Stub(9), {"time": 2.0, "agent_id": 7, "event_type": "start_job_search"},
+                 extra={"event_detail": "application_filed"})
+    lg.close()
+    rader = [parse_line(l) for l in path.read_text(encoding="utf-8").splitlines()]
+    assert [r["agent_id"] for r in rader] == ["2062_i000002", "2062_i000007"]

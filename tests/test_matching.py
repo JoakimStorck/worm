@@ -840,3 +840,98 @@ def test_revision_can_be_switched_off():
     w2 = _RevWorld(q_last=[1.0], q_now=[np.exp(0.5)], enabled=False)
     assert _apply_wage_revision(w2, 366.0) == {}
     assert w2.individuals.at[0, "w_neg"] == pytest.approx(1.0)
+
+
+def test_search_once_is_unchanged_by_the_reordering():
+    """0108 flyttar mötesdraget FÖRE lön och pendling, så att produktivitet,
+    avstånd och förhandlad lön bara räknas för de kandidater hon möter. Draget
+    konsumerar lika många slumptal i samma ordning, så utfallet ska vara
+    IDENTISKT. Provet jämför mot en referens skriven som den gamla ordningen,
+    över hundra sökningar med slumpade marknader."""
+    import numpy as np
+    from core.occupations.utils import search_once, negotiated_wage
+    from core.occupations.requirement import productivity
+
+    def referens(ind, A, cand_idx, queue, rng, bargaining, c_km, min_s, scale, k_req):
+        ix, iy = float(ind["x_occ"]), float(ind["y_occ"])
+        ri = float(ind.get("r_i", 0.0) or 0.0)
+        gx, gy = float(ind["x"]), float(ind["y"])
+        w_res = float(ind.get("w_res", 0.0) or 0.0)
+        jx, jy = A["x_occ"][cand_idx], A["y_occ"][cand_idx]
+        d2 = (jx - ix) ** 2 + (jy - iy) ** 2
+        sigma2 = np.maximum(A["r_o"][cand_idx] ** 2 + ri ** 2, 1e-9)
+        q = np.exp(-0.5 * d2 / sigma2)
+        p = productivity(q, A["r_req"][cand_idx], k=k_req)
+        km = np.hypot(A["x"][cand_idx] - gx, A["y"][cand_idx] - gy) / 1000.0
+        w_off = negotiated_wage(p, A["wage"][cand_idx], w_res, **bargaining)
+        S = np.where(np.isnan(w_off), -np.inf, w_off - c_km * km - w_res)
+        S = S / (1.0 + np.asarray(queue, float)[cand_idx])
+        live = (S > min_s) & (rng.random(S.size) < np.minimum(1.0, q))
+        if not live.any():
+            return (None,) * 5
+        k = np.flatnonzero(live)
+        z = (S[k] - S[k].max()) / scale
+        w = np.exp(z)
+        pick = k[int(rng.choice(w.size, p=w / w.sum()))]
+        return (int(cand_idx[pick]), float(S[pick]), float(w_off[pick]),
+                float(q[pick]), float(km[pick]))
+
+    rng0 = np.random.default_rng(4711)
+    barg = {"theta": 0.5, "wage_floor_share": 0.70, "labour_share": 0.65}
+    for _ in range(100):
+        J = int(rng0.integers(20, 400))
+        A = {"x_occ": rng0.normal(0, 0.35, J), "y_occ": rng0.normal(0, 0.35, J),
+             "r_o": rng0.uniform(0.05, 0.3, J), "r_req": rng0.uniform(0, 1, J),
+             "x": rng0.uniform(0, 40000, J), "y": rng0.uniform(0, 40000, J),
+             "wage": rng0.lognormal(0, 0.3, J)}
+        ind = {"x_occ": float(rng0.normal(0, 0.3)), "y_occ": float(rng0.normal(0, 0.3)),
+               "r_i": 0.1, "x": float(rng0.uniform(0, 40000)),
+               "y": float(rng0.uniform(0, 40000)), "w_res": float(rng0.uniform(0.4, 1.2))}
+        cand = np.arange(J)
+        queue = rng0.integers(0, 4, J)
+        fro = int(rng0.integers(0, 10**6))
+        ny = search_once(ind, None, cand, queue=queue, rng=np.random.default_rng(fro),
+                         commute_cost_per_km=0.005, min_surplus=0.0, choice_scale=0.05,
+                         arrays=A, bargaining=barg, requirement_k=2.0)
+        gammal = referens(ind, A, cand, queue, np.random.default_rng(fro), barg,
+                          0.005, 0.0, 0.05, 2.0)
+        assert ny == gammal or (ny[0] is None and gammal[0] is None), (ny, gammal)
+
+
+def test_union_of_two_circles_matches_the_general_path():
+    """Snabbvägen för två cirklar (0108) ska ge exakt samma q som den
+    allmänna vägen med argsort."""
+    import numpy as np
+    from core.occupations.competence import Circles, CompetenceParams
+
+    p = CompetenceParams()
+    rng = np.random.default_rng(7)
+    for _ in range(50):
+        c = Circles(1, 12)
+        for k in range(2):
+            c.add(0, f"K{k}", float(rng.normal(0, 0.3)), float(rng.normal(0, 0.3)),
+                  float(rng.uniform(0.02, 0.2)), float(rng.uniform(0.5, 20.0)))
+        J = 300
+        jx, jy = rng.normal(0, 0.3, J), rng.normal(0, 0.3, J)
+        jro = rng.uniform(0.05, 0.3, J)
+        snabb = c.competitiveness(0, jx, jy, jro, p)
+
+        occ = c.key[0] != "__EMPTY__"
+        cx, cy = c.x[0, occ], c.y[0, occ]
+        r2, m = c.rho2[0, occ], c.mass[0, occ]
+        ro2 = jro ** 2
+        width = r2[:, None] + ro2[None, :]
+        d2 = (cx[:, None] - jx[None, :]) ** 2 + (cy[:, None] - jy[None, :]) ** 2
+        contrib = ((1.0 - np.exp(-m[:, None] / p.m_ref)) * (2.0 * ro2[None, :] / width)
+                   * np.exp(-0.5 * d2 / (p.gamma ** 2 * width)))
+        dx, dy = cx[:, None] - cx[None, :], cy[:, None] - cy[None, :]
+        s2 = r2[:, None] + r2[None, :]
+        O = np.exp(-(dx ** 2 + dy ** 2) / (2.0 * s2)) * (2.0 * np.sqrt(r2[:, None] * r2[None, :]) / s2)
+        ordning = np.argsort(-contrib, axis=0)
+        c_s = np.take_along_axis(contrib, ordning, axis=0)
+        novel, q = np.ones(J), np.zeros(J)
+        for k in range(2):
+            if k > 0:
+                novel = novel * (1.0 - O[ordning[k - 1], ordning[k]] * np.minimum(c_s[k - 1], 1.0))
+            q += c_s[k] * novel
+        assert np.allclose(snabb, q, rtol=0, atol=0)

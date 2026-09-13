@@ -56,12 +56,78 @@ def save_run_output(matching_stats, commuting_stats, scenario_name, outdir="outp
     with open(f"{base}_log.txt", "w", encoding="utf-8") as f:
         f.write('\n'.join(_log_lines))
 
+class _AgentFields:
+    """De fyra fält loggen faktiskt läser, ur CACHADE kolumnarrayer.
+
+    MÄTT, INTE GISSAT, och första försöket var fel. .loc[idx] bygger en Series
+    över alla kolumner (pandas fast_xs): 45 us. Att i stället läsa de fyra
+    fälten med .at[] kostade 45 us -- ingen vinst alls, varje .at är ett eget
+    uppslag. Kolumnerna som numpy-arrayer, med en get_loc för positionen,
+    kostar 1.1 us. Arrayerna cachas per tabell och byggs om när tabellen byter
+    längd, vilket är samma villkor som jobbtabellens arrayer använder sedan
+    0060.
+
+    Bär samma get()-gränssnitt som den Series den ersätter, så
+    build_standard_logdict är oförändrad.
+    """
+
+    FALT = ("individual_id", "employer_id", "chi", "xi", "r_i")
+    __slots__ = ("_kol", "_pos", "id_value")
+
+    def __init__(self, cache, df, idx, id_column):
+        self._kol = cache.kolumner(df)
+        self._pos = None
+        if self._kol is not None:
+            try:
+                self._pos = df.index.get_loc(idx)
+            except KeyError:
+                self._pos = None
+        self.id_value = self.get(id_column, idx) if self._pos is not None else idx
+
+    def get(self, key, default=None):
+        if self._pos is None or self._kol is None:
+            return default
+        arr = self._kol.get(key)
+        if arr is None:
+            return default
+        v = arr[self._pos]
+        return default if v is None else v
+
+
+class _KolumnCache:
+    """Kolumnarrayer per tabell, ombyggda när tabellen byter längd."""
+
+    def __init__(self):
+        self._per_tabell = {}
+
+    def kolumner(self, df):
+        if df is None or not len(df):
+            return None
+        nyckel = id(df)
+        post = self._per_tabell.get(nyckel)
+        if post is None or post[0] != len(df) or post[1] is not df.columns.size:
+            self._per_tabell[nyckel] = (
+                len(df), df.columns.size,
+                {k: df[k].to_numpy() for k in _AgentFields.FALT if k in df.columns})
+            post = self._per_tabell[nyckel]
+        return post[2]
+
+
 class EventLogger:
+    # Buffertens storlek i rader. flush() per rad kostade 0.8 sekunder rent
+    # systemanrop i profilen, och tvingade dessutom fram en skrivning per
+    # händelse. Buffras och töms vid close() och vid print_line (månads- och
+    # årsraderna), så att en avbruten körning ändå har allt fram till senaste
+    # månadsskiftet.
+    BUFFERT = 2000
+
     def __init__(self, filepath=None):
         self.filepath = filepath
         self.file = open(filepath, 'w') if filepath else None
         self.csv_writer = None
         self.columns = None
+        self._buffert = []
+        self._kolcache = _KolumnCache()
 
     def log_event(self, world, event, agent_type=None, extra=None, print_line=False):
         """
@@ -100,14 +166,22 @@ class EventLogger:
             else:
                 agent_type = "unknown"
 
+        # FYRA FÄLT, INTE EN SERIE. .loc[idx] på en DataFrame bygger en Series
+        # över alla kolumner -- pandas fast_xs, 348 000 anrop och 21 sekunder
+        # av 160 i profilen -- för att sedan läsa fyra av dem. Samma fyra
+        # hämtas nu direkt ur kolumnerna. Identiskt utfall: agent.get(k)
+        # returnerar None för en kolumn som inte finns, och det gör _hamta
+        # också.
+        agent = None
         if agent_type == "individual":
-            agent = world.individuals.loc[event["agent_id"]] if event["agent_id"] in world.individuals.index else None
-            agent_id = agent.get("individual_id", event["agent_id"]) if agent is not None else event["agent_id"]
+            agent = _AgentFields(self._kolcache, world.individuals,
+                                 event["agent_id"], "individual_id")
+            agent_id = agent.id_value
         elif agent_type == "employer":
-            agent = world.employers.loc[event["agent_id"]] if event["agent_id"] in world.employers.index else None
-            agent_id = agent.get("employer_id", event["agent_id"]) if agent is not None else event["agent_id"]
+            agent = _AgentFields(self._kolcache, world.employers,
+                                 event["agent_id"], "employer_id")
+            agent_id = agent.id_value
         else:
-            agent = None
             agent_id = event["agent_id"]
 
         logdict = build_standard_logdict(
@@ -133,13 +207,21 @@ class EventLogger:
             parts.append(f"{k} {logdict[k]}")
         line = ", ".join(str(x) for x in parts)
         if self.file:
-            self.file.write(line + "\n")
-            self.file.flush()
+            self._buffert.append(line)
+            if print_line or len(self._buffert) >= self.BUFFERT:
+                self._tom()
             if print_line:
                 print(line)
         else:
             print(line)
 
+    def _tom(self):
+        if self.file and self._buffert:
+            self.file.write("\n".join(self._buffert) + "\n")
+            self._buffert.clear()
+            self.file.flush()
+
     def close(self):
+        self._tom()
         if self.file:
             self.file.close()

@@ -261,11 +261,26 @@ def search_once(ind, jobs_df, cand_idx, queue=None, sigma_gamma=1.0,
     # p = q ** (k * r_req) styr vad hon är värd: lön och arbetsgivarens
     # deltagande. Att låta p styra mötet tog bort lokaliteten för halva
     # marknaden och gav median u_R 1.20.
-    from core.occupations.requirement import productivity
-    p = productivity(q, A["r_req"][cand_idx], k=requirement_k)
+    # MÖTESDRAGET FÖRST. live kräver både ett möte och ett positivt överskott,
+    # och de två är oberoende: draget beror bara på q. Dras det först behöver
+    # produktivitet, pendlingsavstånd och förhandlad lön bara räknas för dem
+    # hon faktiskt möter -- en bråkdel av kandidaterna, eftersom q faller
+    # gaussiskt med avståndet. Slumpen konsumeras i samma ordning och med
+    # samma antal tal som förut (ett per kandidat), så utfallet är IDENTISKT.
+    #
+    # Mötesdraget är en sannolikhet och kapar q själv. Värderollen (p, lön,
+    # urval) använder det okapade q: taket där gjorde Pi till ett supremum.
+    mote = rng.random(q.size) < np.minimum(1.0, q)
+    if not mote.any():
+        return None, None, None, None, None
+    sub = np.flatnonzero(mote)
+    c_sub = cand_idx[sub]
 
-    km = np.hypot(A["x"][cand_idx] - gx, A["y"][cand_idx] - gy) / 1000.0
-    w_field = A["wage"][cand_idx]
+    from core.occupations.requirement import productivity
+    p = productivity(q[sub], A["r_req"][c_sub], k=requirement_k)
+
+    km = np.hypot(A["x"][c_sub] - gx, A["y"][c_sub] - gy) / 1000.0
+    w_field = A["wage"][c_sub]
     if bargaining is not None:
         w_off = negotiated_wage(p, w_field, w_res, **bargaining)
     else:
@@ -281,11 +296,9 @@ def search_once(ind, jobs_df, cand_idx, queue=None, sigma_gamma=1.0,
     # 9 099 av 15 554 positioner sågs aldrig av någon under fem år. Det är
     # riktad sökning i Moens mening, och den kostar ingen ny parameter.
     if queue is not None:
-        S = S / (1.0 + np.asarray(queue, float)[cand_idx])
+        S = S / (1.0 + np.asarray(queue, float)[c_sub])
 
-    # Mötesdraget är en sannolikhet och kapar q själv. Värderollen (p, lön,
-    # urval) använder det okapade q: taket där gjorde Pi till ett supremum.
-    live = (S > min_surplus) & (rng.random(S.size) < np.minimum(1.0, q))
+    live = S > min_surplus
     if not live.any():
         return None, None, None, None, None
 
@@ -297,8 +310,8 @@ def search_once(ind, jobs_df, cand_idx, queue=None, sigma_gamma=1.0,
         pick = k[int(rng.choice(w.size, p=w / w.sum()))]
     else:
         pick = k[int(np.argmax(Sk))]
-    return (int(cand_idx[pick]), float(S[pick]), float(w_off[pick]),
-            float(q[pick]), float(km[pick]))
+    return (int(c_sub[pick]), float(S[pick]), float(w_off[pick]),
+            float(q[sub[pick]]), float(km[pick]))
 
 
 def retraining_target(ind, jobs_df, cand_idx, arrays=None,
