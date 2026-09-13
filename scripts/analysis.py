@@ -239,6 +239,24 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
                  "positioner som aldrig tillsätts." if len(vu) else "")
               + " Stocken är flöde gånger varaktighet, så det är dessa poster och "
                 "ingenting annat som sätter vakansgraden.\n")
+        hinkar = ["0-40", "40-90", "90-180", "180-inf"]
+        andel = {h: _kol(f"vacancy_stock_share_{h}") for h in hinkar}
+        krav = {h: _kol(f"vacancy_r_req_{h}") for h in hinkar}
+        if all(len(andel[h]) for h in hinkar):
+            A("Vakansstockens ålder, ur den månatliga folkräkningen (som till skillnad "
+              "från väntetiden ovan också ser de positioner som ALDRIG får en sökande): "
+              + ", ".join(f"**{100*andel[h].median():.0f} %** {h} dagar" for h in hinkar)
+              + (". Medelkravnivå r_req: "
+                 + ", ".join(f"{krav[h].median():.2f} ({h})" for h in hinkar if len(krav[h]))
+                 if any(len(krav[h]) for h in hinkar) else "")
+              + ". Stiger kravet med åldern är svansen tunnhet i uppgiftsrummet; är den "
+                "jämn över kravnivåer ligger den i hur startbeståndets yrken möter jobbens.\n")
+        wq = [_kol(f"wait_first_applicant_mean_q{i}") for i in (1, 2, 3, 4)]
+        if all(len(x) for x in wq):
+            A("Väntan på första sökanden per kravkvartil: "
+              + ", ".join(f"{x.median():.0f} d" for x in wq)
+              + " (lägsta till högsta r_req). Måttet är censurerat: en vakans utan sökande "
+                "loggar ingen väntetid alls.\n")
         cm = _kol("share_hires_cross_municipality")
         if len(cm) and cm.max() > 0:
             ci = _kol("commute_km_median_cross"); cw = _kol("commute_km_median_within")

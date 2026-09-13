@@ -1049,3 +1049,28 @@ def test_same_agent_does_not_confuse_municipalities():
     assert _same_agent("3443", "2062_i003443")
     assert _same_agent("2062_i003443", "2062_i003443")
     assert not _same_agent("2062_i003443", "2034_i003443")
+
+
+def test_vacancy_census_gives_the_stock_by_age_and_requirement(tmp_path):
+    """Andelen av stocken per åldersintervall och kravnivån i de äldsta mot de
+    yngsta är det som avgör om svansen är tunnhet eller artefakt. Vägt över
+    månaderna, inte medelvärde av medelvärden."""
+    def c(t, hink, n, r):
+        return (f"{t:.2f}, vacancy_census, event_detail vacancy_census, age_bucket {hink}, "
+                f"n {n}, age_mean 50.0, r_req_mean {r}, employer_size_median 10.0, "
+                f"n_applications {n * 2}")
+    lines = [
+        "0.00, new_month, agent_type system, month 1, employed 900, unemployed 100, "
+        "unmatched_jobs 10, open_vacancies 10, not_in_labour_force 0, active_jobs 1000, posted 0",
+        c(30.0, "0-40", 60, 0.30), c(30.0, "40-90", 20, 0.50),
+        c(30.0, "90-180", 10, 0.70), c(30.0, "180-inf", 10, 0.90),
+        "365.25, simulation_completed, agent_type system",
+    ]
+    d = tmp_path / "run_c"; d.mkdir()
+    (d / "eventlog.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    row = summary_row(str(d))
+    assert row["vacancy_stock_share_0-40"] == pytest.approx(0.6)
+    assert row["vacancy_stock_share_180-inf"] == pytest.approx(0.1)
+    assert row["vacancy_r_req_0-40"] == pytest.approx(0.30)
+    assert row["vacancy_r_req_180-inf"] == pytest.approx(0.90)
+    assert row["vacancy_applications_per_job_90-180"] == pytest.approx(2.0)

@@ -356,6 +356,29 @@ Kedjorna visade också yrkeshopp långt utanför medianen -- u_R_occ 2.7, 2.0,
 `share_u_R_occ_above_1` rapporteras nu, eftersom en median inte säger något
 om svansen och det är svansen som avgör om geometrin binder rörligheten.
 
+### 4.5e Vakanssvansen är inte geografisk (Siljan 3, 0107)
+
+Tre kommuner — Mora, Orsa, Rättvik, 18 000 anställda mot Moras 10 000 —
+gav pendling i rätt storleksordning: 35 procent av tillsättningarna över
+kommungräns, medianpendling 25 km över gränsen mot 8 km inom. Men svansen
+av svårtillsatta positioner krympte knappt: väntan på första sökanden 33,4
+dagar i medel mot Moras 36,8, vakansvaraktighet 113 mot 117, andelen
+vakansdagar i positioner som aldrig tillsätts 13,8 procent i båda.
+Täckningen C(0,25) var 0,684 mot 0,676 — tre kommuner täcker inte mer av
+skivan än en.
+
+Svansen är alltså i allt väsentligt oberoende av marknadens storlek, och
+därmed inte geografisk tunnhet. Kvar står två hypoteser, och 0107 mäter
+dem: höga krav i glesa delar av skivan (tunnhet i uppgiftsrummet, ett
+resultat) eller en systematisk obalans mellan startbeståndets yrken och
+jobbens (en artefakt, se fråga 7 om utbud och efterfrågan ur olika
+fördelningar).
+
+Notera också att u_R_occ föll till 0,660 från 0,675: fler sökande per
+vakans ger hårdare urval, 1,03/√n. u_R-kalibreringen är alltså beroende av
+marknadens storlek, vilket är en svaghet i kalibreringen och inte i
+modellen.
+
 ### 4.6 Nivåfrågorna (uppdaterat efter 0098–0100)
 
 u = u_min + V/L exakt, och efter 0098 är u 12,9 procent: u_min 8,8 och

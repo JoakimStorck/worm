@@ -872,6 +872,7 @@ def handle_new_month(event, world):
     }
     m_extra.update(_wage_flow_quantiles(world))
     world.event_logger.log_event(world, event, extra=m_extra, print_line=True)
+    world.census_open_vacancies(float(event['time']))    # folkräkning av de lediga (0107)
     # Reset match-counter
     world.n_matched_in_month = 0
 

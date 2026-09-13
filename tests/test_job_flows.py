@@ -1777,3 +1777,29 @@ def test_start_job_logs_both_municipalities():
     sj = [e for t, e in w.event_logger.events if t == "start_job"][0]
     assert sj["job_municipality"] == "2034"
     assert sj["home_municipality"] == "2062"
+
+
+def test_the_monthly_census_sees_the_vacancies_that_never_get_an_applicant():
+    """Väntetiden i advert_opened är CENSURERAD: den loggas när första
+    ansökan kommer, och svansen består av positioner som aldrig får någon.
+    Folkräkningen ser stocken som den är. Här: fyra lediga positioner med
+    åldrarna 10, 60, 120 och 400 dagar, en i varje intervall, plus en
+    tillsatt och en utlovad som inte ska räknas."""
+    w = make_world(n_employers=3, size=2)
+    w.prepare()
+    w.jobs["individual_id"] = pd.Series([None] * len(w.jobs), dtype=object)
+    w.jobs["active"] = True
+    w.jobs["pending"] = False
+    w.jobs["r_req"] = [0.2, 0.4, 0.6, 0.9, 0.5, 0.5]
+    w.jobs["vacant_since"] = [390.0, 340.0, 280.0, 0.0, 300.0, 300.0]
+    w.jobs.loc[4, "individual_id"] = "2062_i000000"     # tillsatt
+    w.jobs.loc[5, "pending"] = True                      # utlovad
+    w.event_logger.events = []
+    w.census_open_vacancies(400.0)
+    rader = {e["age_bucket"]: e for _, e in w.event_logger.events
+             if e.get("event_detail") == "vacancy_census"}
+    assert set(rader) == {"0-40", "40-90", "90-180", "180-inf"}
+    assert all(e["n"] == 1 for e in rader.values())
+    assert rader["0-40"]["r_req_mean"] == pytest.approx(0.2)
+    assert rader["180-inf"]["r_req_mean"] == pytest.approx(0.9)
+    assert rader["180-inf"]["age_mean"] == pytest.approx(400.0)

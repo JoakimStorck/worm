@@ -203,6 +203,47 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
 
     row = {"run": os.path.basename(run_dir.rstrip("/"))}
 
+    # VAKANSSTOCKENS ÅLDER OCH EGENSKAPER (0107). Folkräkningen är
+    # ocensurerad -- den ser också de positioner som aldrig får en sökande,
+    # och det är de som utgör svansen. Andelen av stocken i varje
+    # åldersintervall och kravnivån i de äldsta mot de yngsta avgör om svansen
+    # är tunnhet i uppgiftsrummet (höga krav, små arbetsgivare) eller en
+    # artefakt i hur startbeståndets yrken möter jobbens.
+    cens = [r for r in events if r.get("event_detail") == "vacancy_census"]
+    if cens:
+        tot = sum(_f(r, "n", 0.0) for r in cens)
+        for hink in ("0-40", "40-90", "90-180", "180-inf"):
+            rader = [r for r in cens if r.get("age_bucket") == hink]
+            if not rader or tot <= 0:
+                continue
+            n_h = sum(_f(r, "n", 0.0) for r in rader)
+            row[f"vacancy_stock_share_{hink}"] = round(float(n_h / tot), 4)
+            rr = [(_f(r, "r_req_mean"), _f(r, "n", 0.0)) for r in rader]
+            rr = [(v, n) for v, n in rr if v == v and n > 0]
+            if rr:
+                row[f"vacancy_r_req_{hink}"] = round(
+                    float(sum(v * n for v, n in rr) / sum(n for _, n in rr)), 4)
+            es = [_f(r, "employer_size_median") for r in rader]
+            es = [v for v in es if v == v]
+            if es:
+                row[f"vacancy_employer_size_{hink}"] = round(float(np.median(es)), 1)
+            ap = sum(_f(r, "n_applications", 0.0) for r in rader)
+            if n_h > 0:
+                row[f"vacancy_applications_per_job_{hink}"] = round(float(ap / n_h), 2)
+
+    # VÄNTETID PER KRAVNIVÅ (0107). Censurerad -- se ovan -- men den säger om
+    # de som ändå får en sökande väntar längre när kravet är högt.
+    ann = [(_f(r, "wait_first_applicant_days"), _f(r, "r_req")) for r in events
+           if r.get("event_detail") == "advert_opened"]
+    ann = [(w, rq) for w, rq in ann if w == w and rq == rq]
+    if len(ann) > 100:
+        rq = np.array([x[1] for x in ann]); w = np.array([x[0] for x in ann])
+        kvartil = np.quantile(rq, [0.25, 0.5, 0.75])
+        for i, (lo, hi) in enumerate(zip([-np.inf, *kvartil], [*kvartil, np.inf])):
+            m = (rq >= lo) & (rq < hi)
+            if m.any():
+                row[f"wait_first_applicant_mean_q{i+1}"] = round(float(w[m].mean()), 1)
+
     # PENDLING ÖVER KOMMUNGRÄNS (0105): andel av körningens tillsättningar
     # där jobbets kommun är en annan än individens. I ett enkommunsscenario
     # är den noll per konstruktion; med Mora, Orsa och Rättvik är det talet

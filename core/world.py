@@ -472,6 +472,56 @@ class World:
         if "onet_code" in self.individuals.columns and not hasattr(self, "circles"):
             self.init_competence()
 
+    def census_open_vacancies(self, t_now):
+        """Folkräkning av de LEDIGA positionerna, per åldersintervall.
+
+        Väntetiden i advert_opened är CENSURERAD: den loggas när den första
+        ansökan kommer, och en vakans som aldrig får någon loggar ingenting.
+        Svansen består av just dem, så medelvärdet 33-37 dagar är räknat på de
+        överlevande och underskattar. Folkräkningen har inte det problemet --
+        den ser stocken som den är, varje månad -- och bär de egenskaper som
+        skiljer en position som väntar ett år från en som fylls på fyrtio
+        dagar: kravnivå, arbetsgivarstorlek, kommun, antal ansökningar hittills.
+
+        Fyra rader per månad, 480 på en tioårskörning.
+        """
+        jobs = self.jobs
+        if 'active' not in jobs.columns or 'vacant_since' not in jobs.columns:
+            return
+        ledig = (jobs['individual_id'].isna() & jobs['active'].fillna(False).astype(bool)
+                 & ~jobs.get('pending', False).fillna(False).astype(bool))
+        if not ledig.any():
+            return
+        d = jobs.loc[ledig]
+        alder = float(t_now) - pd.to_numeric(d['vacant_since'], errors='coerce')
+        kanter = [(0.0, 40.0), (40.0, 90.0), (90.0, 180.0), (180.0, np.inf)]
+        for lo, hi in kanter:
+            m = (alder >= lo) & (alder < hi)
+            if not m.any():
+                continue
+            grupp = d.loc[m.values]
+            extra = {"event_detail": "vacancy_census",
+                     "age_bucket": f"{int(lo)}-{'inf' if hi == np.inf else int(hi)}",
+                     "n": int(len(grupp)),
+                     "age_mean": round(float(alder[m].mean()), 1)}
+            if 'r_req' in grupp.columns:
+                extra["r_req_mean"] = round(float(pd.to_numeric(
+                    grupp['r_req'], errors='coerce').mean()), 4)
+            if 'employer_size' in grupp.columns:
+                extra["employer_size_median"] = round(float(pd.to_numeric(
+                    grupp['employer_size'], errors='coerce').median()), 1)
+            if 'municipal_code' in grupp.columns:
+                topp = grupp['municipal_code'].astype(str).value_counts()
+                extra["municipality_top"] = str(topp.index[0])
+                extra["municipality_top_share"] = round(float(topp.iloc[0] / len(grupp)), 3)
+            # applications skapas lat vid första ansökan; inga ansökningar alls
+            # är ett giltigt tillstånd och inte ett fel.
+            ans = getattr(self, 'applications', {})
+            extra["n_applications"] = int(sum(len(ans.get(j, [])) for j in grupp['job_id']))
+            self.event_logger.log_event(
+                self, {"time": float(t_now), "agent_id": None,
+                       "event_type": "vacancy_census"}, extra=extra)
+
     def search_interval(self, idx, t_now, first=False):
         """Nästa söktidpunkt för individen, ur status.
 
@@ -740,11 +790,22 @@ class World:
             pos = self.job_index().get(job_id)
             if pos is not None and 'vacant_since' in self.jobs.columns:
                 vs = float(self.jobs.iat[pos, self.jobs.columns.get_loc('vacant_since')])
+                rad = self.jobs.iloc[pos]
+                extra = {"event_detail": "advert_opened", "job_id": job_id,
+                         "wait_first_applicant_days": round(float(t_now) - vs, 1)}
+                # Vakansens EGENSKAPER på samma rad (0107): utan dem går
+                # väntetiden inte att ställa mot kravnivån, och frågan om
+                # svansen är tunnhet eller artefakt kan inte avgöras.
+                for kol, namn in (('r_req', 'r_req'), ('onet_code', 'onet'),
+                                  ('municipal_code', 'municipality'),
+                                  ('employer_size', 'employer_size')):
+                    if kol in self.jobs.columns:
+                        v = rad.get(kol)
+                        if v is not None and not (isinstance(v, float) and np.isnan(v)):
+                            extra[namn] = round(float(v), 4) if namn in ('r_req',) else str(v)
                 self.event_logger.log_event(
                     self, {"time": float(t_now), "agent_id": None,
-                           "event_type": "open_advert"},
-                    extra={"event_detail": "advert_opened", "job_id": job_id,
-                           "wait_first_applicant_days": round(float(t_now) - vs, 1)})
+                           "event_type": "open_advert"}, extra=extra)
         return True
 
     def applicant_counts(self):
