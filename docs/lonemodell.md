@@ -244,14 +244,18 @@ erbjudandefördelningen, vilket är vad 0,93 över Π betyder. Spridningen
 kollapsar först, 0,30 → 0,22, därför att alla samlas vid samma tak, och
 återhämtar sig sedan långsamt genom revisionen.
 
-### 4.2 Restpoolen tränger undan -- INTE BELAGT (0086)
+### 4.2 Restpoolen tränger undan -- INTE BELAGT (0086), med rättelse 0104
 
 Diagnosen löd: arbetsgivaren väljer högst q, anställda har mogna cirklar och
 vinner, arbetslösa ackumuleras. Den vilade på måttet "100 procent av
 tillsättningarna till anställda", som var en konstant ur bool("False")
 (0086). Rätt mätt går 46 procent till anställda och 54 till arbetslösa,
 trots median q 0.79 mot 0.59: 23 procent av vakanserna har en enda sökande,
-och den är då oftast arbetslös. Arbetslösheten växte inte av
+och den är då oftast arbetslös. (Rättelse 0104: de talen räknade med
+uppstartens ~10 000 beslut, som alla går till arbetslösa. Körningens egna
+beslut ger 54 procent till anställda och 46 till arbetslösa. Slutsatsen står
+-- ingen undanträngning till 100 procent -- men de anställda vinner
+majoriteten, inte minoriteten.) Arbetslösheten växte inte av
 undanträngning utan av den exogena avgången (0085). Skillnaden i q kvarstår
 som observation; Becsis restpool är fortfarande rätt begrepp för den, men
 den är inte orsaken till nivån i u. Stycket nedan behålls som bakgrund.

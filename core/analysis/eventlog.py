@@ -212,7 +212,8 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
     # toppnivå och inte i Stegen-blocket, som hoppas över helt när
     # CPS-urvalet är tomt: det är en vakansfråga, inte en mobilitetsfråga.
     lags = [(_f(r, "start_delay_days"), r.get("delay_status"))
-            for r in events if r.get("event_detail") == "match_completed"]
+            for r in events if r.get("event_detail") == "match_completed"
+            and float(r.get("time", 0.0)) > 0.0]        # uppstarten ut, se 0104
     lags = [(v, st) for v, st in lags if v == v]
     if lags:
         varden = np.array([v for v, _ in lags], dtype=float)
@@ -476,8 +477,13 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                 and str(r.get("all_declined", "")).lower() == "true")
             row["n_search_superseded"] = sum(
                 1 for r in events if r.get("event_detail") == "search_superseded")
-            # RESTPOOLEN: vem vinner urvalen
-            mc = [r for r in events if r.get("event_detail") == "match_completed"]
+            # RESTPOOLEN: vem vinner urvalen. UPPSTARTENS beslut ligger på
+            # t = 0 och går alla till arbetslösa (0104): med dem i nämnaren var
+            # andelen till anställda 37 procent i rapporten, medan körningens
+            # egna beslut ger 54. Samma fel som n_flow i Littles lag (0086):
+            # rätt population.
+            mc = [r for r in events if r.get("event_detail") == "match_completed"
+                  and float(r.get("time", 0.0)) > 0.0]
             if mc:
                 we = [_b(r, "winner_employed") for r in mc]
                 row["share_hires_from_employment"] = round(float(np.mean(we)), 4)
