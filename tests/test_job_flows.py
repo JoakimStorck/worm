@@ -180,6 +180,7 @@ def test_job_ids_unique_across_municipalities():
 
     sb = ScenarioBuilder.__new__(ScenarioBuilder)
     sb.conn = None
+    sb.rng = np.random.default_rng(1)      # sedan 0109 är all generering sådd
     sb.cfg_reader = FakeConfig({})
     sb.onet_space_df = pd.DataFrame(
         {"chi": [0.3], "xi": [0.3], "x_occ": [0.29], "y_occ": [0.09],
@@ -1803,3 +1804,30 @@ def test_the_monthly_census_sees_the_vacancies_that_never_get_an_applicant():
     assert rader["0-40"]["r_req_mean"] == pytest.approx(0.2)
     assert rader["180-inf"]["r_req_mean"] == pytest.approx(0.9)
     assert rader["180-inf"]["age_mean"] == pytest.approx(400.0)
+
+
+def test_the_same_seed_gives_the_same_points():
+    """REGRESSION: sample_points utan rng läser SYSTEMENTROPI och struntar i
+    np.random.seed. Arbetsgivarnas och individernas koordinater drogs därför
+    på nytt varje körning, och två körningar på samma commit och frö gav
+    1 376 mot 1 364 arbetslösa år ett -- modellen var inte reproducerbar ur
+    sitt frö, och fröspannet i rapporten mätte frö PLUS koordinatbrus."""
+    from shapely.geometry import Polygon
+    from core.scenariobuilder import ScenarioBuilder
+
+    ruta = Polygon([(0, 0), (1000, 0), (1000, 1000), (0, 1000)])
+
+    def punkter(seed):
+        sb = ScenarioBuilder.__new__(ScenarioBuilder)
+        sb.rng = np.random.default_rng(seed)
+        return [(round(p.x, 9), round(p.y, 9))
+                for _ in range(3) for p in sb.random_points_in_polygon(ruta, 4)]
+
+    assert punkter(1) == punkter(1), "samma frö ska ge samma koordinater"
+    assert punkter(1) != punkter(2), "olika frön ska ge olika koordinater"
+
+    # Och den globala sådden ska inte längre kunna påverka utfallet
+    np.random.seed(99)
+    a = punkter(1)
+    np.random.seed(12345)
+    assert punkter(1) == a

@@ -124,9 +124,22 @@ class ScenarioBuilder:
         return sni_df
 
     def random_points_in_polygon(self, polygon, n_points):
+        """Punkter i en polygon, ur scenariots egen generator.
+
+        UTAN rng SÅS INTE sample_points AV NÅGOT. Den läser systementropi och
+        ignorerar np.random.seed: samma frö gav två olika punktmängder, och
+        därmed olika koordinater för arbetsgivare och individer i varje
+        körning. Modellen var inte reproducerbar ur sitt frö, och skillnaden
+        var mätbar -- två körningar på samma commit och frö gav 1 376 mot
+        1 364 arbetslösa år ett. Allt som hänger på avstånd hängde på
+        systemklockan: pendling, matchning, vakansernas ålder.
+
+        self.rng är sådd ur scenariots seed och delas med övrig generering,
+        så ordningen mellan anropen är en del av strömmen -- som den ska vara.
+        """
         import geopandas as gpd
         gdf = gpd.GeoSeries([polygon])
-        result = gdf.sample_points(n_points)[0]
+        result = gdf.sample_points(n_points, rng=self.rng)[0]
         if result.geom_type == "Point":
             return [result]
         elif result.geom_type == "MultiPoint":
@@ -181,7 +194,9 @@ class ScenarioBuilder:
             all_layers = list(layer_gdfs.keys())
             layer = rng.choice(all_layers)
             gdf = layer_gdfs[layer]
-            row = gdf.sample(1, random_state=None).iloc[0]
+            # random_state ur scenariots generator: None betyder pandas globala
+            # np.random, en andra ström vid sidan av self.rng (0109).
+            row = gdf.sample(1, random_state=self.rng).iloc[0]
             pt = self.random_points_in_polygon(row.geometry, 1)[0]
             deso_code = row.get('deso_code', None)
 
@@ -402,7 +417,7 @@ class ScenarioBuilder:
             eid = row.get('employer_id', idx)
             e = eta_size * np.log(max(float(row['size']), 1.0) / 10.0)
             if eta_sd > 0:
-                e += float(np.random.normal(0.0, eta_sd))
+                e += float(self.rng.normal(0.0, eta_sd))
             eta_by_employer[eid] = e
 
         for idx, row in employers_df.iterrows():
@@ -414,13 +429,13 @@ class ScenarioBuilder:
                 prof = (self._register_profile(row['municipal_code'])
                         if self.occupation_source() == "register" else None)
                 if prof is not None and not prof.empty:
-                    onet_code = np.random.choice(prof["onet_code"].to_numpy(),
+                    onet_code = self.rng.choice(prof["onet_code"].to_numpy(),
                                                  p=prof["prob"].to_numpy())
                 else:
                     # SNI-vägen (default, och fallback om registret saknar kommunen)
                     occ_freq = self.get_onet_codes_with_freq_for_sni(sni)
                     onet_codes, freqs = zip(*occ_freq)
-                    onet_code = np.random.choice(onet_codes, p=np.array(freqs)/np.sum(freqs))
+                    onet_code = self.rng.choice(onet_codes, p=np.array(freqs)/np.sum(freqs))
 
                 x_occ, y_occ, r_o, chi, xi, geom_source, wage, r_req = self.get_geom_for_onet_code(onet_code)
                 eta = float(eta_by_employer.get(row.get('employer_id', idx), 0.0))

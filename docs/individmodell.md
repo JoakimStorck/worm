@@ -423,6 +423,15 @@ Byggordningen som stod här är genomförd (0036–0080). Ordningen på det som
 Kvar står de regler som visat sig kosta att bryta. Varje rad nedan har ett
 pris betalt i felsökning.
 
+**En ström, sådd ur fröet.** `sample_points` utan `rng` läser systementropi
+och struntar i `np.random.seed`: arbetsgivarnas och individernas koordinater
+drogs på nytt varje körning, och två körningar på samma commit och frö gav
+1 376 mot 1 364 arbetslösa år ett (0109). Fröspannet i rapporten mätte
+därmed frö PLUS koordinatbrus, och "samma frö ger samma körning" var ett
+antagande vi aldrig prövat. Allt slumpmässigt går genom `self.rng` respektive
+världens generator, och varje nytt bibliotek prövas mot att två anrop med
+samma frö ger samma tal innan det används.
+
 **Invariantkontrollen skrivs före mekanismen.** U = L − J + V höll genom hela
 jobbytesfallet i 0079 därför att testet fanns först. De två fel som låg nära —
 att frigöra den gamla positionen vid erbjudandet i stället för vid tillträdet,
