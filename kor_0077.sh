@@ -1,9 +1,21 @@
 #!/usr/bin/env bash
-# kor_0077.sh — konvergenskontroll. Körs från repo-roten: bash kor_0077.sh [frön]
+# kor_0077.sh — det normala körskriptet. Körs från repo-roten:
+#
+#     bash kor_0077.sh                       # mora_baseline, frön 1-5
+#     bash kor_0077.sh "1 2"                 # valda frön
+#     SCENARIO=scenarios/siljan_3_kommuner.yml bash kor_0077.sh
+#
+# Vägrar starta med ocommittade ändringar: frö 3 i 0089-körningen gjordes
+# på ett smutsigt träd och rapporten kunde bara varna i efterhand. Testerna
+# körs först och avbryter vid rött (set -e).
 set -euo pipefail
 
 FRON="${1:-1 2 3 4 5}"
+SCENARIO="${SCENARIO:-scenarios/mora_baseline.yml}"
+[ -f "$SCENARIO" ] || { echo "Scenariot finns inte: $SCENARIO"; exit 1; }
+git diff --quiet || { echo "Ocommittade ändringar: körningen blir inte återskapbar. Committa eller stasha."; exit 1; }
 git log -1 --format='HEAD %h  %s'
+echo "scenario $SCENARIO"
 ( cd tests && python -m pytest -q )
 
 python scripts/prune_runs.py --keep-commit "$(git rev-parse --short=8 HEAD)"
@@ -11,7 +23,7 @@ python scripts/prune_runs.py --keep-commit "$(git rev-parse --short=8 HEAD)"
 for s in $FRON; do
     echo "--- frö $s ---"
     WORM_SEED=$s python -c \
-      "import core.scenario_runner as r; r.run_and_log_scenario('scenarios/mora_baseline.yml')"
+      "import core.scenario_runner as r; r.run_and_log_scenario('$SCENARIO')"
 done
 
 python scripts/analysis.py --all
