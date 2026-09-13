@@ -1,0 +1,133 @@
+# === SCENARIO: Siljan tre kommuner -- Mora, Orsa, Rättvik ===
+#
+# Det första flerkommunsscenariot mot dagens modell (0105). Mindre än
+# Dalaklustret i befolkning -- ungefär 38 000 mot Moras 20 000 -- men det
+# räcker för det som en kommun inte kan ge: pendling över kommungräns, och
+# därmed frågan om grannkommuner täcker luckan när det egna uppgiftsrummet
+# är tunt (första pappret, punkt 4).
+#
+# Bygger på mora_baseline.yml rad för rad. Det som skiljer är kommunlistan,
+# kommunvisa arbetslöshets- och arbetskraftstal, och loggfilen.
+# Simulation och matchning ärvs från _simulation_defaults.yml oförändrade,
+# så att skillnaden mot Mora ensam mäter geografin och inget annat.
+#
+# KÖRTID: sökningen kostar sökningar gånger vakanser, alltså ungefär
+# kvadratiskt i arbetskraften. Räkna med 3-4 gånger Moras tid per frö.
+
+extends: _simulation_defaults.yml
+
+scenario_name: "Siljan 3 kommuner"
+description: >
+  Mora, Orsa och Rättvik som en gemensam arbetsmarknad med pendling över
+  kommungräns. Baslinje utan chock.
+start_year: 2024
+n_years: 10          # konvergensen kräver tio år: vakansstocken planar ut först år 6-8
+seed: 12345
+
+municipalities:
+  - 2062   # Mora
+  - 2034   # Orsa
+  - 2031   # Rättvik
+
+# === GLOBAL DEFAULTS FOR ALL MUNICIPALITIES ===
+defaults:
+  population: auto                # Laddas från databas; saknas kommunen kastas ett fel
+  workforce_ratio: 0.52
+  unemployment_rate: 0.07
+  education_levels:
+    low: 0.25
+    medium: 0.60
+    high: 0.15
+  sex_ratio: 0.51
+  occupation_distribution: "realistic"
+  employer_distribution:
+    n_employers: auto
+    employer_ratio_per_population: 0.09
+    allocation_order:
+      - business_zones
+      - commercial_zones
+      - small_localities
+      - urban_areas
+    layer_configs:
+      business_zones:
+        weight_field: num_workplaces
+      commercial_zones:
+        weight_field: num_workplaces
+      small_localities:
+        weight_field: num_workplaces
+      urban_areas:
+        weight_field: population
+    employer_size_distribution:
+      micro:
+        max_size: 9
+        ratio: 0.85
+      small:
+        min_size: 10
+        max_size: 49
+        ratio: 0.12
+      medium_large:
+        min_size: 50
+        max_size: 250
+        ratio: 0.025
+      very_large:
+        min_size: 251
+        max_size: 1000
+        ratio: 0.005
+
+  individuals:
+    propensities:
+      start_education:
+        mean: 0.12
+        std: 0.05
+      internal_training:
+        mean: 0.35
+        std: 0.12
+      quit_job:              # död sedan 0085, läses av ingen; kvar tills kolumnen tas bort
+        mean: 0.14
+        std: 0.07
+      career_break:
+        mean: 0.06
+        std: 0.03
+      internal_job_change:
+        mean: 0.10
+        std: 0.04
+
+  employer:
+    training_prob_by_size:
+      small: 0.05
+      medium: 0.15
+      large: 0.40
+
+# === MUNICIPALITY-SPECIFIC OVERRIDES ===
+# Mora ärvs från mora_baseline.yml. Orsa och Rättvik: arbetskraftsandel och
+# arbetslöshet är SATTA SOM PLATSHÅLLARE på Dalarnas nivå och ska
+# verifieras mot Arbetsförmedlingens kommunstatistik och AKU innan
+# scenariot används för något annat än att pröva pendlingsmekaniken.
+municipality_overrides:
+  2062: # Mora
+    education_levels:
+      low: {curve: linear, start: 0.23, end: 0.18, start_year: 2024, end_year: 2030}
+      medium: 0.63
+      high: {by_year: {2024: 0.14, 2027: 0.18, 2030: 0.19}}
+    workforce_ratio: 0.56
+    unemployment_rate: 0.065
+  2034: # Orsa -- platshållare, se ovan
+    workforce_ratio: 0.50
+    unemployment_rate: 0.075
+    education_levels:
+      low: 0.30
+      medium: 0.60
+      high: 0.10
+  2031: # Rättvik -- platshållare, se ovan
+    workforce_ratio: 0.48
+    unemployment_rate: 0.065
+    education_levels:
+      low: 0.30
+      medium: 0.60
+      high: 0.10
+
+hiring_policy: "random"
+wage_policy: "market_adjust"
+
+simulation:
+  logfile_path: output/siljan_3_kommuner.log

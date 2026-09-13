@@ -239,6 +239,14 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
                  "positioner som aldrig tillsätts." if len(vu) else "")
               + " Stocken är flöde gånger varaktighet, så det är dessa poster och "
                 "ingenting annat som sätter vakansgraden.\n")
+        cm = _kol("share_hires_cross_municipality")
+        if len(cm) and cm.max() > 0:
+            ci = _kol("commute_km_median_cross"); cw = _kol("commute_km_median_within")
+            A(f"Pendling över kommungräns: **{100*cm.median():.1f} %** av tillsättningarna "
+              "går till ett jobb i en annan kommun än individens"
+              + (f", med medianpendling {ci.median():.0f} km mot {cw.median():.0f} km inom "
+                 "kommunen" if len(ci) and len(cw) else "")
+              + ". Jämförs med SCB:s pendlingsmatris för de ingående kommunerna.\n")
         sd = _kol("start_delay_median")
         sdu = _kol("start_delay_median_unemployed")
         sde = _kol("start_delay_median_employed")

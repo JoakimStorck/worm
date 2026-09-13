@@ -1759,3 +1759,21 @@ def test_the_configured_fill_rate_does_not_add_to_unemployment():
     stock = run_months(w, 48)
     assert np.mean(stock[-12:]) == pytest.approx(
         theoretical_stock(1000, delta, fill), rel=0.03)
+
+
+def test_start_job_logs_both_municipalities():
+    """Jobbets kommun ur jobbtabellen, individens ur hennes id (0105)."""
+    from core.event_handlers import handle_close_vacancy, handle_start_job
+    w, gammalt, nytt = _byte_world()
+    w.prepare()
+    w.jobs["municipal_code"] = "2034"
+    w.individuals["individual_id"] = ["2062_i000000"]
+    w.file_application(nytt, 0, 0.0, q=1.0, w_neg=1.5, surplus=0.3, commute_km=2.0)
+    handle_close_vacancy({"time": 40.0, "agent_id": None, "event_type": "close_vacancy",
+                          "params": {"job_id": nytt}}, w)
+    start = [e for e in w._pushed if e["event_type"] == "start_job"][0]
+    w.event_logger.events = []
+    handle_start_job(start, w)
+    sj = [e for t, e in w.event_logger.events if t == "start_job"][0]
+    assert sj["job_municipality"] == "2034"
+    assert sj["home_municipality"] == "2062"

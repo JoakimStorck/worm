@@ -203,6 +203,24 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
 
     row = {"run": os.path.basename(run_dir.rstrip("/"))}
 
+    # PENDLING ÖVER KOMMUNGRÄNS (0105): andel av körningens tillsättningar
+    # där jobbets kommun är en annan än individens. I ett enkommunsscenario
+    # är den noll per konstruktion; med Mora, Orsa och Rättvik är det talet
+    # som ska ställas mot SCB:s pendlingsmatris.
+    gr = [(r.get("home_municipality"), r.get("job_municipality"), _f(r, "commute_km"))
+          for r in events if r.get("event") == "start_job"
+          and r.get("is_bootstrap") not in (True, "True")
+          and r.get("home_municipality") and r.get("job_municipality")]
+    if gr:
+        over = np.array([h != j for h, j, _ in gr])
+        row["n_hires_with_municipality"] = len(gr)
+        row["share_hires_cross_municipality"] = round(float(over.mean()), 4)
+        km = np.array([k for _, _, k in gr], dtype=float)
+        if over.any() and np.isfinite(km[over]).any():
+            row["commute_km_median_cross"] = round(float(np.nanmedian(km[over])), 1)
+        if (~over).any() and np.isfinite(km[~over]).any():
+            row["commute_km_median_within"] = round(float(np.nanmedian(km[~over])), 1)
+
     # FÖRDRÖJNINGEN FRÅN BESLUT TILL TILLTRÄDE, efter status (0103). Vakansens
     # ålder vid tillträdet är exakt 80.1 dagar i median över femton körningar
     # -- ett moduvärde, inte en median över en blandad population, och 80 är

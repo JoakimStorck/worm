@@ -245,6 +245,16 @@ def handle_start_job(event, world):
         extra['job_to_job'] = bool(_job_to_job)
         if _job_to_job and pd.notna(_w_prev):
             extra['w_prev'] = round(float(_w_prev), 4)
+        # PENDLING ÖVER KOMMUNGRÄNS (0105). Jobbets kommun står i jobbtabellen;
+        # individens i hennes id (2062_i003443 -> 2062), som är det enda
+        # ställe scenariobyggaren skriver den. Med flera kommuner i scenariot
+        # är andelen tillsättningar över gränsen det första som ska
+        # jämföras med SCB:s pendlingsmatris.
+        if 'municipal_code' in jobs.columns:
+            extra['job_municipality'] = str(job_row.get('municipal_code'))
+        _iid = individuals.at[idx, 'individual_id'] if 'individual_id' in individuals.columns else None
+        if isinstance(_iid, str) and '_i' in _iid:
+            extra['home_municipality'] = _iid.split('_i', 1)[0]
         # Vakansens ålder vid tillsättning
         try:
             vs = float(jobs.iat[pos, jobs.columns.get_loc('vacant_since')])

@@ -1008,3 +1008,44 @@ def test_hire_shares_exclude_the_bootstrap(tmp_path):
     assert row["share_hires_employed"] == pytest.approx(0.5)
     assert row["share_hires_from_employment"] == pytest.approx(0.5)
     assert row["start_delay_median"] == pytest.approx(25.0)
+
+
+def test_cross_municipality_hires_are_counted(tmp_path):
+    """Flerkommunsscenariot (0105) behöver ett tal att ställa mot SCB:s
+    pendlingsmatris: andelen tillsättningar där jobbets kommun inte är
+    individens. Uppstarten räknas inte. Här: tre tillsättningar under
+    körning, en över gränsen."""
+    def sj(t, aid, home, job, km, extra=""):
+        return (f"{t:.2f}, start_job, agent_id {home}_i{aid}, job_id J{aid}, "
+                f"from_onet 43-4051.00, to_onet 51-2011.00, occ_change 1, u_R 0.5, "
+                f"u_R_occ 0.5, w_field 1.0, w_occ 1.0, w_neg 0.9, q_hire 0.8, job_to_job False, "
+                f"home_municipality {home}, job_municipality {job}, commute_km {km}{extra}")
+    lines = [
+        "0.00, new_month, agent_type system, month 1, employed 900, unemployed 100, "
+        "unmatched_jobs 10, open_vacancies 10, not_in_labour_force 0, active_jobs 1000, posted 0",
+        sj(0.0, "000001", "2062", "2034", 30.0, ", is_bootstrap True"),
+        sj(50.0, "000002", "2062", "2062", 5.0),
+        sj(60.0, "000003", "2034", "2062", 25.0),
+        sj(70.0, "000004", "2031", "2031", 4.0),
+        "365.25, simulation_completed, agent_type system",
+    ]
+    d = tmp_path / "run_k3"; d.mkdir()
+    (d / "eventlog.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    row = summary_row(str(d))
+    assert row["n_hires_with_municipality"] == 3
+    assert row["share_hires_cross_municipality"] == pytest.approx(1 / 3, abs=1e-4)
+    assert row["commute_km_median_cross"] == pytest.approx(25.0)
+    assert row["commute_km_median_within"] == pytest.approx(4.5)
+
+
+def test_same_agent_does_not_confuse_municipalities():
+    """Svansjämförelsen i _same_agent finns för loggar i gammal form, där
+    match_completed bar DataFrame-indexet. Två individual_id ur olika
+    kommuner har samma svans och är inte samma person."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    from individual_history import _same_agent
+    assert _same_agent("3443", "2062_i003443")
+    assert _same_agent("2062_i003443", "2062_i003443")
+    assert not _same_agent("2062_i003443", "2034_i003443")

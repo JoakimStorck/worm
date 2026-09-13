@@ -97,6 +97,11 @@ def _same_agent(a, b):
     a, b = str(a).strip(), str(b).strip()
     if a == b:
         return True
+    # Svansjämförelsen gäller BARA när den ena sidan är ett rent index (gammal
+    # form). Två individual_id ur olika kommuner -- 2062_i003443 och
+    # 2034_i003443 -- har samma svans och är inte samma person (0105).
+    if not (a.isdigit() or b.isdigit()):
+        return False
     tail_a = a.rsplit("_i", 1)[-1].lstrip("0") or "0"
     tail_b = b.rsplit("_i", 1)[-1].lstrip("0") or "0"
     return tail_a.isdigit() and tail_b.isdigit() and tail_a == tail_b
