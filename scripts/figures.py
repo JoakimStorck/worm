@@ -243,6 +243,23 @@ def fig_coverage(run_dirs, out, s=0.25):
     tg, rg = np.meshgrid(np.linspace(0, 2 * math.pi, 241),
                          np.linspace(0, 1.0, 121))
     gx, gy = rg * np.cos(tg), rg * np.sin(tg)
+    # Sluttillståndet finns bara för körningar som gick hela vägen:
+    # scenario_runner skriver final_state_jobs.csv EFTER simulate(), och en
+    # körning som avbröts -- eller som pågår just nu -- saknar det. Figuren
+    # kraschade då på sista steget, efter att alla tabeller och fyra andra
+    # figurer redan skrivits (0113). summary_row har haft samma kontroll sedan
+    # 0060; den här hade den inte.
+    fullstandiga = [rd for rd in run_dirs
+                    if os.path.isfile(os.path.join(rd, "final_state_jobs.csv"))]
+    if len(fullstandiga) < len(run_dirs):
+        saknas = [os.path.basename(str(rd)) for rd in run_dirs
+                  if rd not in fullstandiga]
+        print(f"fig_coverage: {len(saknas)} körning(ar) saknar final_state_jobs.csv "
+              f"och utelämnas: {', '.join(saknas)}")
+    run_dirs = fullstandiga
+    if not run_dirs:
+        print("fig_coverage: ingen körning har final_state_jobs.csv, hoppar över")
+        return
     n = len(run_dirs)
     cov_rows = []
     fig, axes = plt.subplots(1, n, figsize=(4.6 * n, 4.8), dpi=ps.DPI,

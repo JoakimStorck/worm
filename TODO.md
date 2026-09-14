@@ -26,6 +26,10 @@ avståndsfördelningar, inte kalibrerade mot data.
 
 ## Modell
 
+- [ ] **Tyst except i scenario_runner** (`except Exception: traceback; return`)
+      gör en kastad simulering till en körning som ser lyckad ut i `output/`
+      men saknar sluttillstånd. Har nu dolt fel två gånger (0113).
+
 - [ ] **Omskolningen saknar utlösare** sedan 0085 tog bort den exogena avgången.
       Ska utlösas ur torr sökning (`propensity_start_education` växer redan där),
       efter beslut om nivå och inriktning (individmodell.md 11).

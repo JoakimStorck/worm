@@ -1101,3 +1101,29 @@ def test_the_logger_cache_follows_a_growing_table(tmp_path):
     lg.close()
     rader = [parse_line(l) for l in path.read_text(encoding="utf-8").splitlines()]
     assert [r["agent_id"] for r in rader] == ["2062_i000002", "2062_i000007"]
+
+
+def test_coverage_figure_skips_runs_without_a_final_state(tmp_path):
+    """REGRESSION: fig_coverage läste final_state_jobs.csv utan att pröva att
+    den fanns. Filen skrivs EFTER simulate(), så en avbruten körning -- eller
+    en som pågår -- saknar den, och figuren kraschade på sista steget efter
+    att alla tabeller och fyra andra figurer redan skrivits. summary_row har
+    haft kontrollen sedan 0060."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import figures as F
+
+    hel = tmp_path / "run_hel"; hel.mkdir()
+    (hel / "final_state_jobs.csv").write_text(
+        "x_occ,y_occ,active\n0.1,0.1,True\n0.2,-0.1,True\n", encoding="utf-8")
+    trasig = tmp_path / "run_trasig"; trasig.mkdir()
+
+    F.fig_coverage([str(hel), str(trasig)], str(tmp_path))
+    assert (tmp_path / "coverage.pdf").exists()          # den fullständiga räckte
+    data = pd.read_csv(tmp_path / "coverage.csv")
+    assert list(data["run"]) == ["run_hel"]              # den trasiga utelämnad
+
+    (tmp_path / "coverage.pdf").unlink()
+    F.fig_coverage([str(trasig)], str(tmp_path))         # ingen krasch
+    assert not (tmp_path / "coverage.pdf").exists()
