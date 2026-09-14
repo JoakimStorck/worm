@@ -104,20 +104,36 @@ class World(IndividualViews):
         self.wallclock_start = time.time()
         self._init_events()
         self._check_calendar_covers_run()
+        n_handelser = 0
         while not self.event_queue.is_empty():
             event = self.event_queue.pop()
             if event["time"] > self.simulation_end_time:
                 break
             handler = RULE_SWITCH[event["event_type"]]
             handler(event, self)
+            n_handelser += 1
 
+        # MÄTNINGEN AVSLUTAS. wallclock_start sattes här sedan länge men lästes
+        # aldrig någonstans: klockan startades och stannades aldrig, och
+        # körtiden fick uppskattas ur skillnaden mellan run_meta.json:s
+        # "started" och registryraden -- sekundupplösning, och hela
+        # scenariobygget inräknat. Talet hör hemma på raden, så att en
+        # prestandaregression syns i samma tabell som allt annat i stället
+        # för i minnet av hur lång tid förra körningen kändes.
+        sekunder = time.time() - self.wallclock_start
+        self.sim_seconds = round(sekunder, 1)
         event = {
             "time": self.simulation_end_time,
             "agent_id": None,
             "event_type": "simulation_completed",
             "params": {}
         }
-        self.event_logger.log_event(self, event, print_line=True)
+        self.event_logger.log_event(
+            self, event, print_line=True,
+            extra={"wallclock_seconds": round(sekunder, 1),
+                   "n_events_handled": n_handelser,
+                   "events_per_second": round(n_handelser / sekunder, 1)
+                   if sekunder > 0 else None})
 
         self.close()
 

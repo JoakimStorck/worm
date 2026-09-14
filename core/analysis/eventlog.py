@@ -298,6 +298,12 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
                 "commit": (meta.get("git_commit") or "")[:8],
                 "dirty": bool(meta.get("git_dirty")),
                 "municipalities": ",".join(map(str, meta.get("municipalities") or [])),
+                # Körtiden hör till härkomsten: en prestandaregression ska
+                # synas i samma tabell som modellutfallen, inte upptäckas på
+                # känsla nästa gång någon väntar på en körning. Saknas på
+                # körningar gjorda före 0115.
+                "total_seconds": meta.get("total_seconds"),
+                "sim_seconds": meta.get("sim_seconds"),
             })
             sim = meta.get("simulation") or {}
             for k in ("sigma_gamma", "commute_cost_per_km", "choice_scale",

@@ -5,6 +5,7 @@ import numpy as np
 import json
 import sys
 import sqlite3
+import time
 import yaml
 import datetime
 import pandas as pd
@@ -104,6 +105,7 @@ def run_and_log_scenario(config_path):
     Kör en komplett simulering, sparar output/resultat i unik output-mapp,
     uppdaterar central registry, och returnerar körlogg som text.
     """
+    t_start = time.time()
     output_buffer = []
     def local_log(*args):
         s = " ".join([str(a) for a in args])
@@ -223,6 +225,31 @@ def run_and_log_scenario(config_path):
         log.save_run_output(match_stats, commuting_stats, scenario_name, outdir=outdir)
 
         world.close()
+
+        # --- 10b. Körtiden tillbaka i härkomsten ---
+        # Två tal, inte ett, eftersom de mäter olika saker: total_seconds
+        # täcker hela funktionen -- databasläsning, scenariobygge,
+        # uppstartsmatchning, simulering, skrivning -- och sim_seconds bara
+        # händelseslingan. Utan uppdelningen går det inte att se om en
+        # långsammare körning beror på modellen eller på att startbeståndet
+        # blivit dyrare att bygga. sim_seconds tas ur World:s egen klocka och
+        # mäts inte om här; samma skäl som att aggregaten i export_viz läses
+        # ur loggen i stället för att räknas om.
+        total_s = round(time.time() - t_start, 1)
+        try:
+            with open(os.path.join(outdir, "run_meta.json"), encoding="utf-8") as f:
+                meta_ut = json.load(f)
+        except Exception:
+            meta_ut = dict(meta)
+        meta_ut.update({
+            "finished": datetime.datetime.now().isoformat(timespec="seconds"),
+            "total_seconds": total_s,
+            "sim_seconds": getattr(world, "sim_seconds", None),
+        })
+        with open(os.path.join(outdir, "run_meta.json"), "w", encoding="utf-8") as f:
+            json.dump(meta_ut, f, indent=2, ensure_ascii=False)
+        print(f"[RUN] {run_id}  klar på {total_s:.0f} s "
+              f"(simulering {meta_ut['sim_seconds'] or float('nan'):.0f} s)")
 
         # --- 11. Uppdatera registry ---
         ensure_registry_exists()
