@@ -230,6 +230,23 @@ class Tillstand:
                 self.jobb_innehavare[jid] = None
                 self.jobb_annonserat[jid] = False
 
+        elif detalj in ("career_break", "education_started"):
+            # TVÅ SÄTT ATT SLUTA ARBETA UTAN ATT JOBBET FÖRSTÖRS.
+            # handle_career_break och handle_start_education nollar båda
+            # individens job_id och släpper positionen tillbaka som vakans,
+            # men skriver ingen destroy_job-rad. Utan dem räknade
+            # uppspelningen personen som fortsatt anställd tills hon anställdes
+            # igen -- en långsam överskattning som växte till fem personer över
+            # tio år och som aldrig hade synts som ett fel, bara som en
+            # marknad som sakta drog ifrån kurvan bredvid.
+            # Vilket jobb hon hade vet uppspelningen själv; raden bär inget
+            # job_id.
+            if aid is not None:
+                tidigare = self.ind_jobb.get(aid)
+                self.ind_jobb[aid] = None
+                if tidigare is not None and tidigare in self.jobb_innehavare:
+                    self.jobb_innehavare[tidigare] = None
+
         elif h == "open_advert" or detalj == "advert_opened":
             if jid is not None and jid in self.jobb_annonserat:
                 self.jobb_annonserat[jid] = True
@@ -354,6 +371,7 @@ def spela_upp(run_dir, panel_n, panel_jobb_n, seed):
     frames = []
     ticker = []
     sedan_forra = []
+    ar_nu = None
 
     def bildruta(t, manad, ar):
         status, jobbref, xi_l, chi_l, r_l = [], [], [], [], []
@@ -419,9 +437,17 @@ def spela_upp(run_dir, panel_n, panel_jobb_n, seed):
             # olika tidpunkter, och panelens sysselsättning stämmer inte med
             # kurvan bredvid.
             bildruta(r["time"],
-                     int(float(r.get("month", 0) or 0)),
-                     int(float(r.get("year", 0) or 0)) if r.get("year") else None)
+                     int(float(r.get("month", 0) or 0)), ar_nu)
             sedan_forra = []
+        elif h == "new_year":
+            # ÅRTALET STÅR BARA PÅ new_year-raden. handle_new_month loggar
+            # month men inte year, så varje bildruta fick year: null och
+            # tidsaxeln hade behövt räkna månader i stället för att visa
+            # årtal. new_year kommer före årets första new_month i kön.
+            try:
+                ar_nu = int(float(r.get("year")))
+            except (TypeError, ValueError):
+                pass
         tillstand.applicera(r)
         if h == "start_job" and str(r.get("is_bootstrap", "")).lower() not in ("true", "1"):
             txt = _handelsetext(r)

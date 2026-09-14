@@ -233,3 +233,58 @@ def test_slutlagets_innehavare_smittar_inte_startlaget(tmp_path):
     _, _, frames, _, _ = spela_upp(d, 10, 20, seed=0)
     assert sum(frames[0]["workers"]["state"]) == 0
     assert frames[0]["jobs"]["state"].count(0) == 0
+
+
+def test_career_break_och_utbildning_avslutar_anstallningen(tmp_path):
+    """Varken handle_career_break eller handle_start_education skriver en
+    destroy_job-rad, men båda nollar individens job_id och släpper
+    positionen. Känner uppspelningen dem inte räknas personen som anställd
+    tills hon anställs igen."""
+    d = str(tmp_path / "run_cb")
+    ind, jobb = _skriv_korning(d, n_ind=10)
+    ind.loc[0:1, "job_id"] = ["J0000000", "J0000001"]
+    jobb.loc[0:1, "individual_id"] = list(ind.loc[0:1, "individual_id"])
+    ind.to_csv(os.path.join(d, "initial_state_individuals.csv"), index=False)
+    jobb.to_csv(os.path.join(d, "initial_state_jobs.csv"), index=False)
+    i0, i1 = ind.loc[0, "individual_id"], ind.loc[1, "individual_id"]
+    _logg(d, [
+        _rad(0.0, "new_month", month=1, year=2020, employed=2, unemployed=8,
+             unmatched_jobs=8, active_jobs=10, not_in_labour_force=0),
+        _rad(10.0, "career_break", agent_type="individual", agent_id=i0,
+             chi=1.0, xi=1.0, r_i=0.27, event_detail="career_break"),
+        _rad(30.0, "new_month", month=2, year=2020, employed=1, unemployed=8,
+             unmatched_jobs=9, active_jobs=10, not_in_labour_force=1),
+        _rad(40.0, "start_education", agent_type="individual", agent_id=i1,
+             chi=1.0, xi=1.0, r_i=0.27, event_detail="education_started"),
+        _rad(60.0, "new_month", month=3, year=2020, employed=0, unemployed=8,
+             unmatched_jobs=10, active_jobs=10, not_in_labour_force=2),
+    ])
+
+    _, panel_jobb, frames, _, _ = spela_upp(d, 10, 20, seed=0)
+
+    assert [sum(f["workers"]["state"]) for f in frames] == [2, 1, 0]
+    # Positionerna ska stå som vakanser, inte som inaktiva: jobben förstörs
+    # inte, de blir lediga.
+    for jid in ("J0000000", "J0000001"):
+        pos = list(panel_jobb["job_id"]).index(jid)
+        assert frames[2]["jobs"]["state"][pos] == 1
+
+
+def test_artalet_hamtas_fran_new_year(tmp_path):
+    """handle_new_month loggar month men inte year. Utan new_year-raden blir
+    varje bildruta year: null och tidsaxeln kan inte visa årtal."""
+    d = str(tmp_path / "run_ar")
+    _skriv_korning(d, n_ind=10)
+    _logg(d, [
+        _rad(0.0, "new_year", year=2024),
+        _rad(0.0, "new_month", month=1, employed=0, unemployed=10,
+             unmatched_jobs=10, active_jobs=10, not_in_labour_force=0),
+        _rad(334.0, "new_month", month=12, employed=0, unemployed=10,
+             unmatched_jobs=10, active_jobs=10, not_in_labour_force=0),
+        _rad(365.0, "new_year", year=2025),
+        _rad(365.0, "new_month", month=1, employed=0, unemployed=10,
+             unmatched_jobs=10, active_jobs=10, not_in_labour_force=0),
+    ])
+    _, _, frames, _, _ = spela_upp(d, 10, 20, seed=0)
+    assert [(f["year"], f["month"]) for f in frames] == [
+        (2024, 1), (2024, 12), (2025, 1)]
