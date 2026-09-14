@@ -214,6 +214,23 @@ class Tillstand:
                     pass
 
         if h == "start_job" and aid is not None and jid is not None:
+            # EN start_job-RAD ÄR INTE ALLTID EN ANSTÄLLNING. handle_start_job
+            # kontrollerar att positionen fortfarande är aktiv och ledig när
+            # händelsen förfaller -- mellan beslut och tillträde ligger tio
+            # till fyrtio dagar -- och returnerar utan att anställa om jobbet
+            # hunnit förstöras eller tas. Båda utgångarna loggas som
+            # start_job, med detaljen som enda skillnad:
+            #
+            #   job_gone_before_start                 hon blir arbetslös
+            #   job_gone_before_start_kept_previous   hon behåller sitt jobb
+            #
+            # Uppspelningen läste bara händelsetypen och bokförde en
+            # anställning i ett jobb som inte fanns. Felet självläker när hon
+            # anställs på riktigt nästa gång, vilket är varför avvikelsen
+            # svängde upp och ner kring noll i stället för att växa: den var
+            # aldrig ackumulerande, bara ständigt närvarande.
+            if str(detalj or "").startswith("job_gone_before_start"):
+                return
             tidigare = self.ind_jobb.get(aid)
             if tidigare is not None and tidigare in self.jobb_innehavare:
                 self.jobb_innehavare[tidigare] = None
@@ -449,7 +466,10 @@ def spela_upp(run_dir, panel_n, panel_jobb_n, seed):
             except (TypeError, ValueError):
                 pass
         tillstand.applicera(r)
-        if h == "start_job" and str(r.get("is_bootstrap", "")).lower() not in ("true", "1"):
+        if (h == "start_job"
+                and str(r.get("is_bootstrap", "")).lower() not in ("true", "1")
+                and not str(r.get("event_detail") or "").startswith(
+                    "job_gone_before_start")):
             txt = _handelsetext(r)
             if txt:
                 post = {"t": round(float(r["time"]), 1), "worker": r.get("agent_id"),

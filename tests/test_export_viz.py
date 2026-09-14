@@ -288,3 +288,41 @@ def test_artalet_hamtas_fran_new_year(tmp_path):
     _, _, frames, _, _ = spela_upp(d, 10, 20, seed=0)
     assert [(f["year"], f["month"]) for f in frames] == [
         (2024, 1), (2024, 12), (2025, 1)]
+
+
+def test_start_job_som_inte_blev_nagon_anstallning(tmp_path):
+    """handle_start_job returnerar utan att anställa om positionen hunnit
+    förstöras eller tas mellan beslut och tillträde. Båda utgångarna loggas
+    som start_job och skiljs bara av event_detail."""
+    d = str(tmp_path / "run_gone")
+    ind, jobb = _skriv_korning(d, n_ind=10)
+    ind.loc[1, "job_id"] = "J0000005"
+    jobb.loc[5, "individual_id"] = ind.loc[1, "individual_id"]
+    ind.to_csv(os.path.join(d, "initial_state_individuals.csv"), index=False)
+    jobb.to_csv(os.path.join(d, "initial_state_jobs.csv"), index=False)
+    i0, i1 = ind.loc[0, "individual_id"], ind.loc[1, "individual_id"]
+    _logg(d, [
+        _rad(0.0, "new_month", month=1, year=2020, employed=1, unemployed=9,
+             unmatched_jobs=9, active_jobs=10, not_in_labour_force=0),
+        # Arbetslös: jobbet var borta, hon förblir arbetslös.
+        _rad(10.0, "start_job", agent_type="individual", agent_id=i0,
+             chi=1.0, xi=1.0, r_i=0.27, job_id="J0000001",
+             event_detail="job_gone_before_start"),
+        # Anställd: jobbet var borta, hon behåller sitt gamla.
+        _rad(15.0, "start_job", agent_type="individual", agent_id=i1,
+             chi=1.0, xi=1.0, r_i=0.27, job_id="J0000002",
+             event_detail="job_gone_before_start_kept_previous"),
+        _rad(30.0, "new_month", month=2, year=2020, employed=1, unemployed=9,
+             unmatched_jobs=9, active_jobs=10, not_in_labour_force=0),
+    ])
+
+    _, panel_jobb, frames, ticker, _ = spela_upp(d, 10, 20, seed=0)
+
+    assert sum(frames[1]["workers"]["state"]) == 1
+    # Hon som behöll sitt jobb ska fortfarande stå på det, och de jobb som
+    # aldrig tillträddes ska inte vara besatta.
+    besatta = {jid for jid, st in zip(panel_jobb["job_id"],
+                                      frames[1]["jobs"]["state"]) if st == 0}
+    assert besatta == {"J0000005"}
+    # Och raden hör inte hemma i händelseströmmen: ingen fick något jobb.
+    assert ticker == []
