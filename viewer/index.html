@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<!--
+  viewer/index.html -- visningsapp för en WORM-körning.
+
+  Läser en JSON-fil skriven av scripts/export_viz.py och spelar upp den månad
+  för månad. Kör inte modellen och pratar inte med Python: allt som visas
+  ligger i filen.
+
+  INGA EXTERNA BIBLIOTEK, med avsikt. En demo för beslutsfattare körs på en
+  lånad projektor i ett rum med trasigt wifi, och ett CDN-anrop som inte går
+  fram är en svart skärm. Koordinaterna är redan projicerade (EPSG:3006,
+  meter), så en linjär transform räcker -- den kartprojektion ett
+  kartbibliotek hade bidragit med är redan gjord.
+
+  Punkterna ritas på canvas och kommunerna på samma canvas under dem: 2 000
+  individer gånger 120 bildrutor är 240 000 uppdateringar, och som DOM-noder
+  hakar uppspelningen.
+
+      python -m http.server 8000
+      http://localhost:8000/viewer/?data=../viz/run_20260914_201623.json
+-->
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<title>WORM -- uppspelning</title>
+<style>
+  :root {
+    --bg: #12131a; --panel: #1b1d26; --text: #e8e6e0; --dim: #8b8b96;
+    --linje: #2c2f3c;
+    --anstalld: #4a9d7f; --arbetslos: #d4703a; --vakans: #e0c060;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 "Inter", "Helvetica Neue", Arial, sans-serif;
+  }
+  header { padding: 14px 20px 10px; }
+  h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: .01em; }
+  .harkomst { color: var(--dim); font-size: 12px; margin-top: 2px; }
+  main { display: grid; grid-template-columns: 1fr 260px; gap: 16px;
+         padding: 0 20px 20px; align-items: start; }
+  .karta { position: relative; background: var(--panel); border-radius: 6px;
+           overflow: hidden; }
+  canvas { display: block; width: 100%; }
+  .tid { position: absolute; left: 16px; top: 14px; font-size: 26px;
+         font-weight: 600; font-variant-numeric: tabular-nums; }
+  .sido { display: flex; flex-direction: column; gap: 14px; }
+  .kort { background: var(--panel); border-radius: 6px; padding: 12px 14px; }
+  .kort h2 { margin: 0 0 8px; font-size: 11px; font-weight: 600;
+             letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  .tal { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+  .tal + .tal { margin-top: 4px; }
+  .tal b { font-weight: 600; }
+  .legend { display: flex; align-items: center; gap: 7px; margin-top: 5px;
+            font-size: 12px; color: var(--dim); }
+  .prick { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .kontroller { display: flex; align-items: center; gap: 12px;
+                padding: 10px 20px 0; }
+  button { background: var(--panel); color: var(--text); border: 1px solid var(--linje);
+           border-radius: 4px; padding: 6px 14px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--dim); }
+  input[type=range] { flex: 1; accent-color: var(--anstalld); }
+  .pendling td { padding: 1px 0; font-variant-numeric: tabular-nums; }
+  .pendling td.n { text-align: right; padding-left: 10px; }
+  .pendling td.scb { text-align: right; padding-left: 10px; color: var(--dim); }
+  .fel { padding: 40px 20px; color: var(--arbetslos); }
+</style>
+</head>
+<body>
+<header>
+  <h1>WORM &mdash; <span id="scenario">uppspelning</span></h1>
+  <div class="harkomst" id="harkomst"></div>
+</header>
+
+<div class="kontroller">
+  <button id="spela">Spela</button>
+  <input type="range" id="skjut" min="0" max="0" value="0">
+  <span id="ruta" class="harkomst"></span>
+</div>
+
+<main>
+  <div class="karta">
+    <canvas id="duk"></canvas>
+    <div class="tid" id="tid"></div>
+  </div>
+  <div class="sido">
+    <div class="kort">
+      <h2>Arbetsmarknaden</h2>
+      <div class="tal"><span>Sysselsatta</span><b id="a-syss">&ndash;</b></div>
+      <div class="tal"><span>Arbetslösa</span><b id="a-arbl">&ndash;</b></div>
+      <div class="tal"><span>Arbetslöshet</span><b id="a-u">&ndash;</b></div>
+      <div class="tal"><span>Vakanser</span><b id="a-vak">&ndash;</b></div>
+      <div class="tal"><span>Vakansgrad</span><b id="a-v">&ndash;</b></div>
+    </div>
+    <div class="kort">
+      <h2>Panelen</h2>
+      <div class="legend"><span class="prick" style="background:var(--anstalld)"></span> anställd</div>
+      <div class="legend"><span class="prick" style="background:var(--arbetslos)"></span> arbetslös</div>
+      <div class="legend"><span class="prick" style="background:var(--vakans)"></span> ledig position</div>
+      <div class="harkomst" id="panelnot" style="margin-top:8px"></div>
+    </div>
+    <div class="kort">
+      <h2>Pendling över kommungräns</h2>
+      <table class="pendling" id="pendling"></table>
+      <div class="harkomst" style="margin-top:8px">Modell mot SCB (grått).</div>
+    </div>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+const FARG = { anstalld: "#4a9d7f", arbetslos: "#d4703a", vakans: "#e0c060" };
+const el = (id) => document.getElementById(id);
+
+async function start() {
+  const url = new URLSearchParams(location.search).get("data");
+  if (!url) {
+    document.body.innerHTML =
+      '<div class="fel">Ange körning: <code>?data=../viz/&lt;run&gt;.json</code></div>';
+    return;
+  }
+  let d;
+  try {
+    const svar = await fetch(url);
+    if (!svar.ok) throw new Error(svar.status + " " + svar.statusText);
+    d = await svar.json();
+  } catch (e) {
+    document.body.innerHTML =
+      '<div class="fel">Kunde inte läsa ' + url + ': ' + e.message +
+      '<br>Kör <code>python -m http.server 8000</code> från repo-roten.</div>';
+    return;
+  }
+  rita(d);
+}
+
+function rita(d) {
+  const duk = el("duk"), ctx = duk.getContext("2d");
+  const frames = d.frames;
+
+  el("scenario").textContent = d.meta.scenario || d.meta.run;
+  el("harkomst").textContent =
+    [d.meta.run, d.meta.commit ? "commit " + d.meta.commit : null,
+     d.meta.seed != null ? "frö " + d.meta.seed : null,
+     d.meta.n_months + " månader"].filter(Boolean).join("  \u00b7  ");
+  el("panelnot").textContent =
+    d.meta.panel.workers.toLocaleString("sv") + " av " +
+    d.meta.panel.population.toLocaleString("sv") +
+    " individer visas. Talen ovan gäller hela populationen.";
+
+  // --- Utsnitt. Kommunernas ytterkontur styr om den finns, annars punkterna.
+  let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
+  const omslut = (x, y) => {
+    if (x < xmin) xmin = x; if (x > xmax) xmax = x;
+    if (y < ymin) ymin = y; if (y > ymax) ymax = y;
+  };
+  const ringar = [];
+  for (const kom of d.municipalities || []) {
+    const g = kom.geometry;
+    const delar = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+    for (const poly of delar) for (const ring of poly) {
+      ringar.push(ring);
+      for (const [x, y] of ring) omslut(x, y);
+    }
+  }
+  if (!ringar.length) {
+    for (let i = 0; i < d.workers.x.length; i++) omslut(d.workers.x[i], d.workers.y[i]);
+  }
+
+  let skala = 1, dx = 0, dy = 0, H = 0;
+  function matt() {
+    const B = duk.clientWidth;
+    H = Math.round(B * (ymax - ymin) / (xmax - xmin));
+    H = Math.max(360, Math.min(H, 720));
+    const dpr = window.devicePixelRatio || 1;
+    duk.width = B * dpr; duk.height = H * dpr;
+    duk.style.height = H + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const marg = 18;
+    skala = Math.min((B - 2 * marg) / (xmax - xmin), (H - 2 * marg) / (ymax - ymin));
+    dx = (B - (xmax - xmin) * skala) / 2;
+    dy = (H - (ymax - ymin) * skala) / 2;
+  }
+  // y vänds: kartkoordinater växer norrut, canvas nedåt.
+  const px = (x) => dx + (x - xmin) * skala;
+  const py = (y) => H - dy - (y - ymin) * skala;
+
+  function rutan(i) {
+    const f = frames[i];
+    ctx.clearRect(0, 0, duk.clientWidth, H);
+
+    ctx.strokeStyle = "#343846"; ctx.lineWidth = 1;
+    ctx.fillStyle = "rgba(255,255,255,0.025)";
+    for (const ring of ringar) {
+      ctx.beginPath();
+      ctx.moveTo(px(ring[0][0]), py(ring[0][1]));
+      for (let k = 1; k < ring.length; k++) ctx.lineTo(px(ring[k][0]), py(ring[k][1]));
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+
+    // Lediga positioner under individerna: de är bakgrund, inte figur.
+    const js = f.jobs.state;
+    ctx.fillStyle = FARG.vakans;
+    for (let k = 0; k < js.length; k++) {
+      if (js[k] !== 1) continue;
+      ctx.fillRect(px(d.jobs.x[k]) - 1.5, py(d.jobs.y[k]) - 1.5, 3, 3);
+    }
+
+    const ws = f.workers.state;
+    for (let k = 0; k < ws.length; k++) {
+      ctx.fillStyle = ws[k] ? FARG.anstalld : FARG.arbetslos;
+      ctx.beginPath();
+      ctx.arc(px(d.workers.x[k]), py(d.workers.y[k]), ws[k] ? 1.6 : 2.4, 0, 6.2832);
+      ctx.fill();
+    }
+
+    const a = f.agg;
+    el("tid").textContent = (f.year || "") + (f.month ? "-" + String(f.month).padStart(2, "0") : "");
+    const tal = (v, d2) => v == null ? "\u2013" : v.toLocaleString("sv",
+      { minimumFractionDigits: d2 || 0, maximumFractionDigits: d2 || 0 });
+    el("a-syss").textContent = tal(a.employed);
+    el("a-arbl").textContent = tal(a.unemployed);
+    el("a-u").textContent = a.u == null ? "\u2013" : tal(a.u, 1) + " %";
+    el("a-vak").textContent = tal(a.vacancies);
+    el("a-v").textContent = a.v == null ? "\u2013" : tal(a.v, 1) + " %";
+    el("ruta").textContent = "ruta " + (i + 1) + " av " + frames.length;
+
+    // Pendling: bara över kommungräns, det är den modellen ska pröva.
+    const rader = Object.entries(f.commuting || {})
+      .filter(([k]) => { const p = k.split(">"); return p[0] !== p[1]; })
+      .sort((p, q) => q[1] - p[1]).slice(0, 6);
+    el("pendling").innerHTML = rader.map(([k, n]) => {
+      const scb = (d.commuting_scb || {})[k];
+      return "<tr><td>" + namn(k) + "</td><td class='n'>" +
+        n.toLocaleString("sv") + "</td><td class='scb'>" +
+        (scb == null ? "\u2013" : scb.toLocaleString("sv")) + "</td></tr>";
+    }).join("");
+  }
+
+  const namnkarta = {};
+  for (const k of d.municipalities || []) namnkarta[k.code] = k.name;
+  const namn = (nyckel) => nyckel.split(">").map((c) => namnkarta[c] || c).join(" \u2192 ");
+
+  // --- Uppspelning
+  const skjut = el("skjut"), knapp = el("spela");
+  skjut.max = frames.length - 1;
+  let i = 0, timer = null;
+  const visa = (n) => { i = n; skjut.value = n; rutan(n); };
+
+  skjut.addEventListener("input", () => { stopp(); visa(+skjut.value); });
+  knapp.addEventListener("click", () => timer ? stopp() : spela());
+  window.addEventListener("resize", () => { matt(); rutan(i); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === " ") { e.preventDefault(); timer ? stopp() : spela(); }
+    if (e.key === "ArrowRight") visa(Math.min(i + 1, frames.length - 1));
+    if (e.key === "ArrowLeft") visa(Math.max(i - 1, 0));
+  });
+
+  function spela() {
+    if (i >= frames.length - 1) visa(0);
+    knapp.textContent = "Pausa";
+    timer = setInterval(() => {
+      if (i >= frames.length - 1) return stopp();
+      visa(i + 1);
+    }, 110);
+  }
+  function stopp() {
+    clearInterval(timer); timer = null; knapp.textContent = "Spela";
+  }
+
+  matt(); visa(0);
+}
+
+start();
+</script>
+</body>
+</html>
