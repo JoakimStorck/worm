@@ -759,16 +759,25 @@ class ScenarioBuilder:
             log("[jobbandelar] commuting täcker inte scenariots kommuner -- "
                 "faller tillbaka på kommunernas egen arbetskraft.")
             return None
-        dag = {}
+        dag, natt = {}, {}
         for kod in koder:
-            n = float(inom[inom["work_municipality"] == kod]["employed"].sum())
-            if n <= 0:
-                log(f"[jobbandelar] {kod}: inga jobb i pendlingsmatrisen -- "
+            j = float(inom[inom["work_municipality"] == kod]["employed"].sum())
+            b = float(inom[inom["home_municipality"] == kod]["employed"].sum())
+            if j <= 0 or b <= 0:
+                log(f"[jobbandelar] {kod}: saknas i pendlingsmatrisen -- "
                     f"faller tillbaka på kommunernas egen arbetskraft.")
                 return None
-            dag[kod] = n
-        tot = sum(dag.values())
-        return {k: v / tot for k, v in dag.items()}
+            dag[kod], natt[kod] = j, b
+        # BÅDA MARGINALERNA UR SAMMA DELMATRIS. Kolumnsumman är jobben i
+        # kommunen, radsumman dess boende sysselsatta, och de summerar till
+        # samma tal -- delmatrisen ÄR en sluten arbetsmarknad. Hämtas bara
+        # täljaren ur SCB och nämnaren ur scenariofilens workforce_ratio mäter
+        # dag/natt skillnaden mellan två källor lika mycket som modellens
+        # beteende: med platshållarna för Ovansiljan fick Mora 63.3 procent av
+        # invånarna mot SCB:s 59.6 och Älvdalen 18.1 mot 20.4, vilket ensamt
+        # förklarade att kvoterna blev 1.04 och 1.07 i stället för 1.10 och
+        # 0.95.
+        return {"jobb": dag, "boende": natt}
 
     def generate(self, year=None):
         t0 = time.time()
@@ -786,25 +795,31 @@ class ScenarioBuilder:
 
         unemployment_rate = self.cfg_reader.config.get("unemployment_rate", 0.0)
 
-        # JOBBENS FÖRDELNING MELLAN KOMMUNERNA. Totalen är summan av
-        # kommunernas sysselsatta invånare, som förut -- scenariot är slutet
-        # och jobben måste räcka till precis dem som finns. Det som ändras är
-        # hur totalen delas: efter arbetsställestatistiken i stället för efter
-        # varje kommuns egen arbetskraft. Se jobbandelar().
-        andelar = None
-        total_jobs = 0
+        # BÅDA SIDOR UR PENDLINGSMATRISEN. Jobben per kommun ur kolumnsumman,
+        # de boende sysselsatta ur radsumman. De summerar till samma tal, så
+        # scenariot förblir slutet: lika många jobb som sysselsatta invånare
+        # totalt, men fördelade olika mellan kommunerna. Se jobbandelar().
+        #
+        # workforce_ratio i scenariofilen slutar därmed styra HUR MÅNGA
+        # sysselsatta varje kommun har och blir bara det den bör vara: en
+        # uppgift om befolkningen. Andelen härleds, och den härledda skrivs ut
+        # tillsammans med den angivna så att skillnaden syns.
+        marginaler = None
         if len(municipalities) > 1:
-            for kod in municipalities:
-                bef = self.cfg_reader.get_population(kod)[0]
-                wr = self.cfg_reader.get_workforce_ratio(kod)[0]
-                ur = self.cfg_reader.get_unemployment_rate(kod, year)[0]
-                wf = int(round(bef * wr))
-                total_jobs += wf - int(round(wf * ur))
-            andelar = self.jobbandelar(municipalities, year)
-            if andelar:
-                log("[jobbandelar] " + ", ".join(
-                    f"{k}: {100 * v:.1f} %" for k, v in andelar.items())
-                    + f" av {total_jobs} jobb")
+            marginaler = self.jobbandelar(municipalities, year)
+        if marginaler:
+            jobb_per_kommun = marginaler["jobb"]
+            boende_per_kommun = marginaler["boende"]
+            total_jobs = int(round(sum(jobb_per_kommun.values())))
+            log("[jobbandelar] jobb " + ", ".join(
+                f"{k}: {100 * v / total_jobs:.1f} %"
+                for k, v in jobb_per_kommun.items()) + f" av {total_jobs}")
+            log("[jobbandelar] boende " + ", ".join(
+                f"{k}: {100 * v / sum(boende_per_kommun.values()):.1f} %"
+                for k, v in boende_per_kommun.items()))
+        else:
+            jobb_per_kommun = boende_per_kommun = None
+            total_jobs = 0
 
         for municipal_code in municipalities:
             t1 = time.time()
@@ -812,6 +827,17 @@ class ScenarioBuilder:
             population = self.cfg_reader.get_population(municipal_code)[0]
             workforce_ratio = self.cfg_reader.get_workforce_ratio(municipal_code)[0]
             local_unemployment_rate = self.cfg_reader.get_unemployment_rate(municipal_code, year)[0]
+
+            if boende_per_kommun:
+                # Arbetskraften back-räknas ur SCB:s sysselsatta och
+                # scenariots arbetslöshetstal: syss = arbetskraft * (1 - u).
+                syss = boende_per_kommun[str(municipal_code)]
+                arbetskraft = syss / max(1.0 - local_unemployment_rate, 1e-9)
+                harledd = arbetskraft / max(population, 1)
+                log(f"  arbetskraftsandel: {harledd:.3f} härledd ur SCB "
+                    f"({syss:.0f} sysselsatta), mot {workforce_ratio:.3f} "
+                    f"i scenariofilen")
+                workforce_ratio = harledd
 
             # Individer
             t_ind0 = time.time()
@@ -828,14 +854,14 @@ class ScenarioBuilder:
             t_emp0 = time.time()
             workforce = int(round(population * workforce_ratio))
             n_unemployed = int(round(workforce * local_unemployment_rate))
-            if andelar:
+            if jobb_per_kommun:
                 # Nycklarna är strängar; kommunkoderna i scenariofilen är
                 # heltal. Uppslaget med rå kod gav KeyError vid första
                 # kommunen.
-                target_jobs = int(round(total_jobs * andelar[str(municipal_code)]))
-                log(f"  jobb: {target_jobs} (arbetsställestatistik), mot "
-                    f"{workforce - n_unemployed} sysselsatta invånare "
-                    f"-- dag/natt {target_jobs / max(workforce - n_unemployed, 1):.2f}")
+                target_jobs = int(round(jobb_per_kommun[str(municipal_code)]))
+                log(f"  jobb: {target_jobs} mot {workforce - n_unemployed} "
+                    f"sysselsatta invånare -- dag/natt "
+                    f"{target_jobs / max(workforce - n_unemployed, 1):.2f}")
             else:
                 target_jobs = workforce - n_unemployed
 

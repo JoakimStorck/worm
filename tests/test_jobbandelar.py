@@ -55,26 +55,46 @@ def _rader(jobb_per_kommun, year=2023):
     return ut
 
 
-def test_andelarna_foljer_arbetsstallestatistiken():
+def test_jobben_foljer_kolumnsumman():
     conn = _db(_rader({"2062": 9948, "2034": 2235, "2039": 2933}))
-    a = _Byggare(conn).jobbandelar(["2062", "2034", "2039"], 2023)
-    assert round(sum(a.values()), 6) == 1.0
+    m = _Byggare(conn).jobbandelar(["2062", "2034", "2039"], 2023)
+    j = m["jobb"]
     # Ovansiljans faktiska ordning: Mora, Älvdalen, Orsa.
-    assert a["2062"] > a["2039"] > a["2034"]
-    assert round(a["2062"], 3) == round(9948 / (9948 + 2235 + 2933), 3)
+    assert j["2062"] > j["2039"] > j["2034"]
+    assert round(j["2062"]) == 9948
 
 
-def test_summan_bevaras_och_asymmetrin_uppstar():
-    """Totalen är scenariots egen; fördelningen kommer ur data. Mora ska få
-    fler jobb än sina egna sysselsatta invånare, Orsa färre."""
-    conn = _db(_rader({"2062": 9948, "2034": 2235}))
-    a = _Byggare(conn).jobbandelar(["2062", "2034"], 2023)
-    boende = {"2062": 8953, "2034": 3013}
-    total = sum(boende.values())
-    jobb = {k: round(total * v) for k, v in a.items()}
-    assert sum(jobb.values()) == pytest.approx(total, abs=1)
-    assert jobb["2062"] / boende["2062"] > 1.05
-    assert jobb["2034"] / boende["2034"] < 0.85
+def test_bada_marginalerna_summerar_lika():
+    """Delmatrisen ÄR en sluten arbetsmarknad: kolumnsummorna och
+    radsummorna är samma tal. Det är det som gör att scenariot kan ha
+    olika dag/natt per kommun utan att jobben tar slut eller blir över."""
+    conn = _db(_rader({"2062": 9948, "2034": 2235, "2039": 2933}))
+    m = _Byggare(conn).jobbandelar(["2062", "2034", "2039"], 2023)
+    assert round(sum(m["jobb"].values())) == round(sum(m["boende"].values()))
+
+
+def test_boende_kommer_ur_radsumman():
+    """Nämnaren får inte komma ur scenariofilens workforce_ratio. Med
+    platshållarna för Ovansiljan fick Mora 63.3 procent av invånarna mot
+    SCB:s 59.6 och Älvdalen 18.1 mot 20.4, vilket ensamt förklarade att
+    dag/natt blev 1.04 och 1.07 i stället för 1.10 och 0.95."""
+    conn = _db([
+        {"home_municipality": "2062", "work_municipality": "2062",
+         "year": 2023, "employed": 8360},
+        {"home_municipality": "2034", "work_municipality": "2062",
+         "year": 2023, "employed": 1219},
+        {"home_municipality": "2062", "work_municipality": "2034",
+         "year": 2023, "employed": 431},
+        {"home_municipality": "2034", "work_municipality": "2034",
+         "year": 2023, "employed": 1759},
+    ])
+    m = _Byggare(conn).jobbandelar(["2062", "2034"], 2023)
+    assert m["boende"]["2062"] == 8360 + 431
+    assert m["boende"]["2034"] == 1219 + 1759
+    # Och dag/natt blir SCB:s egna kvoter.
+    assert m["jobb"]["2062"] / m["boende"]["2062"] == pytest.approx(1.09, abs=0.01)
+    assert m["jobb"]["2034"] / m["boende"]["2034"] == pytest.approx(0.74, abs=0.01)
+
 
 
 def test_kolumnsumman_och_inte_radsumman():
@@ -93,12 +113,10 @@ def test_kolumnsumman_och_inte_radsumman():
         {"home_municipality": "2034", "work_municipality": "2034",
          "year": 2023, "employed": 1759},
     ])
-    a = _Byggare(conn).jobbandelar(["2062", "2034"], 2023)
-    jobb_mora, jobb_orsa = 8360 + 1219, 431 + 1759          # kolumnsummor
-    assert round(a["2062"], 4) == round(jobb_mora / (jobb_mora + jobb_orsa), 4)
-    # Radsumman hade gett Orsa en större andel -- kontrollen som saknades.
-    boende_orsa = 1219 + 1759
-    assert a["2034"] < boende_orsa / (8360 + 431 + boende_orsa)
+    m = _Byggare(conn).jobbandelar(["2062", "2034"], 2023)
+    assert m["jobb"]["2062"] == 8360 + 1219      # kolumnsumma
+    assert m["boende"]["2062"] == 8360 + 431     # radsumma
+    assert m["jobb"]["2062"] != m["boende"]["2062"]
 
 
 def test_en_kommun_utan_underlag_ger_fallback():
@@ -119,14 +137,15 @@ def test_aldre_ar_duger_via_fallback():
     """fetch_with_fallback tar närmaste tidigare år. Ett scenario som startar
     2024 ska kunna använda 2023 års statistik."""
     conn = _db(_rader({"2062": 9948, "2034": 2235}, year=2023))
-    a = _Byggare(conn).jobbandelar(["2062", "2034"], 2024)
-    assert a is not None and round(sum(a.values()), 6) == 1.0
+    m = _Byggare(conn).jobbandelar(["2062", "2034"], 2024)
+    assert m is not None
+    assert round(sum(m["jobb"].values())) == round(sum(m["boende"].values()))
 
 
 def test_nycklarna_ar_strangar_aven_for_heltalskoder():
     """Kommunkoderna i scenariofilen är heltal. Slog anroparen upp med rå kod
     blev det KeyError vid första kommunen, mitt i en körning."""
     conn = _db(_rader({"2062": 9948, "2034": 2235}))
-    a = _Byggare(conn).jobbandelar([2062, 2034], 2023)
-    assert set(a) == {"2062", "2034"}
-    assert a[str(2062)] > a[str(2034)]
+    m = _Byggare(conn).jobbandelar([2062, 2034], 2023)
+    assert set(m["jobb"]) == {"2062", "2034"}
+    assert m["jobb"][str(2062)] > m["jobb"][str(2034)]

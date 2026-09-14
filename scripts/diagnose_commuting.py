@@ -189,9 +189,9 @@ def main():
         m = md[k] / mn[k] if mn[k] else np.nan
         s = sd[k] / sn[k] if sn[k] else np.nan
         print(f"{n(k):<12}{m:>9.2f}{s:>9.2f}{m - s:>+9.2f}")
-    print("  Modellen ger 1.00 per konstruktion: target_jobs = workforce - "
-          "n_unemployed,\n  alltså lika många jobb som sysselsatta invånare i "
-          "varje kommun.\n")
+    print("  Båda sidor kommer ur samma delmatris i SCB:s pendlingsstatistik\n"
+          "  sedan 0137, så en nära träff här är inmatning och inte utfall.\n"
+          "  Det som prövas är flödena nedan.\n")
 
     # --- FLÖDEN ---
     print("Flöden över kommungräns")
@@ -214,8 +214,9 @@ def main():
         km = mm[1] / mm[0] if mm[0] else np.nan
         ks = ss[1] / ss[0] if ss[0] else np.nan
         print(f"{n(h) + ' ↔ ' + n(aa):<26}{km:>9.2f}{ks:>9.2f}")
-    print("  En kvot nära 1.00 är ett symmetriskt par. Modellens värden ligger "
-          "där\n  av samma skäl som dag/natt ligger på 1.00.\n")
+    print("  En kvot nära 1.00 är ett symmetriskt par. Skiljer sig modellens\n"
+          "  asymmetri från SCB:s trots att dag/natt stämmer, sitter felet i\n"
+          "  hur flödena FÖRDELAS mellan paren och inte i jobbens placering.\n")
 
     # --- STÄNGNINGEN ---
     print("Utpendling som faller utanför scenariot")
