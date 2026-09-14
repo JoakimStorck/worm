@@ -1,0 +1,160 @@
+# === SCENARIO: Ovansiljan -- Mora, Orsa, Älvdalen ===
+#
+# Ersätter siljan_3_kommuner.yml som flerkommunsfall. Skälet är mätt, inte
+# geografiskt: andelen av kommunens arbetskraft vars pendling saknar mål i
+# scenariot, enligt SCB:s matris 2023.
+#
+#     Mora + Orsa + Älvdalen      Mora 10.9 %   Orsa  9.5 %   Älvdalen  9.8 %
+#     Mora + Orsa + Rättvik       Mora 11.5 %   Orsa 10.0 %   Rättvik  27.5 %
+#
+# Ovansiljan är jämnt cirka tio procent i alla tre. Med Rättvik i stället
+# ligger en av tre kommuner på nästan tre gånger det: 78 procent av Rättviks
+# utpendlare arbetar utanför gruppen, mest i Leksand (533) och Falun (356).
+# Rättvik hör till Siljansbygden söderut och kräver Leksand, Falun och
+# Borlänge för att kunna prövas -- ett annat och mycket större scenario.
+# Den som söker Rättvik i historiken hittar skälet här, inte ett bortfall.
+#
+# VAD SCENARIOT PRÖVAR. Ovansiljan har en arbetsplatskommun och två
+# utpendlingskommuner. SCB 2023, jobb per sysselsatt invånare inom gruppen:
+#
+#     Mora      1.11      importerar arbetskraft
+#     Orsa      0.74      1 219 av utpendlarna till Mora
+#     Älvdalen  0.83        369 av utpendlarna till Mora
+#
+# Modellen ger 1.00 i varje kommun per konstruktion, eftersom scenariobuilder
+# sätter target_jobs = workforce - n_unemployed. Nettopendlingen blir därmed
+# noll och flödena symmetriska. Två oberoende satelliter till samma centrum
+# gör det möjligt att se om en omläggning träffar båda eller bara den ena --
+# med bara en satellit går en tillfällighet inte att skilja från en mekanism.
+#
+# Mät före och efter med:  python scripts/diagnose_commuting.py
+#
+# STORLEK OCH KÖRTID. 16 879 sysselsatta mot siljan_3_kommuners 18 686, alltså
+# något kortare körning. Sökningen kostar sökningar gånger vakanser och växer
+# ungefär kvadratiskt i arbetskraften.
+#
+# Simulation och matchning ärvs oförändrade från _simulation_defaults.yml, så
+# att skillnaden mot mora_baseline mäter geografin och inget annat.
+
+extends: _simulation_defaults.yml
+
+scenario_name: "Ovansiljan 3 kommuner"
+description: >
+  Mora, Orsa och Älvdalen som en gemensam arbetsmarknad med pendling över
+  kommungräns. En arbetsplatskommun och två utpendlingskommuner. Baslinje
+  utan chock.
+start_year: 2024
+n_years: 10          # konvergensen kräver tio år: vakansstocken planar ut först år 6-8
+seed: 12345
+
+municipalities:
+  - 2062   # Mora
+  - 2034   # Orsa
+  - 2039   # Älvdalen
+
+# === GLOBAL DEFAULTS FOR ALL MUNICIPALITIES ===
+defaults:
+  population: auto                # Laddas från databas; saknas kommunen kastas ett fel
+  workforce_ratio: 0.52
+  unemployment_rate: 0.07
+  education_levels:
+    low: 0.25
+    medium: 0.60
+    high: 0.15
+  sex_ratio: 0.51
+  occupation_distribution: "realistic"
+  employer_distribution:
+    n_employers: auto
+    employer_ratio_per_population: 0.09
+    allocation_order:
+      - business_zones
+      - commercial_zones
+      - small_localities
+      - urban_areas
+    layer_configs:
+      business_zones:
+        weight_field: num_workplaces
+      commercial_zones:
+        weight_field: num_workplaces
+      small_localities:
+        weight_field: num_workplaces
+      urban_areas:
+        weight_field: population
+    employer_size_distribution:
+      micro:
+        max_size: 9
+        ratio: 0.85
+      small:
+        min_size: 10
+        max_size: 49
+        ratio: 0.12
+      medium_large:
+        min_size: 50
+        max_size: 250
+        ratio: 0.025
+      very_large:
+        min_size: 251
+        max_size: 1000
+        ratio: 0.005
+
+  individuals:
+    propensities:
+      start_education:
+        mean: 0.12
+        std: 0.05
+      internal_training:
+        mean: 0.35
+        std: 0.12
+      quit_job:              # död sedan 0085, läses av ingen; kvar tills kolumnen tas bort
+        mean: 0.14
+        std: 0.07
+      career_break:
+        mean: 0.06
+        std: 0.03
+      internal_job_change:
+        mean: 0.10
+        std: 0.04
+
+  employer:
+    training_prob_by_size:
+      small: 0.05
+      medium: 0.15
+      large: 0.40
+
+# === MUNICIPALITY-SPECIFIC OVERRIDES ===
+# Mora ärvs från mora_baseline.yml. Orsa och Älvdalen: arbetskraftsandel och
+# arbetslöshet är SATTA SOM PLATSHÅLLARE på Dalarnas nivå och ska verifieras
+# mot Arbetsförmedlingens kommunstatistik och AKU innan scenariot används för
+# något annat än att pröva pendlingsmekaniken.
+#
+# Älvdalens siffror är de mest osäkra av de tre: kommunen är liten (6 800
+# invånare) och har en säsongstung arbetsmarknad, vilket gör årsgenomsnitt
+# mindre representativa än i Mora.
+municipality_overrides:
+  2062: # Mora
+    education_levels:
+      low: {curve: linear, start: 0.23, end: 0.18, start_year: 2024, end_year: 2030}
+      medium: 0.63
+      high: {by_year: {2024: 0.14, 2027: 0.18, 2030: 0.19}}
+    workforce_ratio: 0.56
+    unemployment_rate: 0.065
+  2034: # Orsa -- platshållare, se ovan
+    workforce_ratio: 0.50
+    unemployment_rate: 0.075
+    education_levels:
+      low: 0.30
+      medium: 0.60
+      high: 0.10
+  2039: # Älvdalen -- platshållare, se ovan
+    workforce_ratio: 0.48
+    unemployment_rate: 0.070
+    education_levels:
+      low: 0.32
+      medium: 0.59
+      high: 0.09
+
+hiring_policy: "random"
+wage_policy: "market_adjust"
+
+simulation:
+  logfile_path: output/ovansiljan_3_kommuner.log

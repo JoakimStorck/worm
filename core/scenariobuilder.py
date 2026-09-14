@@ -679,6 +679,54 @@ class ScenarioBuilder:
 
         return df
 
+    def jobbandelar(self, municipalities, year):
+        """Hur scenariots jobb ska FÖRDELAS mellan kommunerna.
+
+        Tidigare fick varje kommun target_jobs = workforce - n_unemployed,
+        alltså exakt lika många jobb som den har sysselsatta invånare.
+        Nettopendlingen blev därmed noll i varje kommun per konstruktion och
+        det enda som kunde uppstå var symmetriska bruttoflöden. I SCB:s tal
+        för Ovansiljan har Mora 1.11 jobb per sysselsatt invånare, Orsa 0.74
+        och Älvdalen 0.83; modellen gav 1.00 åt alla tre. Ingen justering av
+        commute_cost_per_km kan ändra det -- parametern skalar bruttoflödena
+        men kan inte skapa ett netto.
+
+        employment_municipality_sni räknar sysselsatta efter ARBETSSTÄLLE, och
+        summan per kommun är alltså dagbefolkningen. Kvoten mellan kommunernas
+        dagbefolkning är den fördelning jobben ska ha.
+
+        SUMMAN BEVARAS. Scenariot är ett slutet system: en Morabo som i
+        verkligheten arbetar i Falun kan i modellen inte pendla ut, eftersom
+        Falun inte finns. Skulle totalen tas rakt ur arbetsställestatistiken
+        skulle Ovansiljan få fler jobb än sysselsatta invånare och skillnaden
+        dyka upp som vakanser ingen kan fylla. Det är fördelningen som hämtas
+        ur data, inte nivån.
+
+        Returnerar dict kommun -> andel, eller None om underlaget saknas för
+        någon kommun. Då faller anroparen tillbaka på den gamla fördelningen,
+        som är fel men känd.
+        """
+        from core.database.utils import fetch_with_fallback
+        dag = {}
+        for kod in municipalities:
+            try:
+                df, _ = fetch_with_fallback(
+                    self.conn, table="employment_municipality_sni",
+                    filters={"municipal_code": str(kod)}, year_col="year",
+                    desired_year=year, columns="employed")
+            except Exception as e:
+                log(f"[jobbandelar] {kod}: {e} -- faller tillbaka på "
+                    f"kommunens egen arbetskraft.")
+                return None
+            n = pd.to_numeric(df["employed"], errors="coerce").sum()
+            if not n or n <= 0:
+                log(f"[jobbandelar] {kod}: ingen arbetsställestatistik -- "
+                    f"faller tillbaka på kommunens egen arbetskraft.")
+                return None
+            dag[kod] = float(n)
+        tot = sum(dag.values())
+        return {k: v / tot for k, v in dag.items()}
+
     def generate(self, year=None):
         t0 = time.time()
         log(f"[TIMER] generate: startat")
@@ -694,6 +742,26 @@ class ScenarioBuilder:
         all_events = []
 
         unemployment_rate = self.cfg_reader.config.get("unemployment_rate", 0.0)
+
+        # JOBBENS FÖRDELNING MELLAN KOMMUNERNA. Totalen är summan av
+        # kommunernas sysselsatta invånare, som förut -- scenariot är slutet
+        # och jobben måste räcka till precis dem som finns. Det som ändras är
+        # hur totalen delas: efter arbetsställestatistiken i stället för efter
+        # varje kommuns egen arbetskraft. Se jobbandelar().
+        andelar = None
+        total_jobs = 0
+        if len(municipalities) > 1:
+            for kod in municipalities:
+                bef = self.cfg_reader.get_population(kod)[0]
+                wr = self.cfg_reader.get_workforce_ratio(kod)[0]
+                ur = self.cfg_reader.get_unemployment_rate(kod, year)[0]
+                wf = int(round(bef * wr))
+                total_jobs += wf - int(round(wf * ur))
+            andelar = self.jobbandelar(municipalities, year)
+            if andelar:
+                log("[jobbandelar] " + ", ".join(
+                    f"{k}: {100 * v:.1f} %" for k, v in andelar.items())
+                    + f" av {total_jobs} jobb")
 
         for municipal_code in municipalities:
             t1 = time.time()
@@ -717,7 +785,13 @@ class ScenarioBuilder:
             t_emp0 = time.time()
             workforce = int(round(population * workforce_ratio))
             n_unemployed = int(round(workforce * local_unemployment_rate))
-            target_jobs = workforce - n_unemployed
+            if andelar:
+                target_jobs = int(round(total_jobs * andelar[municipal_code]))
+                log(f"  jobb: {target_jobs} (arbetsställestatistik), mot "
+                    f"{workforce - n_unemployed} sysselsatta invånare "
+                    f"-- dag/natt {target_jobs / max(workforce - n_unemployed, 1):.2f}")
+            else:
+                target_jobs = workforce - n_unemployed
 
             employer_dist_cfg = self.cfg_reader.get_employer_distribution(municipal_code)
             employers = self.generate_employers_with_target_jobs(
