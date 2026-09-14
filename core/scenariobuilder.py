@@ -101,6 +101,11 @@ class ScenarioBuilder:
                 desired_year=year,
                 columns="sni_code, employed"
             )
+            # TOTALEN ÄR INTE EN NÄRINGSGREN. Med den kvar i urvalet skulle
+            # hälften av arbetsgivarna dras till en kod som betyder "alla
+            # branscher". Före rättningen av extract_sni_code bar totalen
+            # dessutom koden A, och drogs alltså som jordbruk.
+            sni_df = sni_df[sni_df['sni_code'].astype(str).str.upper() != "TOTAL"]
             total = sni_df['employed'].sum()
             if total > 0:
                 sni_df['prob'] = sni_df['employed'] / total
@@ -115,6 +120,7 @@ class ScenarioBuilder:
                 desired_year=year,
                 columns="sni_code, workplaces"
             )
+            sni_df = sni_df[sni_df['sni_code'].astype(str).str.upper() != "TOTAL"]
             total = sni_df['workplaces'].sum()
             if total > 0:
                 sni_df['prob'] = sni_df['workplaces'] / total
@@ -691,9 +697,17 @@ class ScenarioBuilder:
         commute_cost_per_km kan ändra det -- parametern skalar bruttoflödena
         men kan inte skapa ett netto.
 
-        employment_municipality_sni räknar sysselsatta efter ARBETSSTÄLLE, och
-        summan per kommun är alltså dagbefolkningen. Kvoten mellan kommunernas
-        dagbefolkning är den fördelning jobben ska ha.
+        Källan är totalraden i employment_deso_sni, inte
+        employment_municipality_sni. Den senare såg ut att duga -- den räknar
+        efter arbetsställe -- men är ett urval: den ger Mora 4 250 sysselsatta
+        på 164 arbetsställen när kommunen har omkring 10 000 jobb, och
+        summorna är jämna femtiotal. Andelarna blev 81/12/7 mot de riktiga
+        66/15/19, alltså Älvdalen halverat. Att fetch_sni_distribution läser
+        kolumnen workplaces och inte employed ur samma tabell var tecknet på
+        att employed inte bär det den ser ut att bära.
+
+        Kolumnsumman i pendlingsmatrisen är jobben i kommunen, och kvoten
+        mellan kommunerna är den fördelning jobben ska ha.
 
         SUMMAN BEVARAS. Scenariot är ett slutet system: en Morabo som i
         verkligheten arbetar i Falun kan i modellen inte pendla ut, eftersom
@@ -706,24 +720,48 @@ class ScenarioBuilder:
         någon kommun. Då faller anroparen tillbaka på den gamla fördelningen,
         som är fel men känd.
         """
-        from core.database.utils import fetch_with_fallback
+        koder = [str(k) for k in municipalities]
+        # KÄLLAN ÄR TOTALRADEN I employment_deso_sni. DeSO-koden inleds med
+        # kommunkoden, och "A-U+US Total" är kommunens dagbefolkning summerad
+        # över dess DeSO-områden -- sysselsatta efter ARBETSSTÄLLE, alltså
+        # jobben där de ligger. Sekretessprickade celler gör att en summa över
+        # branschraderna underskattar, mest i små kommuner; totalraden prickas
+        # inte.
+        #
+        # employment_municipality_sni duger inte: den ger Mora 4 250
+        # sysselsatta på 164 arbetsställen när kommunen har omkring 10 000
+        # jobb, och summorna är jämna femtiotal. Andelarna blev 81/12/7 mot de
+        # riktiga 66/15/19, alltså Älvdalen halverat, och den fördelningen gav
+        # en körning med dag/natt 1.21 för Mora och 0.49 för Älvdalen.
+        try:
+            df = pd.read_sql(
+                "SELECT deso_code, year, sni_code, employed "
+                "FROM employment_deso_sni", self.conn)
+        except Exception as e:
+            log(f"[jobbandelar] employment_deso_sni saknas ({e}) -- faller "
+                f"tillbaka på kommunernas egen arbetskraft.")
+            return None
+        if df.empty:
+            return None
+        df = df[df["sni_code"].astype(str).str.upper() == "TOTAL"]
+        if df.empty:
+            log("[jobbandelar] ingen totalrad i employment_deso_sni -- "
+                "tabellen är laddad med en äldre extract_sni_code där totalen "
+                "kolliderade med näringsgren A. Ladda om den.")
+            return None
+        if "year" in df.columns and df["year"].notna().any():
+            df = df[df["year"] == df["year"].max()]
+        df["kom"] = df["deso_code"].astype(str).str[:4]
         dag = {}
-        for kod in municipalities:
-            try:
-                df, _ = fetch_with_fallback(
-                    self.conn, table="employment_municipality_sni",
-                    filters={"municipal_code": str(kod)}, year_col="year",
-                    desired_year=year, columns="employed")
-            except Exception as e:
-                log(f"[jobbandelar] {kod}: {e} -- faller tillbaka på "
-                    f"kommunens egen arbetskraft.")
+        for kod in koder:
+            n = float(pd.to_numeric(df[df["kom"] == str(kod)]["employed"],
+                                    errors="coerce").sum())
+            if n <= 0:
+                log(f"[jobbandelar] {kod}: ingen dagbefolkning i "
+                    f"employment_deso_sni -- faller tillbaka på kommunernas "
+                    f"egen arbetskraft.")
                 return None
-            n = pd.to_numeric(df["employed"], errors="coerce").sum()
-            if not n or n <= 0:
-                log(f"[jobbandelar] {kod}: ingen arbetsställestatistik -- "
-                    f"faller tillbaka på kommunens egen arbetskraft.")
-                return None
-            dag[kod] = float(n)
+            dag[kod] = n
         tot = sum(dag.values())
         return {k: v / tot for k, v in dag.items()}
 

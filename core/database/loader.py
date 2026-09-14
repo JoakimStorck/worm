@@ -292,11 +292,29 @@ def update_deso_population_from_csv(pop_csv, db_path="data/worm.sqlite3"):
     log(f"Uppdaterade population för {len(pop)} DeSO-zoner (skrev om hela tabellen).")
 
 
+# Aggregatetiketter i SCB:s SNI-uttag. "A-U+US Total" är summan över alla
+# näringsgrenar och inte en näringsgren. Den måste ha en EGEN nyckel: med
+# uttrycket nedan stannade matchningen vid bindestrecket och gav "A", samma
+# kod som näringsgren A, jordbruk och skogsbruk. Raderna kolliderade,
+# drop_duplicates behöll den som låg först i filen -- totalen -- och
+# jordbruksraden försvann. Kod A i employment_deso_sni innehöll därmed hela
+# kommunens sysselsättning: 10 184 för Mora mot jordbrukets verkliga
+# storleksordning. fetch_sni_distribution läser tabellen för att välja bransch
+# åt varje arbetsgivare, så varje flerkommunskörning placerade en stor andel
+# av arbetsgivarna i jordbruk och skogsbruk och drog yrkesfördelningen mot den
+# delen av uppgiftsrummet.
+SNI_TOTAL = "TOTAL"
+
+
 def extract_sni_code(s):
     if not isinstance(s, str):
         return ""
-    m = re.match(r"^([A-U\+\d]+)", s.strip())
-    return m.group(1) if m else s.strip()
+    t = s.strip()
+    # Totalen först: den innehåller ett bindestreck som bryter uttrycket nedan.
+    if re.match(r"^[A-U]\s*-\s*[A-U]", t) or t.lower().startswith("total"):
+        return SNI_TOTAL
+    m = re.match(r"^([A-U\+\d]+)", t)
+    return m.group(1) if m else t
 
 def extract_sni_description(s):
     if not isinstance(s, str):
@@ -323,8 +341,23 @@ def load_employment_deso_sni(csv_file, db_path="data/worm.sqlite3", year=2023):
     df_out = df[["region", "year", "sni_code", "sni_description", "employed"]]
     df_out = df_out.rename(columns={"region": "deso_code"})
 
-    # Ta bort dubletter
-    df_out = df_out.drop_duplicates(subset=["deso_code", "year", "sni_code"])
+    # DUBLETTER SKA LARMA, INTE FÖRSVINNA. Raden fanns för att filen har en
+    # könsdimension, men den dolde också kodkollisionen ovan i två år: två
+    # olika näringsgrenar med samma nyckel såg ut som en dublett, och den
+    # första vann tyst.
+    dubbletter = df_out.duplicated(subset=["deso_code", "year", "sni_code"],
+                                   keep=False)
+    if dubbletter.any():
+        exempel = (df_out[dubbletter]
+                   .groupby(["deso_code", "sni_code"])["sni_description"]
+                   .apply(lambda s: sorted(set(s))))
+        kolliderande = [f"{k[1]}: {v}" for k, v in exempel.items() if len(v) > 1][:3]
+        if kolliderande:
+            raise ValueError(
+                "Olika näringsgrenar får samma sni_code: "
+                + "; ".join(kolliderande)
+                + ". Rätta extract_sni_code i stället för att släppa raderna.")
+        df_out = df_out.drop_duplicates(subset=["deso_code", "year", "sni_code"])
 
     # Skriv till SQLite. append mot en tabell med primarnyckel
     # (deso_code, year, sni_code) gjorde en andra korning av

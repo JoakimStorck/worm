@@ -30,32 +30,43 @@ class _Byggare:
 
 def _db(rader):
     conn = sqlite3.connect(":memory:")
-    pd.DataFrame(rader).to_sql("employment_municipality_sni", conn, index=False)
+    pd.DataFrame(rader).to_sql("employment_deso_sni", conn, index=False)
     return conn
 
 
-def _rader(per_kommun, year=2023):
-    """En rad per kommun och SNI, så att summeringen faktiskt prövas."""
+def _rader(per_kommun, year=2023, med_total=True, deso_per_kommun=3):
+    """Totalrader OCH branschrader, fördelade över flera DeSO per kommun --
+    andelarna ska summera per kommun och bara över totalraderna."""
     ut = []
     for kod, tot in per_kommun.items():
-        for i, del_ in enumerate((tot // 2, tot - tot // 2)):
-            ut.append({"municipal_code": kod, "year": year,
-                       "sni_code": f"S{i}", "employed": del_, "workplaces": 1})
+        delar = [tot // deso_per_kommun] * deso_per_kommun
+        delar[-1] = tot - sum(delar[:-1])
+        for i, d in enumerate(delar):
+            deso = f"{kod}A{i:04d}"
+            if med_total:
+                ut.append({"deso_code": deso, "year": year,
+                           "sni_code": "TOTAL", "employed": d})
+            # Branschrader: ska INTE räknas med i andelarna.
+            ut.append({"deso_code": deso, "year": year,
+                       "sni_code": "A", "employed": d // 4})
+            ut.append({"deso_code": deso, "year": year,
+                       "sni_code": "Q", "employed": d // 3})
     return ut
 
 
 def test_andelarna_foljer_arbetsstallestatistiken():
-    conn = _db(_rader({"2062": 9934, "2034": 2235, "2039": 1600}))
+    conn = _db(_rader({"2062": 9948, "2034": 2235, "2039": 2933}))
     a = _Byggare(conn).jobbandelar(["2062", "2034", "2039"], 2023)
     assert round(sum(a.values()), 6) == 1.0
-    assert a["2062"] > a["2034"] > a["2039"]
-    assert round(a["2062"], 3) == round(9934 / (9934 + 2235 + 1600), 3)
+    # Ovansiljans faktiska ordning: Mora, Älvdalen, Orsa.
+    assert a["2062"] > a["2039"] > a["2034"]
+    assert round(a["2062"], 3) == round(9948 / (9948 + 2235 + 2933), 3)
 
 
 def test_summan_bevaras_och_asymmetrin_uppstar():
     """Totalen är scenariots egen; fördelningen kommer ur data. Mora ska få
     fler jobb än sina egna sysselsatta invånare, Orsa färre."""
-    conn = _db(_rader({"2062": 9934, "2034": 2235}))
+    conn = _db(_rader({"2062": 9948, "2034": 2235}))
     a = _Byggare(conn).jobbandelar(["2062", "2034"], 2023)
     boende = {"2062": 8953, "2034": 3013}
     total = sum(boende.values())
@@ -65,22 +76,37 @@ def test_summan_bevaras_och_asymmetrin_uppstar():
     assert jobb["2034"] / boende["2034"] < 0.85
 
 
+def test_branschraderna_raknas_inte_med():
+    """Andelen ska bygga på totalraden. Summeras branschraderna med blir
+    talet ungefär dubbelt och dessutom snedvridet av sekretessprickning."""
+    conn = _db(_rader({"2062": 9948, "2034": 2235}))
+    a = _Byggare(conn).jobbandelar(["2062", "2034"], 2023)
+    assert round(a["2062"], 3) == round(9948 / (9948 + 2235), 3)
+
+
+def test_utan_totalrad_ges_fallback():
+    """En tabell laddad med den gamla extract_sni_code har ingen TOTAL-kod --
+    totalen ligger dold under näringsgren A. Då ska andelarna inte gissas."""
+    conn = _db(_rader({"2062": 9948, "2034": 2235}, med_total=False))
+    assert _Byggare(conn).jobbandelar(["2062", "2034"], 2023) is None
+
+
 def test_en_kommun_utan_underlag_ger_fallback():
     """Saknas arbetsställestatistik för NÅGON kommun används den gamla
     fördelningen för alla. En blandning -- data för några, egen arbetskraft
     för resten -- ger en total som inte stämmer med någondera."""
-    conn = _db(_rader({"2062": 9934}))
+    conn = _db(_rader({"2062": 9948}))
     assert _Byggare(conn).jobbandelar(["2062", "2034"], 2023) is None
 
 
 def test_nollrader_raknas_som_saknat_underlag():
-    conn = _db(_rader({"2062": 9934, "2034": 0}))
+    conn = _db(_rader({"2062": 9948, "2034": 0}))
     assert _Byggare(conn).jobbandelar(["2062", "2034"], 2023) is None
 
 
 def test_aldre_ar_duger_via_fallback():
     """fetch_with_fallback tar närmaste tidigare år. Ett scenario som startar
     2024 ska kunna använda 2023 års statistik."""
-    conn = _db(_rader({"2062": 9934, "2034": 2235}, year=2023))
+    conn = _db(_rader({"2062": 9948, "2034": 2235}, year=2023))
     a = _Byggare(conn).jobbandelar(["2062", "2034"], 2024)
     assert a is not None and round(sum(a.values()), 6) == 1.0
