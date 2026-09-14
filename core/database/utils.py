@@ -3,6 +3,26 @@
 import pandas as pd
 from core.log import log 
 
+def kommunkod(serie):
+    """Kommunkoder som fyrsiffriga strängar med bevarad inledande nolla.
+
+    SCB:s koder är fyra siffror och hundratjugosju av dem börjar med nolla --
+    hela Stockholms, Uppsala, Södermanlands, Östergötlands, Jönköpings,
+    Kronobergs och Kalmar län. Läses ett lager ur en gpkg där kolumnen är
+    numerisk blir 0180 till 180, och varje uppslag mot kommunkod faller tyst:
+    ingen tabell klagar, raden finns bara inte. Dalarnas koder börjar på 2 och
+    överlever, vilket är varför felet kan ligga i en kodbas i åratal utan att
+    märkas.
+
+    to_sql med if_exists="replace" släpper dessutom kolumntypen ur schema.py
+    och sätter den efter dataframens dtype, så TEXT i CREATE TABLE räcker
+    inte: typen måste vara rätt redan i ramen.
+    """
+    return (pd.Series(serie).astype("string").str.strip()
+            .str.replace(r"\.0$", "", regex=True)
+            .str.zfill(4))
+
+
 def fetch_with_fallback(conn, table, filters, year_col='year', desired_year=None, columns='*'):
     """
     Hämtar rader från valfri tabell med dynamiska filter och fallback till senaste tillgängliga år.

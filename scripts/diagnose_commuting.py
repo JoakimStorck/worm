@@ -166,11 +166,16 @@ def main():
         conn = sqlite3.connect(a.db)
         for kod, n in conn.execute(
                 "SELECT municipal_code, municipality FROM municipalities"):
-            namn[str(kod)] = n
+            # ZFILL VID UPPSLAG. Koderna i commuting är fyrsiffriga med
+            # inledande nolla; municipalities kan ha dem numeriska om lagret
+            # laddats före 0132. Då slog 0180 aldrig igenom och Stockholm
+            # skrevs ut som sin kod, medan Dalarnas koder såg riktiga ut.
+            namn[str(kod).strip().zfill(4)] = n
         conn.close()
     except Exception:
         pass
-    n = lambda k: namn.get(k, k)  # noqa: E731
+    def n(k):
+        return namn.get(str(k).strip().zfill(4), str(k))
 
     print(f"\nKörning: {os.path.basename(run_dir.rstrip('/'))}   "
           f"SCB: {ar}   kommuner: {', '.join(n(k) for k in koder)}\n")

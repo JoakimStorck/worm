@@ -7,6 +7,7 @@ import locale
 import json
 
 from core.log import log 
+from core.database.utils import kommunkod
 
 locale.setlocale(locale.LC_NUMERIC, "C")
 
@@ -24,7 +25,8 @@ def load_municipalities_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
     # Välj kolumner (justera om fältnamn skiljer sig)
     cols = ["municipal_code", "municipality", "county_code", "county", "population", "area_ha", "area_km2", "geom_wkt"]
-    gdf = gdf[cols]
+    gdf = gdf[cols].copy()
+    gdf["municipal_code"] = kommunkod(gdf["municipal_code"])
     conn = sqlite3.connect(db_path)
     gdf.to_sql("municipalities", conn, if_exists="replace", index=False)
     conn.close()
@@ -40,7 +42,7 @@ def load_urban_areas_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf["uuid"] = gdf["uuid"] if "uuid" in gdf.columns else None
     gdf["urban_area_id"] = gdf["tatortskod"] if "tatortskod" in gdf.columns else None
     gdf["urban_area"] = gdf["tatort"] if "tatort" in gdf.columns else None
-    gdf["municipal_code"] = gdf["kommun"] if "kommun" in gdf.columns else None
+    gdf["municipal_code"] = kommunkod(gdf["kommun"]) if "kommun" in gdf.columns else None
     gdf["municipality"] = gdf["kommunnamn"] if "kommunnamn" in gdf.columns else None
     gdf["county_code"] = gdf["lan"] if "lan" in gdf.columns else None
     gdf["county"] = gdf["lannamn"] if "lannamn" in gdf.columns else None
@@ -74,7 +76,7 @@ def load_small_localities_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf["object_id"] = gdf["objectid"] if "objectid" in gdf.columns else gdf.index.astype(str)
     gdf["uuid"] = gdf["uuid"] if "uuid" in gdf.columns else None
     gdf["small_locality_id"] = gdf["smaort"] if "smaort" in gdf.columns else None
-    gdf["municipal_code"] = gdf["kommun"] if "kommun" in gdf.columns else None
+    gdf["municipal_code"] = kommunkod(gdf["kommun"]) if "kommun" in gdf.columns else None
     gdf["municipality"] = gdf["kommunnamn"] if "kommunnamn" in gdf.columns else None
     gdf["county_code"] = gdf["lan"] if "lan" in gdf.columns else None
     gdf["county"] = gdf["lannamn"] if "lannamn" in gdf.columns else None
@@ -107,12 +109,12 @@ def load_commercial_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
 
     # Säkerställ att kommunkod är STRÄNG
-    gdf["kommunkod"] = gdf["kommunkod"].astype(str)
+    gdf["kommunkod"] = kommunkod(gdf["kommunkod"])
 
     # Ladda kommunregister och säkerställ sträng
     conn = sqlite3.connect(db_path)
     municipalities = pd.read_sql("SELECT municipal_code, municipality FROM municipalities", conn)
-    municipalities["municipal_code"] = municipalities["municipal_code"].astype(str)
+    municipalities["municipal_code"] = kommunkod(municipalities["municipal_code"])
     conn.close()
 
     # Lägg in kommunnamn via merge
@@ -122,7 +124,7 @@ def load_commercial_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     # Skapa rätt kolumner
     gdf["id"] = gdf["ho_kod"].astype(str)
     gdf["zone_code"] = gdf["ho_kod"].astype(str)
-    gdf["municipal_code"] = gdf["kommunkod"].astype(str)
+    gdf["municipal_code"] = kommunkod(gdf["kommunkod"])
     # gdf["municipality"] är nu från merge
     gdf["county_code"] = gdf["lankod"].astype(str)
     gdf["county"] = None  # Fyll om det finns länsnamn
@@ -158,12 +160,12 @@ def load_business_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
 
     # Säkerställ STRÄNG och ledande nollor
-    gdf["kommunkod"] = gdf["kommunkod"].astype(str).str.zfill(4)
+    gdf["kommunkod"] = kommunkod(gdf["kommunkod"])
 
     # Ladda kommunregister och säkerställ sträng + ledande nollor
     conn = sqlite3.connect(db_path)
     municipalities = pd.read_sql("SELECT municipal_code, municipality FROM municipalities", conn)
-    municipalities["municipal_code"] = municipalities["municipal_code"].astype(str).str.zfill(4)
+    municipalities["municipal_code"] = kommunkod(municipalities["municipal_code"])
     conn.close()
 
     # DEBUG: Skriv ut Faluns kod och namn i båda tabeller innan merge
@@ -183,7 +185,7 @@ def load_business_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
 
     gdf["id"] = gdf["vo_kod"].astype(str)
     gdf["zone_code"] = gdf["vo_kod"].astype(str)
-    gdf["municipal_code"] = gdf["kommunkod"].astype(str)
+    gdf["municipal_code"] = kommunkod(gdf["kommunkod"])
     gdf["county_code"] = gdf["lankod"].astype(str)
     gdf["county"] = None
     gdf["zone_type"] = gdf["omradestyp"] if "omradestyp" in gdf.columns else None
@@ -215,7 +217,7 @@ def load_leisure_house_zones_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     log("Leisure house zones - columns:", gdf.columns)
     gdf["id"] = gdf["fo_kod"].astype(str) if "fo_kod" in gdf.columns else gdf.index.astype(str)
     gdf["name"] = gdf["kommunnamn"] + " - " + gdf.index.astype(str) if "kommunnamn" in gdf.columns else "Leisure house zone " + gdf.index.astype(str)
-    gdf["municipal_code"] = gdf["kommunkod"].astype(str) if "kommunkod" in gdf.columns else None
+    gdf["municipal_code"] = kommunkod(gdf["kommunkod"]) if "kommunkod" in gdf.columns else None
     gdf["geom_wkt"] = gdf.geometry.to_wkt()
     cols = ["id", "name", "municipal_code", "geom_wkt"]
     gdf = gdf[cols]
@@ -234,7 +236,7 @@ def load_deso_gpkg(gpkg_path, db_path="data/worm.sqlite3"):
     gdf["deso_code"] = gdf["desokod"] if "desokod" in gdf.columns else None
     gdf["regso_code"] = gdf["regsokod"] if "regsokod" in gdf.columns else None
     gdf["county_code"] = gdf["lanskod"] if "lanskod" in gdf.columns else None
-    gdf["municipal_code"] = gdf["kommunkod"] if "kommunkod" in gdf.columns else None
+    gdf["municipal_code"] = kommunkod(gdf["kommunkod"]) if "kommunkod" in gdf.columns else None
     gdf["municipality"] = gdf["kommunnamn"] if "kommunnamn" in gdf.columns else None
     gdf["version"] = gdf["version"] if "version" in gdf.columns else None
 

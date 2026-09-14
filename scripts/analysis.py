@@ -438,9 +438,9 @@ def scb_pendlingsandel(kommuner, db_path="data/worm.sqlite3"):
         return None, None
     if df.empty:
         return None, None
-    koder = {str(k).strip() for k in kommuner if str(k).strip()}
-    df["home_municipality"] = df["home_municipality"].astype(str)
-    df["work_municipality"] = df["work_municipality"].astype(str)
+    koder = {str(k).strip().zfill(4) for k in kommuner if str(k).strip()}
+    for kol in ("home_municipality", "work_municipality"):
+        df[kol] = df[kol].astype(str).str.strip().str.zfill(4)
     df = df[df["home_municipality"].isin(koder) & df["work_municipality"].isin(koder)]
     if df.empty:
         return None, None

@@ -125,7 +125,7 @@ def kommunpolygoner(db_path, koder, tolerans=200.0):
         return []
     ut = []
     for _, rad in gdf.iterrows():
-        kod = str(rad.get("municipal_code", ""))
+        kod = str(rad.get("municipal_code", "")).strip().zfill(4)
         if koder and kod not in koder:
             continue
         try:
@@ -164,7 +164,7 @@ def desopolygoner(db_path, koder, tolerans=150.0):
         return []
     ut = []
     for _, rad in gdf.iterrows():
-        kod = str(rad.get("municipal_code", ""))
+        kod = str(rad.get("municipal_code", "")).strip().zfill(4)
         if koder and kod not in koder:
             continue
         try:
@@ -256,7 +256,8 @@ def scb_pendling(db_path, koder):
         df = df[df["year"] == df["year"].max()]
     ut = {}
     for _, r in df.iterrows():
-        h, a = str(r["home_municipality"]), str(r["work_municipality"])
+        h = str(r["home_municipality"]).strip().zfill(4)
+        a = str(r["work_municipality"]).strip().zfill(4)
         if koder and (h not in koder or a not in koder):
             continue
         ut[f"{h}>{a}"] = int(r["employed"])
