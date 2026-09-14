@@ -11,6 +11,36 @@ from core.geography.geoutils import assign_deso_code, random_points_in_polygon
 from core.log import log
 from core.occupations.utils import sample_from_centers_jitter, sample_centers_xy_jitter
 
+def _lagervikter(layer_gdfs, municipal_code=None):
+    """Sannolikheter för lager och zon ur kolumnen weight_field.
+
+    Returnerar (lager_namn, lager_p, zon_vikt): lagrets andel av kommunens
+    sammanlagda vikt, och inom varje lager zonernas andel av lagrets vikt.
+
+    Ett lager utan viktunderlag faller tillbaka på likformigt INOM lagret men
+    får bara sin zonandel av lagervalet -- inte en fjärdedel bara för att det
+    finns. Skillnaden syns i småorter: de är många och små, och med likformigt
+    lagerval fick de lika stor andel av arbetsgivarna som tätorterna.
+    """
+    namn, vikt, zon = [], [], {}
+    for lager, gdf in layer_gdfs.items():
+        if gdf is None or not len(gdf):
+            continue
+        w = pd.to_numeric(gdf.get("weight_field"), errors="coerce")
+        w = (w if w is not None else pd.Series(dtype=float)).fillna(0.0).clip(lower=0.0)
+        if len(w) != len(gdf) or w.sum() <= 0:
+            w = pd.Series(1.0, index=gdf.index)
+            log(f"[VARNING] Lager '{lager}' saknar viktunderlag i kommun "
+                f"{municipal_code} -- likformigt inom lagret.")
+        namn.append(lager)
+        vikt.append(float(w.sum()))
+        zon[lager] = (w / w.sum()).to_numpy()
+    if not namn:
+        raise ValueError(f"Inga zonlager med geometri för kommun {municipal_code}")
+    p = np.array(vikt, dtype=float)
+    return namn, p / p.sum(), zon
+
+
 class ScenarioBuilder:
     DEFAULT_WEIGHT_FIELDS = {
         "business_zones": ["num_workplaces", "num_employed", "population", "area_ha"],
@@ -190,19 +220,33 @@ class ScenarioBuilder:
         bins, probs, class_names = self.get_size_distribution_from_config(employer_dist_cfg)
         rng = self.rng
 
+        # VIKTERNA ANVÄNDS NU. fetch_zones normaliserade redan varje lagers
+        # viktfält -- num_workplaces för verksamhets- och handelsområden,
+        # population för tätorter -- till kolumnen weight_field, men slingan
+        # drog med gdf.sample(1), alltså likformigt: en DeSO med 2 000
+        # anställda hade samma sannolikhet som en med fem. Hela
+        # layer_configs-blocket i scenariofilen var därmed verkningslöst.
+        #
+        # LAGRET VÄLJS OCKSÅ VIKTAT, efter lagrets sammanlagda vikt i
+        # kommunen. Förut gav rng.choice(all_layers) 25 procent åt vardera av
+        # fyra lager, så småorter fick lika stor andel av arbetsgivarna som
+        # tätorter. allocation_order ser ut som en prioritetsordning men är en
+        # lista att välja ur, och likformigt val gör ordningen betydelselös.
+        #
+        # Det spelar roll för pendlingen: var arbetsgivarna ligger INOM
+        # kommunen avgör avstånden, och medianpendlingen är det enda vi kan
+        # pröva mot SCB innan jobbantalen per kommun är rätt.
+        lager_namn, lager_p, zon_vikt = _lagervikter(layer_gdfs, municipal_code)
+
         employers = []
         n_jobs = 0
-        size_idx = 0
 
         while n_jobs < target_jobs:
             class_i = rng.choice(len(bins), p=probs)
             size = rng.integers(low=bins[class_i][0], high=bins[class_i][1] + 1)
-            all_layers = list(layer_gdfs.keys())
-            layer = rng.choice(all_layers)
+            layer = lager_namn[rng.choice(len(lager_namn), p=lager_p)]
             gdf = layer_gdfs[layer]
-            # random_state ur scenariots generator: None betyder pandas globala
-            # np.random, en andra ström vid sidan av self.rng (0109).
-            row = gdf.sample(1, random_state=self.rng).iloc[0]
+            row = gdf.iloc[rng.choice(len(gdf), p=zon_vikt[layer])]
             pt = self.random_points_in_polygon(row.geometry, 1)[0]
             deso_code = row.get('deso_code', None)
 
@@ -225,9 +269,14 @@ class ScenarioBuilder:
             })
             n_jobs += size
 
+        # Sista arbetsgivaren kapas till målet. Blir den noll ska den bort --
+        # en arbetsgivare utan jobb bidrar med en punkt i geografin och en rad
+        # i statistiken utan att någon kan anställas där.
         overflow = n_jobs - target_jobs
         if overflow > 0:
             employers[-1]['size'] -= overflow
+            if employers[-1]['size'] <= 0:
+                employers.pop()
 
         employers_df = gpd.GeoDataFrame(employers, geometry='geometry')
         log(f"Antal arbetsgivare: {len(employers_df)} (mål: {target_jobs} jobb)")
