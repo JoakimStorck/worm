@@ -577,6 +577,7 @@ def handle_close_vacancy(event, world):
     if 'accepted_job_id' not in ind.columns:
         ind['accepted_job_id'] = pd.Series([None] * len(ind), index=ind.index,
                                            dtype="object")
+        world.refresh_ind()          # ny kolumn: vyerna byggs om (0110)
     ind.at[idx, 'accepted_job_id'] = job_id
 
     # EGEN UPPSÄGNING som konsekvens av erbjudandet, inte som orsak till
@@ -590,6 +591,7 @@ def handle_close_vacancy(event, world):
         if 'notice_job_id' not in ind.columns:
             ind['notice_job_id'] = pd.Series([None] * len(ind), index=ind.index,
                                              dtype="object")
+            world.refresh_ind()      # ny kolumn: vyerna byggs om (0110)
         ind.at[idx, 'notice_job_id'] = job_id
         world.event_logger.log_event(world, event, extra={
             'event_detail': 'quit_job', 'agent_id': idx,

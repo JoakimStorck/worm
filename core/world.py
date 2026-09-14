@@ -674,11 +674,19 @@ class World(IndividualViews):
         self._write_competence_summary()
 
     def _write_competence_summary(self):
+        """Skriver om HELA kolumnerna x_occ, y_occ, chi, xi, r_i, R.
+
+        Anropas varje månad ur evolve_competence, vid uppstart och vid
+        omskolning. En hel kolumn tilldelad byter block i pandas, så
+        kolumnvyerna (0110) tappar kontakten -- verifieringen vid
+        månadsskiftet fångade det på första månaden. Vyerna byggs därför om
+        här, direkt efter skrivningen, i stället för att upptäckas senare."""
         summ = self.circles.summarize()
         ind = self.individuals
         for col in ("x_occ", "y_occ", "chi", "xi", "r_i"):
             ind[col] = summ[col]
         ind["R"] = summ["R"]
+        self.refresh_ind()
 
     def set_active_occupation(self, idx, onet_code, x, y, r_o):
         """Anropas vid tillträde: individen arbetar nu i onet_code, och den

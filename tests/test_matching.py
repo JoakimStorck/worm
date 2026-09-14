@@ -936,3 +936,29 @@ def test_union_of_two_circles_matches_the_general_path():
                 novel = novel * (1.0 - O[ordning[k - 1], ordning[k]] * np.minimum(c_s[k - 1], 1.0))
             q += c_s[k] * novel
         assert np.allclose(snabb, q, rtol=0, atol=0)
+
+
+def test_competence_summary_keeps_the_views_attached():
+    """REGRESSION: _write_competence_summary skriver om HELA kolumnerna x_occ,
+    y_occ, chi, xi och r_i varje månad ur evolve_competence. En hel kolumn
+    tilldelad byter block i pandas, så kolumnvyerna (0110) tappade kontakten
+    och läsningarna gav förra månadens positioner. Verifieringen vid
+    månadsskiftet fångade det på första månaden -- den ska inte behöva göra
+    det: vyerna ska byggas om vid skrivningen."""
+    import pandas as pd
+    from core.individual_views import IndividualViews
+
+    class W(IndividualViews):
+        def _write_competence_summary(self):
+            # samma form som World: hela kolumner tilldelas
+            for col in ("x_occ", "y_occ"):
+                self.individuals[col] = self.individuals[col] + 0.1
+            self.refresh_ind()
+
+    w = W()
+    w.individuals = pd.DataFrame({"individual_id": ["a", "b"], "status": ["employed"] * 2,
+                                  "x_occ": [0.0, 1.0], "y_occ": [0.0, 1.0]})
+    w.refresh_ind()
+    w._write_competence_summary()
+    assert w.get_ind(1, "x_occ") == pytest.approx(1.1)
+    w.refresh_ind(verify=True)      # ska inte kasta
