@@ -77,14 +77,14 @@ def test_anstallning_och_forstorelse_speglas_i_panelen(tmp_path):
     panel, panel_jobb, frames, ticker, _ = spela_upp(d, 40, 40, seed=0)
 
     assert [f["month"] for f in frames] == [1, 2, 3]
-    assert sum(frames[0]["workers"]["state"]) == 0
-    assert sum(frames[1]["workers"]["state"]) == 1      # anställd
-    assert sum(frames[2]["workers"]["state"]) == 0      # och utslagen igen
+    assert frames[0]["workers"]["state"].count("1") == 0
+    assert frames[1]["workers"]["state"].count("1") == 1      # anställd
+    assert frames[2]["workers"]["state"].count("1") == 0      # och utslagen igen
 
     # Jobbet ska vara besatt i ruta 2 och inaktivt i ruta 3.
     pos = list(panel_jobb["job_id"]).index("J0000001")
-    assert frames[1]["jobs"]["state"][pos] == 0
-    assert frames[2]["jobs"]["state"][pos] == 2
+    assert frames[1]["jobs"]["state"][pos] == "0"
+    assert frames[2]["jobs"]["state"][pos] == "2"
 
     # Uppstartens tillsättningar hör inte hemma i händelseströmmen.
     assert len(ticker) == 1 and ticker[0]["worker"] == "2062_i000000"
@@ -105,8 +105,8 @@ def test_uppstartens_anstallningar_las_ur_starttillstandet(tmp_path):
                    not_in_labour_force=0)])
 
     _, _, frames, _, _ = spela_upp(d, 10, 10, seed=0)
-    assert sum(frames[0]["workers"]["state"]) == 5
-    assert frames[0]["jobs"]["state"].count(0) == 5
+    assert frames[0]["workers"]["state"].count("1") == 5
+    assert frames[0]["jobs"]["state"].count("0") == 5
 
 
 def test_aggregaten_kommer_ur_loggen_och_rakas_inte_om(tmp_path):
@@ -209,9 +209,9 @@ def test_jobb_postade_under_korningen_kommer_med(tmp_path):
     assert "N0000001" in set(panel_jobb["job_id"])
     pos = list(panel_jobb["job_id"]).index("N0000001")
     # Månad 1: jobbet är inte fött än.
-    assert frames[0]["jobs"]["state"][pos] == 3
+    assert frames[0]["jobs"]["state"][pos] == "3"
     # Månad 3: fött och besatt, och pendlingen över kommungräns räknad.
-    assert frames[1]["jobs"]["state"][pos] == 0
+    assert frames[1]["jobs"]["state"][pos] == "0"
     assert frames[1]["commuting"] == {"2062>2034": 1}
 
 
@@ -231,8 +231,8 @@ def test_slutlagets_innehavare_smittar_inte_startlaget(tmp_path):
                    not_in_labour_force=0)])
 
     _, _, frames, _, _ = spela_upp(d, 10, 20, seed=0)
-    assert sum(frames[0]["workers"]["state"]) == 0
-    assert frames[0]["jobs"]["state"].count(0) == 0
+    assert frames[0]["workers"]["state"].count("1") == 0
+    assert frames[0]["jobs"]["state"].count("0") == 0
 
 
 def test_career_break_och_utbildning_avslutar_anstallningen(tmp_path):
@@ -262,12 +262,12 @@ def test_career_break_och_utbildning_avslutar_anstallningen(tmp_path):
 
     _, panel_jobb, frames, _, _ = spela_upp(d, 10, 20, seed=0)
 
-    assert [sum(f["workers"]["state"]) for f in frames] == [2, 1, 0]
+    assert [f["workers"]["state"].count("1") for f in frames] == [2, 1, 0]
     # Positionerna ska stå som vakanser, inte som inaktiva: jobben förstörs
     # inte, de blir lediga.
     for jid in ("J0000000", "J0000001"):
         pos = list(panel_jobb["job_id"]).index(jid)
-        assert frames[2]["jobs"]["state"][pos] == 1
+        assert frames[2]["jobs"]["state"][pos] == "1"
 
 
 def test_artalet_hamtas_fran_new_year(tmp_path):
@@ -318,11 +318,76 @@ def test_start_job_som_inte_blev_nagon_anstallning(tmp_path):
 
     _, panel_jobb, frames, ticker, _ = spela_upp(d, 10, 20, seed=0)
 
-    assert sum(frames[1]["workers"]["state"]) == 1
+    assert frames[1]["workers"]["state"].count("1") == 1
     # Hon som behöll sitt jobb ska fortfarande stå på det, och de jobb som
     # aldrig tillträddes ska inte vara besatta.
     besatta = {jid for jid, st in zip(panel_jobb["job_id"],
-                                      frames[1]["jobs"]["state"]) if st == 0}
+                                      frames[1]["jobs"]["state"]) if st == "0"}
     assert besatta == {"J0000005"}
     # Och raden hör inte hemma i händelseströmmen: ingen fick något jobb.
     assert ticker == []
+
+
+def test_deltakodningen_gar_att_bygga_tillbaka(tmp_path):
+    """Jobbreferens och yrkesposition skrivs som ändringar mot föregående
+    bildruta. Ackumuleras de fel visar kartan linjer till fel arbetsställe
+    utan att någon räkning avslöjar det -- antalet anställda stämmer ändå."""
+    d = str(tmp_path / "run_delta")
+    ind, jobb = _skriv_korning(d, n_ind=10)
+    i0 = ind.loc[0, "individual_id"]
+    _logg(d, [
+        _rad(0.0, "new_month", month=1, year=2020, employed=0, unemployed=10,
+             unmatched_jobs=10, active_jobs=10, not_in_labour_force=0),
+        _rad(10.0, "start_job", agent_type="individual", agent_id=i0,
+             chi=1.5, xi=2.5, r_i=0.31, job_id="J0000003", is_bootstrap=False,
+             home_municipality="2062", job_municipality="2062",
+             from_onet="41-2031", to_onet="41-2031", vacancy_age_days=10),
+        _rad(30.0, "new_month", month=2, year=2020, employed=1, unemployed=9,
+             unmatched_jobs=9, active_jobs=10, not_in_labour_force=0),
+        _rad(60.0, "new_month", month=3, year=2020, employed=1, unemployed=9,
+             unmatched_jobs=9, active_jobs=10, not_in_labour_force=0),
+    ])
+
+    panel, panel_jobb, frames, _, _ = spela_upp(d, 0, 0, seed=0)
+
+    # Bygg tillbaka precis som viewern gör.
+    n = len(panel)
+    ref = [-1] * n
+    geom = [(None, None, None)] * n
+    sett = []
+    for f in frames:
+        jd = f["workers"]["job_d"]
+        for k in range(0, len(jd), 2):
+            ref[jd[k]] = jd[k + 1]
+        gd = f["workers"]["geom_d"]
+        for k in range(0, len(gd), 4):
+            geom[gd[k]] = (gd[k + 1], gd[k + 2], gd[k + 3])
+        sett.append(list(ref))
+
+    k0 = list(panel["individual_id"]).index(i0)
+    j3 = list(panel_jobb["job_id"]).index("J0000003")
+    assert sett[0][k0] == -1          # inte anställd ännu
+    assert sett[1][k0] == j3          # anställd, rätt jobb
+    assert sett[2][k0] == j3          # oförändrad: ingen delta behövs
+    assert len(frames[2]["workers"]["job_d"]) == 0
+    assert geom[k0] == (2.5, 1.5, 0.31)
+
+
+def test_hela_populationen_ar_forval(tmp_path):
+    """--panel 0 betyder alla. Urvalet fanns för filstorlekens skull och
+    förde med sig att punkterna visade ett urval medan talen bredvid gällde
+    hela populationen."""
+    d = str(tmp_path / "run_alla")
+    _skriv_korning(d, n_ind=40)
+    _logg(d, [_rad(0.0, "new_month", month=1, year=2020, employed=0,
+                   unemployed=40, unmatched_jobs=40, active_jobs=40,
+                   not_in_labour_force=0)])
+
+    panel, panel_jobb, frames, _, individer = spela_upp(d, 0, 0, seed=0)
+    assert len(panel) == len(individer) == 40
+    assert len(frames[0]["workers"]["state"]) == 40
+    assert len(panel_jobb) == 40
+
+    # Och ett uttryckligt urval fungerar fortfarande.
+    litet, _, _, _, _ = spela_upp(d, 6, 10, seed=0)
+    assert len(litet) == 6

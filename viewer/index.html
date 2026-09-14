@@ -207,6 +207,33 @@ function rita(d) {
   // Arbetslösa ovanpå anställda visar var arbetslösheten sitter; tvärtom
   // visar var jobben finns. Båda är sanna, och det ska vara ett val man gör
   // och ser att man gjort -- inte en ordning som råkade hamna i koden.
+  // --- LÖPANDE TILLSTÅND. Bildrutorna bär jobbreferens och yrkesposition som
+  // deltan mot föregående ruta, eftersom de nästan aldrig ändras och att
+  // skriva dem varje månad tiodubblade filen. Här byggs de tillbaka till
+  // fulla arrayer. Ett hopp bakåt i tidslinjen spelar om från början: 120
+  // rutor med några hundra ändringar styck går på någon millisekund, och
+  // alternativet -- nyckelrutor -- är maskineri utan mätbar vinst i den här
+  // storleksordningen.
+  const N = d.workers.id.length;
+  const jobbref = new Int32Array(N).fill(-1);
+  const gXi = new Float32Array(N), gChi = new Float32Array(N), gR = new Float32Array(N);
+  let byggd = -1;
+
+  function tillTill(n) {
+    if (n < byggd) { jobbref.fill(-1); byggd = -1; }
+    for (let m = byggd + 1; m <= n; m++) {
+      const w = frames[m].workers;
+      const jd = w.job_d;
+      for (let k = 0; k < jd.length; k += 2) jobbref[jd[k]] = jd[k + 1];
+      const gd = w.geom_d;
+      for (let k = 0; k < gd.length; k += 4) {
+        const idx = gd[k];
+        gXi[idx] = gd[k + 1]; gChi[idx] = gd[k + 2]; gR[idx] = gd[k + 3];
+      }
+    }
+    byggd = n;
+  }
+
   const bana = (ring) => {
     ctx.beginPath();
     ctx.moveTo(px(ring[0][0]), py(ring[0][1]));
@@ -234,40 +261,40 @@ function rita(d) {
         for (const ring of ringar) bana(ring), ctx.fill(), ctx.stroke();
       } },
     { id: "besatta", namn: "Besatta positioner", pa: false,
-      antal: (f) => f.jobs.state.filter((v) => v === 0).length, rita: (f) => {
+      antal: (f) => rakna(f.jobs.state, "0"), rita: (f) => {
         ctx.fillStyle = "#3b5c50";
         const js = f.jobs.state;
         for (let k = 0; k < js.length; k++) {
-          if (js[k] !== 0) continue;
+          if (js[k] !== "0") continue;
           ctx.fillRect(px(d.jobs.x[k]) - 1.5, py(d.jobs.y[k]) - 1.5, 3, 3);
         }
       } },
     { id: "vakanser", namn: "Lediga positioner", pa: true,
-      antal: (f) => f.jobs.state.filter((v) => v === 1).length, rita: (f) => {
+      antal: (f) => rakna(f.jobs.state, "1"), rita: (f) => {
         ctx.fillStyle = FARG.vakans;
         const js = f.jobs.state;
         for (let k = 0; k < js.length; k++) {
-          if (js[k] !== 1) continue;
+          if (js[k] !== "1") continue;
           ctx.fillRect(px(d.jobs.x[k]) - 1.5, py(d.jobs.y[k]) - 1.5, 3, 3);
         }
       } },
     { id: "anstallda", namn: "Anställda", pa: true,
-      antal: (f) => f.workers.state.filter((v) => v).length, rita: (f) => {
+      antal: (f) => rakna(f.workers.state, "1"), rita: (f) => {
         ctx.fillStyle = FARG.anstalld;
         const ws = f.workers.state;
         for (let k = 0; k < ws.length; k++) {
-          if (!ws[k]) continue;
+          if (ws[k] !== "1") continue;
           ctx.beginPath();
           ctx.arc(px(d.workers.x[k]), py(d.workers.y[k]), 1.6, 0, 6.2832);
           ctx.fill();
         }
       } },
     { id: "arbetslosa", namn: "Arbetslösa", pa: true,
-      antal: (f) => f.workers.state.filter((v) => !v).length, rita: (f) => {
+      antal: (f) => rakna(f.workers.state, "0"), rita: (f) => {
         ctx.fillStyle = FARG.arbetslos;
         const ws = f.workers.state;
         for (let k = 0; k < ws.length; k++) {
-          if (ws[k]) continue;
+          if (ws[k] !== "0") continue;
           ctx.beginPath();
           ctx.arc(px(d.workers.x[k]), py(d.workers.y[k]), 2.4, 0, 6.2832);
           ctx.fill();
@@ -279,14 +306,14 @@ function rita(d) {
         // Linjer över kommungräns ritas ljusare och tjockare: det är dem
         // scenariot handlar om, och i ett mönster av tusen streck försvinner
         // de annars bland de korta lokala.
-        const ws = f.workers.state, jb = f.workers.job;
+        const ws = f.workers.state, jb = jobbref;
         for (const over of [false, true]) {
           ctx.strokeStyle = over ? "rgba(224,192,96,0.55)" : "rgba(140,150,180,0.18)";
           ctx.lineWidth = over ? 0.9 : 0.5;
           ctx.beginPath();
           for (let k = 0; k < ws.length; k++) {
             const j = jb[k];
-            if (!ws[k] || j < 0) continue;
+            if (ws[k] !== "1" || j < 0) continue;
             if ((d.workers.mun[k] !== d.jobs.mun[j]) !== over) continue;
             ctx.moveTo(px(d.workers.x[k]), py(d.workers.y[k]));
             ctx.lineTo(px(d.jobs.x[j]), py(d.jobs.y[j]));
@@ -301,9 +328,15 @@ function rita(d) {
   // panelen -- men talet i lagerlistan ska visa vad som faktiskt ritas, inte
   // vad som borde ritas.
   function antalLinjer(f) {
-    const ws = f.workers.state, jb = f.workers.job;
+    const ws = f.workers.state;
     let n = 0;
-    for (let k = 0; k < ws.length; k++) if (ws[k] && jb[k] >= 0) n++;
+    for (let k = 0; k < ws.length; k++) if (ws[k] === "1" && jobbref[k] >= 0) n++;
+    return n;
+  }
+
+  function rakna(strang, tecken) {
+    let n = 0;
+    for (let k = 0; k < strang.length; k++) if (strang[k] === tecken) n++;
     return n;
   }
 
@@ -356,6 +389,7 @@ function rita(d) {
 
   function rutan(i) {
     const f = frames[i];
+    tillTill(i);
     ctx.clearRect(0, 0, duk.clientWidth, H);
 
     for (const lager of LAGER) if (lager.pa) lager.rita(f);

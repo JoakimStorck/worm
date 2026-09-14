@@ -79,6 +79,17 @@ def _kolumn(df, *namn, default=np.nan):
     return pd.Series([default] * len(df), index=df.index)
 
 
+def _tal(v, dec=3):
+    """Ett enskilt tal till JSON, avrundat, med None för det som inte är ett tal."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(f):
+        return None
+    return round(f, dec)
+
+
 def _rund(serie, dec):
     """Avrundat till JSON. Koordinater i meter behöver inga decimaler alls, och
     full float64 fyrdubblar filen utan att synas på skärmen."""
@@ -162,6 +173,64 @@ def desopolygoner(db_path, koder, tolerans=150.0):
             continue
         ut.append({"code": str(rad.get("deso_code", "")), "mun": kod,
                    "geometry": mapping(g)})
+    return ut
+
+
+def yrkesrummet(db_path):
+    """Yrkesrummet: varje O*NET-yrke på sin plats i det polära rummet.
+
+    Det här är BAKGRUNDEN uppgiftsrumspanelen ritas mot. Utan den hänger en
+    kompetenscirkel i tomma intet och går bara att jämföra med de jobb som
+    råkar finnas i körningen; med den syns vilken del av yrkesrummet cirkeln
+    täcker, vilket är det tunnhet betyder.
+
+    Job Family är den etikett en publik kan läsa. Den gör att panelen kan
+    säga vård, tillverkning eller transport i stället för att kräva att någon
+    förstår vad chi och xi är, och det är skillnaden mellan en figur som
+    övertygar en kommunpolitiker och en som ser ut som forskning.
+
+    Samma tabell som scenariobuilder läser (onet_occupation_space), så
+    rummet i figuren är rummet modellen räknat i.
+    """
+    if not db_path or not os.path.isfile(db_path):
+        return {}
+    import sqlite3
+    try:
+        conn = sqlite3.connect(db_path)
+        df = pd.read_sql("SELECT * FROM onet_occupation_space", conn)
+        conn.close()
+    except Exception:
+        return {}
+    if df.empty or "chi" not in df.columns:
+        return {}
+    titel = _kolumn(df, "Title", "title", default="")
+    familj = _kolumn(df, "Job Family", "cluster_name", default="")
+    return {
+        "onet": [str(c) for c in _kolumn(df, "onet_code", default="")],
+        "xi": _rund(_kolumn(df, "xi"), 4),
+        "chi": _rund(_kolumn(df, "chi"), 4),
+        "r_o": _rund(_kolumn(df, "r_o"), 4),
+        "r_req": _rund(_kolumn(df, "r_req"), 4),
+        "title": [str(t) for t in titel],
+        "family": [str(f) for f in familj],
+    }
+
+
+def yrken_per_kommun(jobb):
+    """Antal positioner per kommun och yrke, ur körningens egna jobb.
+
+    Tunnhet är inte en egenskap hos yrkesrummet utan hos rummet SOM FINNS PÅ
+    PLATSEN. Samma kompetenscirkel täcker olika många yrken i Mora och i
+    Orsa, och det är den jämförelsen panelen ska kunna göra utan att räkna om
+    något i webbläsaren.
+    """
+    if "municipal_code" not in jobb.columns or "onet_code" not in jobb.columns:
+        return {}
+    ut = {}
+    for (kom, onet), n in jobb.groupby(
+            [jobb["municipal_code"].astype(str),
+             jobb["onet_code"].astype(str)]).size().items():
+        ut.setdefault(kom, {})[onet] = int(n)
     return ut
 
 
@@ -374,25 +443,34 @@ def spela_upp(run_dir, panel_n, panel_jobb_n, seed):
     tillstand = Tillstand(individer, jobb)
 
     rng = np.random.default_rng(seed)
-    # Panelen dras STRATIFIERAT PER KOMMUN. Ett obundet urval ur tre kommuner
-    # av mycket olika storlek ger nästan inga individer i den minsta, och det
-    # är den minsta kommunen tunnheten ska synas i.
     individer["_kommun"] = [_hemkommun(i) for i in individer["individual_id"]]
-    grupper = individer.groupby("_kommun", dropna=False)
-    per_grupp = max(1, panel_n // max(len(grupper), 1))
-    panel_idx = []
-    for _, g in grupper:
-        n = min(per_grupp, len(g))
-        panel_idx.extend(rng.choice(g.index.to_numpy(), size=n, replace=False))
-    # Kommuner mindre än kvoten lämnar ett underskott. Det fylls ur de stora,
-    # annars ger --panel 2000 bara 1 700 individer så snart en kommun är liten.
-    brist = panel_n - len(panel_idx)
-    if brist > 0:
-        rest = individer.index.difference(pd.Index(panel_idx))
-        if len(rest):
-            panel_idx.extend(rng.choice(rest.to_numpy(),
-                                        size=min(brist, len(rest)), replace=False))
-    panel = individer.loc[sorted(panel_idx)].reset_index(drop=True)
+    if not panel_n or panel_n >= len(individer):
+        # HELA POPULATIONEN är förval sedan deltakodningen gjorde den
+        # billigare än det gamla urvalet på 2 000. Urvalet var aldrig en
+        # modellfråga utan en filstorleksfråga, och det förde med sig en
+        # felkälla: punkterna visade ett urval medan talen bredvid gällde
+        # alla, och den som räknade prickar fick fel svar.
+        panel = individer.reset_index(drop=True)
+    else:
+        # Urvalet dras STRATIFIERAT PER KOMMUN. Ett obundet urval ur tre
+        # kommuner av mycket olika storlek ger nästan inga individer i den
+        # minsta, och det är den minsta kommunen tunnheten ska synas i.
+        grupper = individer.groupby("_kommun", dropna=False)
+        per_grupp = max(1, panel_n // max(len(grupper), 1))
+        panel_idx = []
+        for _, g in grupper:
+            n = min(per_grupp, len(g))
+            panel_idx.extend(rng.choice(g.index.to_numpy(), size=n, replace=False))
+        # Kommuner mindre än kvoten lämnar ett underskott. Det fylls ur de
+        # stora, annars ger --panel 2000 bara 1 700 individer så snart en
+        # kommun är liten.
+        brist = panel_n - len(panel_idx)
+        if brist > 0:
+            rest = individer.index.difference(pd.Index(panel_idx))
+            if len(rest):
+                panel_idx.extend(rng.choice(rest.to_numpy(),
+                                            size=min(brist, len(rest)), replace=False))
+        panel = individer.loc[sorted(panel_idx)].reset_index(drop=True)
     panel_ids = list(panel["individual_id"])
 
     # Jobben: alla som någon i panelen håller eller får, plus ett urval av
@@ -411,9 +489,12 @@ def spela_upp(run_dir, panel_n, panel_jobb_n, seed):
               f"tabellerna, t.ex. {sorted(saknade)[:3]}")
     rorda_jobb &= universum
     ovriga = [j for j in jobb["job_id"] if j not in rorda_jobb]
-    n_ovr = min(max(panel_jobb_n - len(rorda_jobb), 0), len(ovriga))
-    valda = rorda_jobb | set(rng.choice(ovriga, size=n_ovr, replace=False)) \
-        if n_ovr else rorda_jobb
+    if not panel_jobb_n:
+        valda = set(jobb["job_id"])              # alla jobb, förval
+    else:
+        n_ovr = min(max(panel_jobb_n - len(rorda_jobb), 0), len(ovriga))
+        valda = rorda_jobb | set(rng.choice(ovriga, size=n_ovr, replace=False)) \
+            if n_ovr else rorda_jobb
     panel_jobb = jobb[jobb["job_id"].isin(valda)].reset_index(drop=True)
     jobb_ids = list(panel_jobb["job_id"])
     # Position i panelens jobblista. Med list.index() blir varje bildruta
@@ -428,25 +509,44 @@ def spela_upp(run_dir, panel_n, panel_jobb_n, seed):
     sedan_forra = []
     ar_nu = None
 
+    # Föregående bildrutas värden, för deltakodningen nedan.
+    forra_jobb = [-1] * len(panel_ids)
+    forra_geom = [tillstand.ind_geom.get(i, (np.nan, np.nan, np.nan)) for i in panel_ids]
+
     def bildruta(t, manad, ar):
-        status, jobbref, xi_l, chi_l, r_l = [], [], [], [], []
-        for iid in panel_ids:
+        nonlocal forra_jobb, forra_geom
+        # TILLSTÅNDEN SOM STRÄNGAR, ÖVRIGT SOM DELTAN. Med hela populationen
+        # är det här skillnaden mellan 50 och 6 MB. En JSON-array av heltal
+        # kostar två tecken per individ och bildruta för kommatecknet allena;
+        # en sträng kostar ett tecken totalt. Och xi, chi och r ändras bara
+        # när någon utbildar sig -- 10 600 händelser fördelade över 120
+        # månader och 20 000 personer -- så att skriva dem varje månad är att
+        # lagra samma tal hundratjugo gånger.
+        status = []
+        jobb_delta = []
+        geom_delta = []
+        for k, iid in enumerate(panel_ids):
             jid = tillstand.ind_jobb.get(iid)
-            status.append(1 if jid else 0)
-            jobbref.append(jobb_pos.get(jid, -1))
-            xi, chi, r_i = tillstand.ind_geom.get(iid, (np.nan, np.nan, np.nan))
-            xi_l.append(xi); chi_l.append(chi); r_l.append(r_i)
+            status.append("1" if jid else "0")
+            ref = jobb_pos.get(jid, -1) if jid else -1
+            if ref != forra_jobb[k]:
+                jobb_delta.extend((k, ref))
+                forra_jobb[k] = ref
+            g = tillstand.ind_geom.get(iid, (np.nan, np.nan, np.nan))
+            if g != forra_geom[k]:
+                geom_delta.extend((k, _tal(g[0]), _tal(g[1]), _tal(g[2])))
+                forra_geom[k] = g
 
         jstatus = []
         for jid in jobb_ids:
             if tillstand.jobb_skapat.get(jid, 0.0) > t:
-                jstatus.append(3)                                   # ej fött än
+                jstatus.append("3")                                 # ej fött än
             elif not tillstand.jobb_aktivt.get(jid, False):
-                jstatus.append(2)                                   # inaktivt
+                jstatus.append("2")                                 # inaktivt
             elif tillstand.jobb_innehavare.get(jid):
-                jstatus.append(0)                                   # besatt
+                jstatus.append("0")                                 # besatt
             else:
-                jstatus.append(1)                                   # vakant
+                jstatus.append("1")                                 # vakant
         # Pendlingsmatrisen räknas på HELA populationen, inte på panelen.
         # Den ska ställas mot SCB:s tabell `commuting`, och en matris räknad
         # på 2 000 av 30 000 individer är inte jämförbar med den -- en kvot
@@ -463,11 +563,9 @@ def spela_upp(run_dir, panel_n, panel_jobb_n, seed):
         a = agg_per_tid.get(float(t), {})
         frames.append({
             "t": round(float(t), 1), "month": manad, "year": ar,
-            "workers": {"state": status, "job": jobbref,
-                        "xi": _rund(pd.Series(xi_l), 3),
-                        "chi": _rund(pd.Series(chi_l), 3),
-                        "r": _rund(pd.Series(r_l), 3)},
-            "jobs": {"state": jstatus},
+            "workers": {"state": "".join(status),
+                        "job_d": jobb_delta, "geom_d": geom_delta},
+            "jobs": {"state": "".join(jstatus)},
             "agg": {k: (None if (isinstance(a.get(k), float) and not np.isfinite(a.get(k)))
                         else (round(float(a[k]), 3) if k in a else None))
                     for k in ("employed", "unemployed", "vacancies", "open_vacancies",
@@ -545,6 +643,8 @@ def exportera(run_dir, ut_path, panel_n, panel_jobb_n, seed, db_path):
         "meta": meta,
         "municipalities": kommunpolygoner(db_path, koder),
         "deso": desopolygoner(db_path, koder),
+        "occupations": yrkesrummet(db_path),
+        "municipality_occupations": yrken_per_kommun(panel_jobb),
         "commuting_scb": scb_pendling(db_path, koder),
         "workers": {
             "id": list(panel["individual_id"]),
@@ -581,8 +681,10 @@ def main():
     p = argparse.ArgumentParser(description="Exportera en körning för visning.")
     p.add_argument("run_dir", nargs="?", default=None)
     p.add_argument("--out", default=None)
-    p.add_argument("--panel", type=int, default=2000, help="individer i panelen")
-    p.add_argument("--panel-jobs", type=int, default=3000)
+    p.add_argument("--panel", type=int, default=0,
+                   help="individer att visa; 0 = hela populationen (förval)")
+    p.add_argument("--panel-jobs", type=int, default=0,
+                   help="jobb att visa; 0 = alla (förval)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--db", default="data/worm.sqlite3", help="för kommunpolygoner")
     a = p.parse_args()
