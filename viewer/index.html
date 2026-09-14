@@ -51,6 +51,14 @@
   .tal { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
   .tal + .tal { margin-top: 4px; }
   .tal b { font-weight: 600; }
+  .lagerrad { display: flex; align-items: center; justify-content: space-between;
+              gap: 8px; padding: 2px 0; }
+  .lagerrad label { display: flex; align-items: center; gap: 7px; cursor: pointer;
+                    font-size: 12px; }
+  .lagerrad input { accent-color: var(--anstalld); margin: 0; }
+  .flytt { display: flex; gap: 2px; flex: none; }
+  .flytt button { padding: 0 5px; font-size: 10px; line-height: 18px; }
+  .flytt button:disabled { opacity: .25; cursor: default; }
   .legend { display: flex; align-items: center; gap: 7px; margin-top: 5px;
             font-size: 12px; color: var(--dim); }
   .prick { width: 9px; height: 9px; border-radius: 50%; flex: none; }
@@ -93,11 +101,10 @@
       <div class="tal"><span>Vakansgrad</span><b id="a-v">&ndash;</b></div>
     </div>
     <div class="kort">
-      <h2>Panelen</h2>
-      <div class="legend"><span class="prick" style="background:var(--anstalld)"></span> anställd</div>
-      <div class="legend"><span class="prick" style="background:var(--arbetslos)"></span> arbetslös</div>
-      <div class="legend"><span class="prick" style="background:var(--vakans)"></span> ledig position</div>
-      <div class="harkomst" id="panelnot" style="margin-top:8px"></div>
+      <h2>Lager</h2>
+      <div id="lager"></div>
+      <div class="harkomst" style="margin-top:8px">Överst i listan ritas överst i bilden.</div>
+      <div class="harkomst" id="panelnot" style="margin-top:6px"></div>
     </div>
     <div class="kort">
       <h2>Pendling över kommungräns</h2>
@@ -185,34 +192,102 @@ function rita(d) {
   const px = (x) => dx + (x - xmin) * skala;
   const py = (y) => H - dy - (y - ymin) * skala;
 
+  // --- LAGREN. Ordningen i listan ÄR ritordningen, och det sista lagret
+  // dominerar bilden: 2 000 punkter på en kommunkarta täcker varandra, och
+  // vilken slutsats en betraktare drar beror på vad som ligger överst.
+  // Arbetslösa ovanpå anställda visar var arbetslösheten sitter; tvärtom
+  // visar var jobben finns. Båda är sanna, och det ska vara ett val man gör
+  // och ser att man gjort -- inte en ordning som råkade hamna i koden.
+  const LAGER = [
+    { id: "kommuner", namn: "Kommuner", pa: true, rita: () => {
+        ctx.strokeStyle = "#343846"; ctx.lineWidth = 1;
+        ctx.fillStyle = "rgba(255,255,255,0.025)";
+        for (const ring of ringar) {
+          ctx.beginPath();
+          ctx.moveTo(px(ring[0][0]), py(ring[0][1]));
+          for (let k = 1; k < ring.length; k++) ctx.lineTo(px(ring[k][0]), py(ring[k][1]));
+          ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+      } },
+    { id: "besatta", namn: "Besatta positioner", pa: false, rita: (f) => {
+        ctx.fillStyle = "#3b5c50";
+        const js = f.jobs.state;
+        for (let k = 0; k < js.length; k++) {
+          if (js[k] !== 0) continue;
+          ctx.fillRect(px(d.jobs.x[k]) - 1.5, py(d.jobs.y[k]) - 1.5, 3, 3);
+        }
+      } },
+    { id: "vakanser", namn: "Lediga positioner", pa: true, rita: (f) => {
+        ctx.fillStyle = FARG.vakans;
+        const js = f.jobs.state;
+        for (let k = 0; k < js.length; k++) {
+          if (js[k] !== 1) continue;
+          ctx.fillRect(px(d.jobs.x[k]) - 1.5, py(d.jobs.y[k]) - 1.5, 3, 3);
+        }
+      } },
+    { id: "anstallda", namn: "Anställda", pa: true, rita: (f) => {
+        ctx.fillStyle = FARG.anstalld;
+        const ws = f.workers.state;
+        for (let k = 0; k < ws.length; k++) {
+          if (!ws[k]) continue;
+          ctx.beginPath();
+          ctx.arc(px(d.workers.x[k]), py(d.workers.y[k]), 1.6, 0, 6.2832);
+          ctx.fill();
+        }
+      } },
+    { id: "arbetslosa", namn: "Arbetslösa", pa: true, rita: (f) => {
+        ctx.fillStyle = FARG.arbetslos;
+        const ws = f.workers.state;
+        for (let k = 0; k < ws.length; k++) {
+          if (ws[k]) continue;
+          ctx.beginPath();
+          ctx.arc(px(d.workers.x[k]), py(d.workers.y[k]), 2.4, 0, 6.2832);
+          ctx.fill();
+        }
+      } },
+  ];
+
+  function lagerpanel() {
+    const ul = el("lager");
+    ul.innerHTML = "";
+    // Listan visas överst först, alltså omvänd ritordning: det man ser
+    // längst upp i listan är det man ser överst i bilden.
+    LAGER.slice().reverse().forEach((lg) => {
+      const n = LAGER.indexOf(lg);
+      const rad = document.createElement("div");
+      rad.className = "lagerrad";
+      rad.innerHTML =
+        '<label><input type="checkbox"' + (lg.pa ? " checked" : "") + '>' +
+        '<span class="prick" style="background:' + lagerfarg(lg.id) + '"></span>' +
+        lg.namn + '</label>' +
+        '<span class="flytt"><button title="Flytta upp">\u25b2</button>' +
+        '<button title="Flytta ned">\u25bc</button></span>';
+      rad.querySelector("input").addEventListener("change", (e) => {
+        lg.pa = e.target.checked; rutan(i);
+      });
+      const [upp, ned] = rad.querySelectorAll(".flytt button");
+      upp.disabled = n === LAGER.length - 1;
+      ned.disabled = n === 0;
+      upp.addEventListener("click", () => byt(n, n + 1));
+      ned.addEventListener("click", () => byt(n, n - 1));
+      ul.appendChild(rad);
+    });
+  }
+  function byt(a, b) {
+    if (b < 0 || b >= LAGER.length) return;
+    [LAGER[a], LAGER[b]] = [LAGER[b], LAGER[a]];
+    lagerpanel(); rutan(i);
+  }
+  const lagerfarg = (id) => ({
+    kommuner: "#343846", besatta: "#3b5c50", vakanser: FARG.vakans,
+    anstallda: FARG.anstalld, arbetslosa: FARG.arbetslos,
+  })[id] || "#555";
+
   function rutan(i) {
     const f = frames[i];
     ctx.clearRect(0, 0, duk.clientWidth, H);
 
-    ctx.strokeStyle = "#343846"; ctx.lineWidth = 1;
-    ctx.fillStyle = "rgba(255,255,255,0.025)";
-    for (const ring of ringar) {
-      ctx.beginPath();
-      ctx.moveTo(px(ring[0][0]), py(ring[0][1]));
-      for (let k = 1; k < ring.length; k++) ctx.lineTo(px(ring[k][0]), py(ring[k][1]));
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-    }
-
-    // Lediga positioner under individerna: de är bakgrund, inte figur.
-    const js = f.jobs.state;
-    ctx.fillStyle = FARG.vakans;
-    for (let k = 0; k < js.length; k++) {
-      if (js[k] !== 1) continue;
-      ctx.fillRect(px(d.jobs.x[k]) - 1.5, py(d.jobs.y[k]) - 1.5, 3, 3);
-    }
-
-    const ws = f.workers.state;
-    for (let k = 0; k < ws.length; k++) {
-      ctx.fillStyle = ws[k] ? FARG.anstalld : FARG.arbetslos;
-      ctx.beginPath();
-      ctx.arc(px(d.workers.x[k]), py(d.workers.y[k]), ws[k] ? 1.6 : 2.4, 0, 6.2832);
-      ctx.fill();
-    }
+    for (const lager of LAGER) if (lager.pa) lager.rita(f);
 
     const a = f.agg;
     el("tid").textContent = (f.year || "") + (f.month ? "-" + String(f.month).padStart(2, "0") : "");
@@ -268,6 +343,7 @@ function rita(d) {
     clearInterval(timer); timer = null; knapp.textContent = "Spela";
   }
 
+  lagerpanel();
   matt(); visa(0);
 }
 
