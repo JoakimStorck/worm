@@ -835,15 +835,51 @@ def handle_destroy_job(event, world):
                                      extra={"event_detail": "vacancy_destroyed", "job_id": job_id})
 
 
+def _employed_wages(world):
+    """Lönerna bland de anställda, som numpy-array plus deras index.
+
+    En väg för både månadens tre percentiler och årets tvärsnitt (0112).
+    """
+    ind = world.individuals
+    if 'status' not in ind.columns:
+        return None, None
+    if 'w_neg' not in ind.columns:
+        # Tom eller minimal ram (tester) är ett legitimt fall. Men finns det
+        # ANSTÄLLDA utan lönekolumn är det ett programmeringsfel som annars
+        # göms: det var precis så beståndsmåttet och lönerevisionen kunde vara
+        # avstängda under fem hela körningar utan att något larmade.
+        if (ind['status'] == 'employed').any():
+            raise KeyError(
+                "individuals har anställda men saknar kolumnen w_neg: "
+                "beståndets tvärsnitt kan inte mätas. Kolumnen skapas i "
+                "World._seed_wages_for_matched och fylls av handle_start_job.")
+        return None, None
+    w = pd.to_numeric(ind.loc[ind['status'] == 'employed', 'w_neg'],
+                      errors='coerce').dropna()
+    w = w[w > 0]
+    if len(w) < 10:
+        return None, None
+    return w.to_numpy(dtype=float), w.index
+
+
 def _wage_flow_quantiles(world):
-    """Tre tal per månad: median och kvartiler i log lön bland anställda.
+    """Tre tal per månad: percentiler i lönebeståndet bland anställda.
 
     Fem årspunkter räcker inte för att se om fördelningen är stationär. Tre
     float per månad kostar ingenting och gör drift synlig i tidsserien.
+
+    RÄKNADE FÖRUT HELA ÅRSTVÄRSNITTET för att kasta bort allt utom tre tal --
+    inklusive slingan över tiotusen anställda som slår upp varje individs
+    jobb för andelen över Pi. 0.30 sekunder per månadsskifte, 3.6 av 47 i
+    ettårsprofilen, för tre percentiler som kostar en millisekund (0112).
     """
-    st = _wage_stock_stats(world)
-    return {k: st[k] for k in ("stock_w_p10", "stock_w_p50", "stock_w_p90")
-            if k in st}
+    w, _ = _employed_wages(world)
+    if w is None:
+        return {}
+    q = np.quantile(w, [0.10, 0.50, 0.90])
+    return {"stock_w_p10": round(float(q[0]), 4),
+            "stock_w_p50": round(float(q[1]), 4),
+            "stock_w_p90": round(float(q[2]), 4)}
 
 
 def handle_new_month(event, world):
@@ -906,27 +942,11 @@ def _wage_stock_stats(world):
     skillnaden blir måttet på hur mycket av lönespridningen som är karriär och
     hur mycket som är matchning.
     """
-    ind = world.individuals
-    if 'status' not in ind.columns:
+    w_arr, w_index = _employed_wages(world)
+    if w_arr is None:
         return {}
-    if 'w_neg' not in ind.columns:
-        # Tom eller minimal ram (tester) är ett legitimt fall. Men finns det
-        # ANSTÄLLDA utan lönekolumn är det ett programmeringsfel som annars
-        # göms: det var precis så beståndsmåttet och lönerevisionen kunde vara
-        # avstängda under fem hela körningar utan att något larmade.
-        if (ind['status'] == 'employed').any():
-            raise KeyError(
-                "individuals har anställda men saknar kolumnen w_neg: "
-                "beståndets tvärsnitt kan inte mätas. Kolumnen skapas i "
-                "World._seed_wages_for_matched och fylls av handle_start_job.")
-        return {}
-    w = pd.to_numeric(ind.loc[ind['status'] == 'employed', 'w_neg'],
-                      errors='coerce').dropna()
-    w = w[w > 0]
-    if len(w) < 10:
-        return {}
-    lg = np.log(w.to_numpy())
-    q = np.quantile(w.to_numpy(), [0.10, 0.25, 0.50, 0.75, 0.90])
+    lg = np.log(w_arr)
+    q = np.quantile(w_arr, [0.10, 0.25, 0.50, 0.75, 0.90])
 
     # ANDELEN AV BESTÅNDET ÖVER SITT EGET YRKES Pi. Det är
     # definitionsvillkoret: är Pi yrkets median ska hälften ligga över.
@@ -937,33 +957,34 @@ def _wage_stock_stats(world):
     # Pi_j * p**theta hamnar över Pi oftare än varannan gång. Flödet och
     # beståndet är olika populationer, precis som stock och flöde i övrigt,
     # och bara beståndet kan pröva normeringen.
+    # ANDELEN ÖVER Pi, VEKTORISERAT (0112). Slingan slog upp varje anställds
+    # jobb med en dict och läste två celler med .iat -- tiotusen gånger per
+    # årsskifte. get_indexer gör uppslaget i ett svep, och jämförelsen blir
+    # två numpy-operationer. Samma tal: samma villkor (position hittad och
+    # Pi > 0), samma jämförelse.
     andel = None
     jobs = world.jobs
     if {'w_occ', 'job_id'} <= set(jobs.columns) or 'wage' in jobs.columns:
-        pos_of = world.job_index()
         kol = 'w_occ' if 'w_occ' in jobs.columns else 'wage'
-        c = jobs.columns.get_loc(kol)
-        eta_c = (jobs.columns.get_loc('wage_eta')
-                 if 'wage_eta' in jobs.columns else None)
-        over, n_par = 0, 0
-        for i in w.index:
-            pos = pos_of.get(world.get_ind(i, 'job_id'))
-            if pos is None:
-                continue
-            pi_j = float(jobs.iat[pos, c])
-            if eta_c is not None and kol == 'wage':
-                try:                       # jobbets lön bär eta; yrkets gör inte
-                    pi_j *= float(np.exp(-float(jobs.iat[pos, eta_c] or 0.0)))
-                except (TypeError, ValueError):
-                    pass
-            if pi_j > 0:
-                n_par += 1
-                over += int(float(w.at[i]) > pi_j)
+        jid = np.array([world.get_ind(i, 'job_id') for i in w_index], dtype=object)
+        pos = pd.Index(jobs['job_id']).get_indexer(jid)
+        pi = np.full(len(jid), np.nan)
+        hit = pos >= 0
+        if hit.any():
+            pi_kol = pd.to_numeric(jobs[kol], errors='coerce').to_numpy(dtype=float)
+            pi[hit] = pi_kol[pos[hit]]
+            if 'wage_eta' in jobs.columns and kol == 'wage':
+                eta = pd.to_numeric(jobs['wage_eta'], errors='coerce').to_numpy(dtype=float)
+                # jobbets lön bär eta; yrkets gör inte. NaN förblir NaN och
+                # faller ur på villkoret Pi > 0, som i slingan.
+                pi[hit] = pi[hit] * np.exp(-eta[pos[hit]])
+        giltig = hit & (pi > 0)
+        n_par = int(giltig.sum())
         if n_par:
-            andel = round(over / n_par, 4)
+            andel = round(int((w_arr[giltig] > pi[giltig]).sum()) / n_par, 4)
 
     ut = {
-        "stock_n": int(len(w)),
+        "stock_n": int(len(w_arr)),
         "stock_w_p10": round(float(q[0]), 4),
         "stock_w_p25": round(float(q[1]), 4),
         "stock_w_p50": round(float(q[2]), 4),

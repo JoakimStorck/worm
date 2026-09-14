@@ -962,3 +962,65 @@ def test_competence_summary_keeps_the_views_attached():
     w._write_competence_summary()
     assert w.get_ind(1, "x_occ") == pytest.approx(1.1)
     w.refresh_ind(verify=True)      # ska inte kasta
+
+
+def test_share_above_pi_matches_the_loop_it_replaced():
+    """LIKVÄRDIGHET (0112): andelen över Pi räknades med en slinga som slog upp
+    varje anställds jobb med en dict och läste två celler med .iat. Den
+    vektoriserade vägen ska ge exakt samma tal, inklusive villkoren: position
+    hittad och Pi > 0. Provet kör hundra slumpade bestånd, med jobb som saknas
+    i tabellen, Pi som är noll och negativ, och NaN i eta."""
+    import numpy as np
+    import pandas as pd
+    from core.event_handlers import _wage_stock_stats
+    from core.individual_views import IndividualViews
+
+    class W(IndividualViews):
+        pass
+
+    def referens(world, w_arr, w_index):
+        jobs = world.jobs
+        pos_of = world.job_index()
+        kol = 'w_occ' if 'w_occ' in jobs.columns else 'wage'
+        c = jobs.columns.get_loc(kol)
+        eta_c = (jobs.columns.get_loc('wage_eta') if 'wage_eta' in jobs.columns else None)
+        over, n_par = 0, 0
+        for k, i in enumerate(w_index):
+            pos = pos_of.get(world.get_ind(i, 'job_id'))
+            if pos is None:
+                continue
+            pi_j = float(jobs.iat[pos, c])
+            if eta_c is not None and kol == 'wage':
+                try:
+                    pi_j *= float(np.exp(-float(jobs.iat[pos, eta_c] or 0.0)))
+                except (TypeError, ValueError):
+                    pass
+            if pi_j > 0:
+                n_par += 1
+                over += int(float(w_arr[k]) > pi_j)
+        return round(over / n_par, 4) if n_par else None
+
+    rng = np.random.default_rng(11)
+    for _ in range(100):
+        n_j = int(rng.integers(20, 120))
+        n_i = int(rng.integers(30, 200))
+        wage = rng.lognormal(0, 0.3, n_j)
+        wage[rng.random(n_j) < 0.1] = 0.0                 # Pi = 0
+        wage[rng.random(n_j) < 0.05] = -1.0               # Pi < 0
+        eta = rng.normal(0, 0.1, n_j)
+        eta[rng.random(n_j) < 0.05] = np.nan              # NaN i eta
+        w = W()
+        w.jobs = pd.DataFrame({"job_id": [f"J{k}" for k in range(n_j)],
+                               "wage": wage, "wage_eta": eta})
+        jid = [f"J{int(rng.integers(0, n_j + 5))}" for _ in range(n_i)]   # några saknas
+        w.individuals = pd.DataFrame({
+            "individual_id": [f"i{k}" for k in range(n_i)],
+            "status": ["employed"] * n_i,
+            "w_neg": rng.lognormal(0, 0.3, n_i),
+            "job_id": jid})
+        w.refresh_ind()
+        w.job_index = lambda _j=w.jobs: {v: k for k, v in enumerate(_j["job_id"])}
+        arr = w.individuals["w_neg"].to_numpy(dtype=float)
+        ut = _wage_stock_stats(w)
+        vantat = referens(w, arr, w.individuals.index)
+        assert ut.get("stock_share_above_pi") == vantat
