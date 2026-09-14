@@ -7,13 +7,13 @@ env/
 .ipynb_checkpoints/
 
 # Stora dataartefakter (hålls utanför git, synkas manuellt mellan maskiner)
-data/
-onet_data/
-output/
-html/
-figures/
-analysis/
-patches/
+/data/
+/onet_data/
+/output/
+/html/
+/figures/
+/analysis/
+/patches/
 *.csv
 *.sqlite3
 *.sqlite3.bak
