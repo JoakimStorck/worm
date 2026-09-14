@@ -70,25 +70,25 @@ def test_bara_en_skrivare_till_geometritabellen():
     skrivare kvar, och testet håller det så."""
     import os
     import re
-    # VITLISTA, INTE SVARTLISTA. Första försöket gick igenom hela repo-roten
-    # och undantog .git, attic, tests och __pycache__. Men .venv ligger också i
-    # roten, och site-packages innehåller testfiler i big5 och andra kodningar:
-    # testet föll på UnicodeDecodeError i ett paket som inte har med saken att
-    # göra. En svartlista måste förutse allt som kan dyka upp i en katalog man
-    # inte äger. Vitlistan räknar upp den kod projektet faktiskt består av.
+    import subprocess
+
+    # FRÅGA GIT, INTE FILSYSTEMET. Två försök att räkna upp filer själv
+    # misslyckades på var sin sorts skräp i trädet: först .venv med
+    # site-packages i big5, sedan .ipynb_checkpoints med en gammal kopia av
+    # loader.py där PCA-skrivaren låg kvar. Båda är redan ignorerade av
+    # .gitignore, och det är den listan frågan handlar om: en skrivare som
+    # inte är versionshanterad är inte en del av kodbasen. Att bygga upp
+    # samma urval för hand är att skriva en andra .gitignore som glider isär
+    # från den riktiga.
     rot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    filer = subprocess.run(["git", "ls-files", "core", "scripts", "pipeline"],
+                           cwd=rot, capture_output=True, text=True, check=True
+                           ).stdout.split()
     skrivare = []
-    for under in ("core", "scripts", "pipeline"):
-        for mapp, _, filer in os.walk(os.path.join(rot, under)):
-            if "__pycache__" in mapp:
-                continue
-            for f in sorted(filer):
-                if not f.endswith(".py"):
-                    continue
-                sokvag = os.path.join(mapp, f)
-                kalla = open(sokvag, encoding="utf-8").read()
-                if re.search(r"""to_sql\(\s*["']onet_occupation_space["']""", kalla):
-                    skrivare.append(os.path.relpath(sokvag, rot))
+    for rel in sorted(f for f in filer if f.endswith(".py")):
+        kalla = open(os.path.join(rot, rel), encoding="utf-8").read()
+        if re.search(r"""to_sql\(\s*["']onet_occupation_space["']""", kalla):
+            skrivare.append(rel)
     assert skrivare == ["scripts/load_task_geometry.py"], skrivare
 
 
