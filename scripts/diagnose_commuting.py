@@ -113,13 +113,26 @@ def scb_flode(koder, db_path=DB):
     inom = hela[hela["work_municipality"].isin(koder)]
     flode = {(r.home_municipality, r.work_municipality): int(r.employed)
              for r in inom.itertuples()}
-    # Hur stor del av kommunens utpendling som går utanför scenariot.
-    utanfor = {}
+    # ANDEL AV UTPENDLARNA, inte av alla sysselsatta. Första versionen delade
+    # med kommunens hela sysselsättning, diagonalen inräknad, och kallade
+    # resultatet "andel av utpendlingen". För Rättvik gav det 27.7 procent när
+    # det rätta talet är 78: de som arbetar kvar i egna kommunen hör inte till
+    # nämnaren när frågan är vart pendlarna tar vägen.
+    utanfor, utpendlare = {}, {}
     for k in koder:
-        alla = hela[hela["home_municipality"] == k]["employed"].sum()
-        i = inom[inom["home_municipality"] == k]["employed"].sum()
-        utanfor[k] = float(1 - i / alla) if alla else np.nan
-    return flode, (ar, utanfor)
+        ut_alla = hela[(hela["home_municipality"] == k)
+                       & (hela["work_municipality"] != k)]["employed"].sum()
+        ut_inom = inom[(inom["home_municipality"] == k)
+                       & (inom["work_municipality"] != k)]["employed"].sum()
+        utpendlare[k] = int(ut_alla)
+        utanfor[k] = float(1 - ut_inom / ut_alla) if ut_alla else np.nan
+    # Vart de tar vägen. Underlaget för frågan om vilken kommun som ska in i
+    # scenariot härnäst: en kandidat är värd sin körtid bara om den fångar en
+    # stor del av det som i dag faller utanför.
+    destinationer = (hela[~hela["work_municipality"].isin(koder)]
+                     .groupby("work_municipality")["employed"].sum()
+                     .sort_values(ascending=False))
+    return flode, (ar, utanfor, utpendlare, destinationer)
 
 
 def _dagnatt(flode, koder):
@@ -146,7 +159,7 @@ def main():
         raise SystemExit("Tabellen commuting saknas eller täcker inte "
                          "scenariots kommuner. Ladda den med "
                          "core.database.load_commuting_matrix.")
-    ar, utanfor = meta
+    ar, utanfor, utpendlare, destinationer = meta
 
     namn = {}
     try:
@@ -200,12 +213,31 @@ def main():
           "där\n  av samma skäl som dag/natt ligger på 1.00.\n")
 
     # --- STÄNGNINGEN ---
-    print("Andel av kommunens verkliga utpendling som faller utanför scenariot")
+    print("Utpendling som faller utanför scenariot")
+    print(f"{'kommun':<12}{'utpendlare':>12}{'utanför':>10}")
     for k in koder:
-        print(f"  {n(k):<12}{100 * utanfor[k]:>6.1f} %")
-    print("  Modellen känner bara scenariots kommuner. En kommun med hög andel "
-          "här\n  är ett svagt testfall oavsett hur väl modellen träffar de "
-          "flöden som finns.\n")
+        print(f"{n(k):<12}{utpendlare[k]:>12d}{100 * utanfor[k]:>9.0f} %")
+    print("  Modellen känner bara scenariots kommuner, så den utpendlingen har\n"
+          "  ingenstans att ta vägen och hamnar i ett av de kommuner som finns.\n"
+          "  En kommun med hög andel här är ett svagt testfall oavsett hur väl\n"
+          "  modellen träffar de flöden som ryms.\n")
+
+    if len(destinationer):
+        print("Vart utpendlingen utanför scenariot går")
+        tot_ut = sum(utpendlare[k] for k in koder)
+        kvar = sum(utpendlare[k] for k in koder) - sum(
+            v for (h, aa), v in scb.items() if h in koder and aa in koder and h != aa)
+        kumulativ = 0
+        print(f"{'kommun':<14}{'personer':>10}{'andel':>8}{'kumulativt':>12}")
+        for kod, v in destinationer.head(8).items():
+            kumulativ += v
+            print(f"{n(str(kod)):<14}{int(v):>10d}{100 * v / kvar:>7.0f} %"
+                  f"{100 * kumulativ / kvar:>11.0f} %")
+        print(f"  Nämnaren är de {kvar} utpendlare som i dag saknar mål i "
+              f"scenariot\n  (av {tot_ut} totalt). En kandidat är värd sin "
+              "körtid bara om den fångar\n  en stor del av dem -- och körtiden "
+              "växer ungefär kvadratiskt i\n  arbetskraften, enligt "
+              "scenariofilens egen anteckning.\n")
 
 
 if __name__ == "__main__":
