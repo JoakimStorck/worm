@@ -289,6 +289,20 @@ function rita(d) {
           ctx.fill();
         }
       } },
+    { id: "utanfor", namn: "Utanför arbetskraften", pa: false,
+      antal: (f) => rakna(f.workers.state, "2"), rita: (f) => {
+        // Befolkningen som inte söker arbete. Avslaget som förval: de är
+        // fler än arbetskraften i en glesbygdskommun och skulle dränka
+        // bilden, men de hör till den och ska gå att visa.
+        ctx.fillStyle = "#565b6e";
+        const ws = f.workers.state;
+        for (let k = 0; k < ws.length; k++) {
+          if (ws[k] !== "2") continue;
+          ctx.beginPath();
+          ctx.arc(px(d.workers.x[k]), py(d.workers.y[k]), 1.2, 0, 6.2832);
+          ctx.fill();
+        }
+      } },
     { id: "arbetslosa", namn: "Arbetslösa", pa: true,
       antal: (f) => rakna(f.workers.state, "0"), rita: (f) => {
         ctx.fillStyle = FARG.arbetslos;
@@ -384,7 +398,7 @@ function rita(d) {
   }
   const lagerfarg = (id) => ({
     kommuner: "#343846", besatta: "#3b5c50", vakanser: FARG.vakans,
-    anstallda: FARG.anstalld, arbetslosa: FARG.arbetslos,
+    anstallda: FARG.anstalld, arbetslosa: FARG.arbetslos, utanfor: "#565b6e",
   })[id] || "#555";
 
   function rutan(i) {

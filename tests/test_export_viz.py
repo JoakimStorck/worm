@@ -391,3 +391,63 @@ def test_hela_populationen_ar_forval(tmp_path):
     # Och ett uttryckligt urval fungerar fortfarande.
     litet, _, _, _, _ = spela_upp(d, 6, 10, seed=0)
     assert len(litet) == 6
+
+
+def test_utanfor_arbetskraften_ar_inte_arbetslosa(tmp_path):
+    """Individtabellen är hela befolkningen. Den andel workforce_ratio lämnar
+    utanför har status not_in_labor_force, söker aldrig och förekommer aldrig
+    i en händelse. Räknas de som arbetslösa stämmer inte punkterna med
+    loggens u -- och i en glesbygdskommun är de fler än arbetskraften."""
+    d = str(tmp_path / "run_nilf")
+    ind, jobb = _skriv_korning(d, n_ind=10)
+    ind["status"] = ["unemployed"] * 4 + ["not_in_labor_force"] * 6
+    ind.to_csv(os.path.join(d, "initial_state_individuals.csv"), index=False)
+    i0 = ind.loc[0, "individual_id"]
+    _logg(d, [
+        _rad(0.0, "new_month", month=1, year=2020, employed=0, unemployed=4,
+             unmatched_jobs=10, active_jobs=10, not_in_labour_force=6),
+        _rad(10.0, "start_job", agent_type="individual", agent_id=i0,
+             chi=1.0, xi=1.0, r_i=0.27, job_id="J0000001", is_bootstrap=False,
+             home_municipality="2062", job_municipality="2062",
+             from_onet="41-2031", to_onet="41-2031", vacancy_age_days=10),
+        _rad(30.0, "new_month", month=2, year=2020, employed=1, unemployed=3,
+             unmatched_jobs=9, active_jobs=10, not_in_labour_force=6),
+    ])
+
+    _, _, frames, _, _ = spela_upp(d, 0, 0, seed=0)
+
+    for f in frames:
+        s_ = f["workers"]["state"]
+        assert s_.count("1") == f["agg"]["employed"]
+        assert s_.count("0") == f["agg"]["unemployed"]
+        assert s_.count("2") == 6
+
+
+def test_den_som_far_jobb_raknas_in_i_arbetskraften(tmp_path):
+    """Skulle någon med status not_in_labor_force ändå anställas är hon i
+    arbetskraften därefter, och får inte falla tillbaka till det tredje
+    tillståndet när jobbet tar slut."""
+    d = str(tmp_path / "run_in")
+    ind, jobb = _skriv_korning(d, n_ind=6)
+    ind["status"] = ["not_in_labor_force"] * 6
+    ind.to_csv(os.path.join(d, "initial_state_individuals.csv"), index=False)
+    i0 = ind.loc[0, "individual_id"]
+    _logg(d, [
+        _rad(0.0, "new_month", month=1, year=2020, employed=0, unemployed=0,
+             unmatched_jobs=6, active_jobs=6, not_in_labour_force=6),
+        _rad(10.0, "start_job", agent_type="individual", agent_id=i0,
+             chi=1.0, xi=1.0, r_i=0.27, job_id="J0000001", is_bootstrap=False,
+             home_municipality="2062", job_municipality="2062",
+             from_onet="41-2031", to_onet="41-2031", vacancy_age_days=10),
+        _rad(30.0, "new_month", month=2, year=2020, employed=1, unemployed=0,
+             unmatched_jobs=5, active_jobs=6, not_in_labour_force=5),
+        _rad(40.0, "destroy_job", agent_type="individual", agent_id=i0,
+             chi=1.0, xi=1.0, r_i=0.27,
+             event_detail="job_destroyed_holder_displaced", job_id="J0000001"),
+        _rad(60.0, "new_month", month=3, year=2020, employed=0, unemployed=1,
+             unmatched_jobs=5, active_jobs=5, not_in_labour_force=5),
+    ])
+
+    _, _, frames, _, _ = spela_upp(d, 0, 0, seed=0)
+    assert frames[2]["workers"]["state"].count("0") == 1
+    assert frames[2]["workers"]["state"].count("2") == 5

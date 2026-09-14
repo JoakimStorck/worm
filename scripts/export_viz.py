@@ -284,6 +284,18 @@ class Tillstand:
 
         for iid, jid in zip(individer["individual_id"], _kolumn(individer, "job_id")):
             self.ind_jobb[str(iid)] = None if pd.isna(jid) else str(jid)
+        # UTANFÖR ARBETSKRAFTEN. Individtabellen är hela befolkningen, inte
+        # arbetskraften: scenariobuilder sätter status not_in_labor_force på
+        # den andel som workforce_ratio lämnar utanför. De söker aldrig och
+        # förekommer aldrig i en händelse. Räknas de som arbetslösa -- vilket
+        # "har inget jobb" gör -- blir de 20 000 orange prickar i en kommun
+        # med 2 100 arbetslösa, och loggens u bredvid säger något helt annat.
+        self.utanfor = set()
+        for iid, st in zip(individer["individual_id"],
+                           _kolumn(individer, "status", default="")):
+            if str(st) == "not_in_labor_force":
+                self.utanfor.add(str(iid))
+
         for iid, xi, chi, r in zip(individer["individual_id"],
                                    _kolumn(individer, "xi"),
                                    _kolumn(individer, "chi"),
@@ -338,6 +350,8 @@ class Tillstand:
             # aldrig ackumulerande, bara ständigt närvarande.
             if str(detalj or "").startswith("job_gone_before_start"):
                 return
+            # Den som får ett jobb är per definition i arbetskraften.
+            self.utanfor.discard(aid)
             tidigare = self.ind_jobb.get(aid)
             if tidigare is not None and tidigare in self.jobb_innehavare:
                 self.jobb_innehavare[tidigare] = None
@@ -527,7 +541,7 @@ def spela_upp(run_dir, panel_n, panel_jobb_n, seed):
         geom_delta = []
         for k, iid in enumerate(panel_ids):
             jid = tillstand.ind_jobb.get(iid)
-            status.append("1" if jid else "0")
+            status.append("1" if jid else ("2" if iid in tillstand.utanfor else "0"))
             ref = jobb_pos.get(jid, -1) if jid else -1
             if ref != forra_jobb[k]:
                 jobb_delta.extend((k, ref))
