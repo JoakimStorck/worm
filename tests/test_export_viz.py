@@ -15,6 +15,17 @@ import pytest
 from scripts.export_viz import exportera, spela_upp
 
 
+def _skriv_slutlage(dir_, jobb, nya=None):
+    """final_state_jobs.csv: hela stocken vid slutet, inklusive jobb som
+    postats under körningen."""
+    import pandas as _pd
+    df = jobb.copy()
+    df["created_time"] = 0.0
+    if nya is not None:
+        df = _pd.concat([df, nya], ignore_index=True)
+    df.to_csv(os.path.join(dir_, "final_state_jobs.csv"), index=False)
+
+
 def _skriv_korning(dir_, n_ind=40):
     os.makedirs(dir_, exist_ok=True)
     ind = pd.DataFrame([{
@@ -162,3 +173,63 @@ def test_json_gar_att_lasa_och_bar_harkomst(tmp_path):
     assert data["meta"]["commit"] == "01234567"
     assert data["meta"]["n_months"] == 1
     assert len(data["workers"]["id"]) == len(data["workers"]["x"]) == 12
+
+
+def test_jobb_postade_under_korningen_kommer_med(tmp_path):
+    """post_vacancies_batch skapar jobb med id-prefix N under körningen. De
+    finns bara i final_state_jobs.csv. Läses de inte syns panelens medlemmar
+    som anställda utan jobb att peka på, och pendlingsmatrisen tappar deras
+    kommun."""
+    import pandas as pd
+
+    d = str(tmp_path / "run_n")
+    ind, jobb = _skriv_korning(d, n_ind=10)
+    nytt = pd.DataFrame([{
+        "job_id": "N0000001", "employer_id": "2062_e000001",
+        "individual_id": None, "municipal_code": "2034",
+        "x": 400000.0, "y": 6700000.0, "xi": 1.0, "chi": 1.0,
+        "r_o": 0.3, "r_req": 0.4, "wage": 30000.0, "onet_code": "41-2031",
+        "created_time": 40.0,
+    }])
+    _skriv_slutlage(d, jobb, nytt)
+    _logg(d, [
+        _rad(0.0, "new_month", month=1, year=2020, employed=0, unemployed=10,
+             unmatched_jobs=10, active_jobs=10, not_in_labour_force=0),
+        _rad(45.0, "start_job", agent_type="individual",
+             agent_id="2062_i000000", chi=1.0, xi=1.0, r_i=0.27,
+             job_id="N0000001", is_bootstrap=False, u_R=0.8,
+             home_municipality="2062", job_municipality="2034",
+             from_onet="41-2031", to_onet="41-2031", vacancy_age_days=10),
+        _rad(60.0, "new_month", month=3, year=2020, employed=1, unemployed=9,
+             unmatched_jobs=10, active_jobs=11, not_in_labour_force=0),
+    ])
+
+    panel, panel_jobb, frames, _, _ = spela_upp(d, 10, 20, seed=0)
+
+    assert "N0000001" in set(panel_jobb["job_id"])
+    pos = list(panel_jobb["job_id"]).index("N0000001")
+    # Månad 1: jobbet är inte fött än.
+    assert frames[0]["jobs"]["state"][pos] == 3
+    # Månad 3: fött och besatt, och pendlingen över kommungräns räknad.
+    assert frames[1]["jobs"]["state"][pos] == 0
+    assert frames[1]["commuting"] == {"2062>2034": 1}
+
+
+def test_slutlagets_innehavare_smittar_inte_startlaget(tmp_path):
+    """final_state_jobs.csv bär den som håller jobbet vid SLUTET. Ärvs den
+    börjar uppspelningen i slutläget."""
+    import pandas as pd
+
+    d = str(tmp_path / "run_s")
+    ind, jobb = _skriv_korning(d, n_ind=10)
+    slut = jobb.copy()
+    slut["created_time"] = 0.0
+    slut.loc[0, "individual_id"] = "2062_i000003"     # innehavare vid slutet
+    slut.to_csv(os.path.join(d, "final_state_jobs.csv"), index=False)
+    _logg(d, [_rad(0.0, "new_month", month=1, year=2020, employed=0,
+                   unemployed=10, unmatched_jobs=10, active_jobs=10,
+                   not_in_labour_force=0)])
+
+    _, _, frames, _, _ = spela_upp(d, 10, 20, seed=0)
+    assert sum(frames[0]["workers"]["state"]) == 0
+    assert frames[0]["jobs"]["state"].count(0) == 0

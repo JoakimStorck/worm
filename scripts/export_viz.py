@@ -186,6 +186,12 @@ class Tillstand:
             self.jobb_innehavare[str(jid)] = None
             self.jobb_aktivt[str(jid)] = True
             self.jobb_annonserat[str(jid)] = False
+        # NÄR JOBBET FÖDDES. Jobb postade under körningen finns i tabellen från
+        # början av uppspelningen men ska inte ritas förrän de skapats, annars
+        # visar första bildrutan tio års jobbskapande på en gång.
+        self.jobb_skapat = {str(j): (0.0 if pd.isna(c) else float(c))
+                            for j, c in zip(jobb["job_id"],
+                                            _kolumn(jobb, "created_time", default=0.0))}
         for jid, iid in zip(jobb["job_id"], _kolumn(jobb, "individual_id")):
             if not pd.isna(iid):
                 self.jobb_innehavare[str(jid)] = str(iid)
@@ -251,11 +257,44 @@ def _handelsetext(r):
     return "; ".join(delar)
 
 
+def _jobbuniversum(run_dir):
+    """Alla jobb som funnits under körningen, inte bara de som fanns vid start.
+
+    post_vacancies_batch skapar jobb varje månad mot arbetsgivarnas måltal och
+    ger dem id med prefix N. De finns inte i initial_state_jobs.csv. Läses bara
+    den saknar exporten varje jobb som fötts under körningen: panelens
+    medlemmar syns som anställda utan jobb att peka på i uppgiftsrummet, och
+    pendlingsmatrisen tappar deras kommun. I en tioårskörning av Siljan var det
+    drygt en tredjedel av de jobb panelen faktiskt tog.
+
+    final_state_jobs.csv bär hela stocken -- förstörda jobb ligger kvar med
+    active=False -- så unionen med starttabellen är det fullständiga
+    universumet. Starttabellen först, slutet sist: geometrin är densamma, men
+    slutraden bär created_time och destroyed_time.
+    """
+    ini = pd.read_csv(os.path.join(run_dir, "initial_state_jobs.csv"))
+    sista = os.path.join(run_dir, "final_state_jobs.csv")
+    if os.path.isfile(sista):
+        fin = pd.read_csv(sista)
+        jobb = pd.concat([ini, fin], ignore_index=True)
+        jobb = jobb.drop_duplicates("job_id", keep="last").reset_index(drop=True)
+        # INNEHAVAREN TAS UR STARTTABELLEN. Slutradens individual_id är den
+        # som håller jobbet vid körningens SLUT. Ärvdes den skulle
+        # uppspelningen börja i slutläget och sedan spela upp tio år av
+        # händelser ovanpå det.
+        start_innehavare = dict(zip(ini["job_id"].astype(str),
+                                    ini.get("individual_id", pd.Series(dtype=object))))
+        jobb["individual_id"] = [start_innehavare.get(str(j)) for j in jobb["job_id"]]
+    else:
+        jobb = ini
+    jobb["job_id"] = jobb["job_id"].astype(str)
+    return jobb
+
+
 def spela_upp(run_dir, panel_n, panel_jobb_n, seed):
     individer = pd.read_csv(os.path.join(run_dir, "initial_state_individuals.csv"))
-    jobb = pd.read_csv(os.path.join(run_dir, "initial_state_jobs.csv"))
+    jobb = _jobbuniversum(run_dir)
     individer["individual_id"] = individer["individual_id"].astype(str)
-    jobb["job_id"] = jobb["job_id"].astype(str)
 
     handelser = read_events(run_dir)
     ts = timeseries_table(handelser)
@@ -290,6 +329,15 @@ def spela_upp(run_dir, panel_n, panel_jobb_n, seed):
     rorda_jobb = {str(r["job_id"]) for r in handelser
                   if r.get("event") == "start_job" and r.get("agent_id") in panel_set
                   and r.get("job_id")}
+    universum = set(jobb["job_id"])
+    # Ett rört jobb som inte finns i universumet är ett tecken på att
+    # tabellerna och loggen kommer från olika körningar. Tyst bortfall här var
+    # precis det som dolde de nypostade N-jobben.
+    saknade = rorda_jobb - universum
+    if saknade:
+        print(f"[varning] {len(saknade)} jobb-id i loggen saknas i "
+              f"tabellerna, t.ex. {sorted(saknade)[:3]}")
+    rorda_jobb &= universum
     ovriga = [j for j in jobb["job_id"] if j not in rorda_jobb]
     n_ovr = min(max(panel_jobb_n - len(rorda_jobb), 0), len(ovriga))
     valda = rorda_jobb | set(rng.choice(ovriga, size=n_ovr, replace=False)) \
@@ -318,7 +366,9 @@ def spela_upp(run_dir, panel_n, panel_jobb_n, seed):
 
         jstatus = []
         for jid in jobb_ids:
-            if not tillstand.jobb_aktivt.get(jid, False):
+            if tillstand.jobb_skapat.get(jid, 0.0) > t:
+                jstatus.append(3)                                   # ej fött än
+            elif not tillstand.jobb_aktivt.get(jid, False):
                 jstatus.append(2)                                   # inaktivt
             elif tillstand.jobb_innehavare.get(jid):
                 jstatus.append(0)                                   # besatt
