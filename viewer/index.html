@@ -53,6 +53,7 @@
   .tal b { font-weight: 600; }
   .lagerrad { display: flex; align-items: center; justify-content: space-between;
               gap: 8px; padding: 2px 0; }
+  .antal { color: var(--dim); font-variant-numeric: tabular-nums; }
   .lagerrad label { display: flex; align-items: center; gap: 7px; cursor: pointer;
                     font-size: 12px; }
   .lagerrad input { accent-color: var(--anstalld); margin: 0; }
@@ -161,15 +162,23 @@ function rita(d) {
     if (x < xmin) xmin = x; if (x > xmax) xmax = x;
     if (y < ymin) ymin = y; if (y > ymax) ymax = y;
   };
-  const ringar = [];
-  for (const kom of d.municipalities || []) {
-    const g = kom.geometry;
-    const delar = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
-    for (const poly of delar) for (const ring of poly) {
-      ringar.push(ring);
-      for (const [x, y] of ring) omslut(x, y);
+  const ringarUr = (lista, rakna) => {
+    const ut = [];
+    for (const omr of lista || []) {
+      const g = omr.geometry;
+      const delar = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+      for (const poly of delar) for (const ring of poly) {
+        ut.push(ring);
+        if (rakna) for (const [x, y] of ring) omslut(x, y);
+      }
     }
-  }
+    return ut;
+  };
+  // Utsnittet styrs av kommunerna. DeSO ligger per definition innanför dem,
+  // och ett DeSO som sträcker sig utanför vore ett datafel snarare än en
+  // anledning att zooma ut.
+  const ringar = ringarUr(d.municipalities, true);
+  const desoringar = ringarUr(d.deso, false);
   if (!ringar.length) {
     for (let i = 0; i < d.workers.x.length; i++) omslut(d.workers.x[i], d.workers.y[i]);
   }
@@ -198,18 +207,34 @@ function rita(d) {
   // Arbetslösa ovanpå anställda visar var arbetslösheten sitter; tvärtom
   // visar var jobben finns. Båda är sanna, och det ska vara ett val man gör
   // och ser att man gjort -- inte en ordning som råkade hamna i koden.
+  const bana = (ring) => {
+    ctx.beginPath();
+    ctx.moveTo(px(ring[0][0]), py(ring[0][1]));
+    for (let k = 1; k < ring.length; k++) ctx.lineTo(px(ring[k][0]), py(ring[k][1]));
+    ctx.closePath();
+  };
+
   const LAGER = [
-    { id: "kommuner", namn: "Kommuner", pa: true, rita: () => {
-        ctx.strokeStyle = "#343846"; ctx.lineWidth = 1;
-        ctx.fillStyle = "rgba(255,255,255,0.025)";
-        for (const ring of ringar) {
-          ctx.beginPath();
-          ctx.moveTo(px(ring[0][0]), py(ring[0][1]));
-          for (let k = 1; k < ring.length; k++) ctx.lineTo(px(ring[k][0]), py(ring[k][1]));
-          ctx.closePath(); ctx.fill(); ctx.stroke();
-        }
+    { id: "deso", namn: "DeSO-områden", pa: false,
+      antal: () => desoringar.length, rita: () => {
+        // Bakgrundsindelning: den upplösning modellens geografi har. Tunn och
+        // dämpad, utan fyllning, så att den aldrig konkurrerar med
+        // kommungränsen.
+        ctx.strokeStyle = "#2a2d3a"; ctx.lineWidth = 0.6;
+        for (const ring of desoringar) bana(ring), ctx.stroke();
       } },
-    { id: "besatta", namn: "Besatta positioner", pa: false, rita: (f) => {
+    { id: "kommuner", namn: "Kommuner", pa: true,
+      antal: () => (d.municipalities || []).length, rita: () => {
+        // KRAFTIGARE ÄN DeSO, med avsikt. Kommungränsen är den enda gräns i
+        // bilden som bär en fråga: pendlingen som korsar den är vad
+        // scenariot finns för. DeSO är indelning, kommun är gräns, och
+        // linjebredden ska säga vilket som är vilket utan bildtext.
+        ctx.fillStyle = "rgba(255,255,255,0.025)";
+        ctx.strokeStyle = "#5b6178"; ctx.lineWidth = 1.8;
+        for (const ring of ringar) bana(ring), ctx.fill(), ctx.stroke();
+      } },
+    { id: "besatta", namn: "Besatta positioner", pa: false,
+      antal: (f) => f.jobs.state.filter((v) => v === 0).length, rita: (f) => {
         ctx.fillStyle = "#3b5c50";
         const js = f.jobs.state;
         for (let k = 0; k < js.length; k++) {
@@ -217,7 +242,8 @@ function rita(d) {
           ctx.fillRect(px(d.jobs.x[k]) - 1.5, py(d.jobs.y[k]) - 1.5, 3, 3);
         }
       } },
-    { id: "vakanser", namn: "Lediga positioner", pa: true, rita: (f) => {
+    { id: "vakanser", namn: "Lediga positioner", pa: true,
+      antal: (f) => f.jobs.state.filter((v) => v === 1).length, rita: (f) => {
         ctx.fillStyle = FARG.vakans;
         const js = f.jobs.state;
         for (let k = 0; k < js.length; k++) {
@@ -225,7 +251,8 @@ function rita(d) {
           ctx.fillRect(px(d.jobs.x[k]) - 1.5, py(d.jobs.y[k]) - 1.5, 3, 3);
         }
       } },
-    { id: "anstallda", namn: "Anställda", pa: true, rita: (f) => {
+    { id: "anstallda", namn: "Anställda", pa: true,
+      antal: (f) => f.workers.state.filter((v) => v).length, rita: (f) => {
         ctx.fillStyle = FARG.anstalld;
         const ws = f.workers.state;
         for (let k = 0; k < ws.length; k++) {
@@ -235,7 +262,8 @@ function rita(d) {
           ctx.fill();
         }
       } },
-    { id: "arbetslosa", namn: "Arbetslösa", pa: true, rita: (f) => {
+    { id: "arbetslosa", namn: "Arbetslösa", pa: true,
+      antal: (f) => f.workers.state.filter((v) => !v).length, rita: (f) => {
         ctx.fillStyle = FARG.arbetslos;
         const ws = f.workers.state;
         for (let k = 0; k < ws.length; k++) {
@@ -245,7 +273,39 @@ function rita(d) {
           ctx.fill();
         }
       } },
+    { id: "linjer", namn: "Bostad \u2192 arbetsställe", pa: false,
+      antal: (f) => antalLinjer(f), rita: (f) => {
+        // En linje per anställd i panelen, från bostad till arbetsställe.
+        // Linjer över kommungräns ritas ljusare och tjockare: det är dem
+        // scenariot handlar om, och i ett mönster av tusen streck försvinner
+        // de annars bland de korta lokala.
+        const ws = f.workers.state, jb = f.workers.job;
+        for (const over of [false, true]) {
+          ctx.strokeStyle = over ? "rgba(224,192,96,0.55)" : "rgba(140,150,180,0.18)";
+          ctx.lineWidth = over ? 0.9 : 0.5;
+          ctx.beginPath();
+          for (let k = 0; k < ws.length; k++) {
+            const j = jb[k];
+            if (!ws[k] || j < 0) continue;
+            if ((d.workers.mun[k] !== d.jobs.mun[j]) !== over) continue;
+            ctx.moveTo(px(d.workers.x[k]), py(d.workers.y[k]));
+            ctx.lineTo(px(d.jobs.x[j]), py(d.jobs.y[j]));
+          }
+          ctx.stroke();
+        }
+      } },
   ];
+
+  // Anställda utan känt arbetsställe kan inte få en linje. Med nuvarande
+  // export ska de vara noll -- varje jobb en panelmedlem tagit ligger i
+  // panelen -- men talet i lagerlistan ska visa vad som faktiskt ritas, inte
+  // vad som borde ritas.
+  function antalLinjer(f) {
+    const ws = f.workers.state, jb = f.workers.job;
+    let n = 0;
+    for (let k = 0; k < ws.length; k++) if (ws[k] && jb[k] >= 0) n++;
+    return n;
+  }
 
   function lagerpanel() {
     const ul = el("lager");
@@ -259,7 +319,7 @@ function rita(d) {
       rad.innerHTML =
         '<label><input type="checkbox"' + (lg.pa ? " checked" : "") + '>' +
         '<span class="prick" style="background:' + lagerfarg(lg.id) + '"></span>' +
-        lg.namn + '</label>' +
+        lg.namn + ' <span class="antal" data-lager="' + lg.id + '"></span></label>' +
         '<span class="flytt"><button title="Flytta upp">\u25b2</button>' +
         '<button title="Flytta ned">\u25bc</button></span>';
       rad.querySelector("input").addEventListener("change", (e) => {
@@ -273,6 +333,17 @@ function rita(d) {
       ul.appendChild(rad);
     });
   }
+  // Antalen uppdateras separat från panelen: att bygga om listan varje månad
+  // skulle nolla fokus och göra kryssrutorna oklickbara under uppspelning.
+  function lagerantal(f) {
+    for (const lg of LAGER) {
+      const ruta = document.querySelector('.antal[data-lager="' + lg.id + '"]');
+      if (!ruta) continue;
+      const n = lg.antal ? lg.antal(f) : null;
+      ruta.textContent = n == null ? "" : "(" + n.toLocaleString("sv") + ")";
+    }
+  }
+
   function byt(a, b) {
     if (b < 0 || b >= LAGER.length) return;
     [LAGER[a], LAGER[b]] = [LAGER[b], LAGER[a]];
@@ -288,6 +359,7 @@ function rita(d) {
     ctx.clearRect(0, 0, duk.clientWidth, H);
 
     for (const lager of LAGER) if (lager.pa) lager.rita(f);
+    lagerantal(f);
 
     const a = f.agg;
     el("tid").textContent = (f.year || "") + (f.month ? "-" + String(f.month).padStart(2, "0") : "");

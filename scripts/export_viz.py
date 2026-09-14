@@ -127,6 +127,44 @@ def kommunpolygoner(db_path, koder, tolerans=200.0):
     return ut
 
 
+def desopolygoner(db_path, koder, tolerans=150.0):
+    """DeSO-områdena inom körningens kommuner.
+
+    Bakgrundsindelning, inte gräns: DeSO är den nivå individer och
+    arbetsgivare placeras på i scenariobuilder, så konturerna visar var
+    modellens geografi faktiskt har sin upplösning. De ritas svagare än
+    kommungränserna, som är de gränser pendlingen korsar och därmed de enda
+    som bär en fråga.
+
+    Tolerensen är tätare än kommunernas: ett DeSO i Mora tätort är litet nog
+    att 200 meter suddar formen.
+    """
+    if not db_path or not os.path.isfile(db_path):
+        return []
+    try:
+        from shapely.geometry import mapping
+
+        from core.geography.geoworld import GeoWorld
+    except ImportError:
+        return []
+    try:
+        gdf = GeoWorld(db_path).deso_zones
+    except Exception:
+        return []
+    ut = []
+    for _, rad in gdf.iterrows():
+        kod = str(rad.get("municipal_code", ""))
+        if koder and kod not in koder:
+            continue
+        try:
+            g = rad["geometry"].simplify(tolerans, preserve_topology=True)
+        except Exception:
+            continue
+        ut.append({"code": str(rad.get("deso_code", "")), "mun": kod,
+                   "geometry": mapping(g)})
+    return ut
+
+
 def scb_pendling(db_path, koder):
     """SCB:s observerade flöden mellan kommunerna, ur tabellen `commuting`.
 
@@ -506,6 +544,7 @@ def exportera(run_dir, ut_path, panel_n, panel_jobb_n, seed, db_path):
     data = {
         "meta": meta,
         "municipalities": kommunpolygoner(db_path, koder),
+        "deso": desopolygoner(db_path, koder),
         "commuting_scb": scb_pendling(db_path, koder),
         "workers": {
             "id": list(panel["individual_id"]),
