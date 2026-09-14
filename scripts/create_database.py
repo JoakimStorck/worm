@@ -91,11 +91,20 @@ if file_exists(onet_skills_path):
 else:
     log("OBS: Laddar inte onet_skills/occupation_skill_link, filen saknas.")
 
-# Bygg occupation space (PCA+klustring) till tabellen
-try:
-    loader.load_onet_occupation_space(n_clusters=50, db_path=DB_PATH)
-except Exception as e:
-    log(f"Fel vid skapande av O*NET occupation space: {e}")
+# Uppgiftsrummet SKRIVS INTE HÄR. Tabellen onet_occupation_space ägs av
+# scripts/load_task_geometry.py, som är den enda skrivare vars kolumner
+# modellen faktiskt läser: scenariobuilder.get_geom_for_onet_code hämtar
+# x_occ, y_occ, r_o och r_req. loader.load_onet_occupation_space skrev samma
+# tabellnamn med helt andra kolumner (pc1, pc2, cluster, cluster_name, h) och
+# 879 rader i stället för 1 016, och gjorde det med if_exists="replace".
+# En körning av det här skriptet raderade alltså geometrin, och eftersom
+# get_geom_for_onet_code ligger i try/except hade nästa simulering inte
+# stannat -- den hade fallit tillbaka på reservvärden och producerat en
+# körning som ser riktig ut.
+if file_exists(os.path.join("data", "geometry")):
+    log("Uppgiftsrummet laddas separat: python scripts/load_task_geometry.py --write")
+else:
+    log("OBS: data/geometry/ saknas — uppgiftsrummet kan inte byggas.")
 
 # Ladda SCB:s pendlingsmatris. Två uttag duger och laddaren känner båda;
 # det bredare och nyare tas först. Utan tabellen saknar

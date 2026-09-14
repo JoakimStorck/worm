@@ -458,6 +458,13 @@ from scipy.stats import entropy
 # from .your_helpers import reorder_clusters_by_angle, select_representative_occupations, name_clusters_by_representative_titles
 
 def load_onet_occupation_space(n_clusters=50, db_path="data/worm.sqlite3"):
+    # SKRIVER INTE LÄNGRE TILL onet_occupation_space UTAN ATT DU BER OM DET.
+    # Tabellen ägs av scripts/load_task_geometry.py, vars kolumner
+    # scenariobuilder läser (x_occ, y_occ, r_o, r_req). Den här funktionen
+    # skriver en ANNAN kolumnuppsättning (pc1, pc2, cluster, cluster_name, h)
+    # till samma namn med if_exists="replace", och raderade därmed geometrin
+    # varje gång create_database.py kördes. Kvar för att PCA-klustringen är
+    # ett eget resultat, men den skriver till ett eget tabellnamn.
     """
     Bygger och laddar O*NET occupation space till tabellen onet_occupation_space.
     """
@@ -527,9 +534,9 @@ def load_onet_occupation_space(n_clusters=50, db_path="data/worm.sqlite3"):
     final_df['n_clusters'] = n_clusters
     cols = ['onet_code', 'n_clusters', 'title', 'pc1', 'pc2', 'cluster', 'cluster_name', 'chi', 'xi', 'h']
     conn = sqlite3.connect(db_path)
-    final_df[cols].to_sql("onet_occupation_space", conn, if_exists="replace", index=False)
+    final_df[cols].to_sql("onet_skill_clusters", conn, if_exists="replace", index=False)
     conn.close()
-    print(f"Sparade {len(final_df)} rader till onet_occupation_space (n_clusters={n_clusters})")
+    print(f"Sparade {len(final_df)} rader till onet_skill_clusters (n_clusters={n_clusters})")
     return final_df
 
 def load_sni_onet_link(csv_path, db_path="data/worm.sqlite3"):

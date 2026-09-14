@@ -12,6 +12,13 @@ from core.occupations.utils import reorder_clusters_by_angle, select_representat
 
 
 def transform_onet_skills_scaled_from_db(n_clusters=50, db_path="data/worm.sqlite3"):
+    # SKRIVER INTE LÄNGRE TILL onet_occupation_space UTAN ATT DU BER OM DET.
+    # Tabellen ägs av scripts/load_task_geometry.py, vars kolumner
+    # scenariobuilder läser (x_occ, y_occ, r_o, r_req). Den här funktionen
+    # skriver en ANNAN kolumnuppsättning (pc1, pc2, cluster, cluster_name, h)
+    # till samma namn med if_exists="replace", och raderade därmed geometrin
+    # varje gång create_database.py kördes. Kvar för att PCA-klustringen är
+    # ett eget resultat, men den skriver till ett eget tabellnamn.
     """
     Skapar occupation space från SQL-databas: läser occupations, skills och occupation_skill_link,
     bygger skill-matris, gör PCA, klustrar, räknar chi/xi/H, sparar till onet_occupation_space.
@@ -82,9 +89,9 @@ def transform_onet_skills_scaled_from_db(n_clusters=50, db_path="data/worm.sqlit
     final_df['n_clusters'] = n_clusters
     cols = ['onet_code', 'n_clusters', 'title', 'pc1', 'pc2', 'cluster', 'cluster_name', 'chi', 'xi', 'h']
     conn = sqlite3.connect(db_path)
-    final_df[cols].to_sql("onet_occupation_space", conn, if_exists="replace", index=False)
+    final_df[cols].to_sql("onet_skill_clusters", conn, if_exists="replace", index=False)
     conn.close()
-    log(f"Sparade {len(final_df)} rader till onet_occupation_space (n_clusters={n_clusters})")
+    log(f"Sparade {len(final_df)} rader till onet_skill_clusters (n_clusters={n_clusters})")
     return final_df
 
 
