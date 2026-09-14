@@ -70,17 +70,25 @@ def test_bara_en_skrivare_till_geometritabellen():
     skrivare kvar, och testet håller det så."""
     import os
     import re
+    # VITLISTA, INTE SVARTLISTA. Första försöket gick igenom hela repo-roten
+    # och undantog .git, attic, tests och __pycache__. Men .venv ligger också i
+    # roten, och site-packages innehåller testfiler i big5 och andra kodningar:
+    # testet föll på UnicodeDecodeError i ett paket som inte har med saken att
+    # göra. En svartlista måste förutse allt som kan dyka upp i en katalog man
+    # inte äger. Vitlistan räknar upp den kod projektet faktiskt består av.
     rot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     skrivare = []
-    for mapp, _, filer in os.walk(rot):
-        if any(d in mapp for d in (".git", "attic", "tests", "__pycache__")):
-            continue
-        for f in filer:
-            if not f.endswith(".py"):
+    for under in ("core", "scripts", "pipeline"):
+        for mapp, _, filer in os.walk(os.path.join(rot, under)):
+            if "__pycache__" in mapp:
                 continue
-            kalla = open(os.path.join(mapp, f), encoding="utf-8").read()
-            if re.search(r'to_sql\(\s*["\']onet_occupation_space["\']', kalla):
-                skrivare.append(os.path.relpath(os.path.join(mapp, f), rot))
+            for f in sorted(filer):
+                if not f.endswith(".py"):
+                    continue
+                sokvag = os.path.join(mapp, f)
+                kalla = open(sokvag, encoding="utf-8").read()
+                if re.search(r"""to_sql\(\s*["']onet_occupation_space["']""", kalla):
+                    skrivare.append(os.path.relpath(sokvag, rot))
     assert skrivare == ["scripts/load_task_geometry.py"], skrivare
 
 
