@@ -1769,6 +1769,7 @@ def test_start_job_logs_both_municipalities():
     w.prepare()
     w.jobs["municipal_code"] = "2034"
     w.individuals["individual_id"] = ["2062_i000000"]
+    w.refresh_ind()      # hel kolumn tilldelad efter prepare: vyerna byggs om (0110)
     w.file_application(nytt, 0, 0.0, q=1.0, w_neg=1.5, surplus=0.3, commute_km=2.0)
     handle_close_vacancy({"time": 40.0, "agent_id": None, "event_type": "close_vacancy",
                           "params": {"job_id": nytt}}, w)
@@ -1831,3 +1832,37 @@ def test_the_same_seed_gives_the_same_points():
     a = punkter(1)
     np.random.seed(12345)
     assert punkter(1) == a
+
+
+def test_individual_views_alias_the_table_and_detect_detachment():
+    """0110: läsningar går genom kolumnvyer som aliasar tabellens minne, så
+    en .at[]-skrivning syns i vyn utan synk. Tilldelas en hel kolumn tappar
+    vyn kontakten -- och det ska KASTA vid nästa prövning, inte ge gammal data
+    i ett år. Byts hela frame byggs vyerna om av sig själva."""
+    from core.individual_views import IndividualViews
+
+    class W(IndividualViews):
+        pass
+
+    w = W()
+    w.individuals = pd.DataFrame({"individual_id": ["a", "b", "c"],
+                                  "status": ["unemployed"] * 3, "w_res": [0.5, 0.6, 0.7]})
+    w.refresh_ind()
+    w.individuals.at[1, "status"] = "employed"
+    w.individuals.at[2, "w_res"] = 0.9
+    assert w.get_ind(1, "status") == "employed"           # .at syns i vyn
+    assert w.get_ind(2, "w_res") == pytest.approx(0.9)
+    assert w.ind_row(0)["individual_id"] == "a"
+    with pytest.raises(KeyError):
+        w.get_ind(0, "finns_inte")                        # som .at, ingen tyst None
+    assert w.get_ind(0, "finns_inte", default=None) is None
+
+    w.refresh_ind(verify=True)                            # oförändrad tabell: tyst
+
+    w.individuals["w_res"] = [1.0, 1.0, 1.0]              # hel kolumn tilldelad
+    with pytest.raises(RuntimeError):
+        w.refresh_ind(verify=True)                        # vyn har tappat kontakten
+
+    w.individuals = pd.DataFrame({"individual_id": ["x"], "status": ["employed"],
+                                  "w_res": [2.0]})
+    assert w.get_ind(0, "w_res") == pytest.approx(2.0)   # ny frame: byggs om av sig själv

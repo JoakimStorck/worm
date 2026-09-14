@@ -19,7 +19,10 @@ MONTH_LENGTHS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 def is_leap_year(year):
     return (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0))
 
-class World:
+from core.individual_views import IndividualViews
+
+
+class World(IndividualViews):
     def __init__(self, db_path, cfg_reader, outdir, geoworld=None, scope=None,
                  individuals=None, jobs=None, employers=None, events=None):
         self.db_path = db_path
@@ -471,6 +474,7 @@ class World:
                 dtype="object")
         if "onet_code" in self.individuals.columns and not hasattr(self, "circles"):
             self.init_competence()
+        self.refresh_ind()
 
     def census_open_vacancies(self, t_now):
         """Folkräkning av de LEDIGA positionerna, per åldersintervall.

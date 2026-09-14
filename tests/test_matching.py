@@ -1,5 +1,6 @@
 """Matchning som överskott, samt att parametrar når kärnan."""
 import numpy as np
+from core.individual_views import IndividualViews
 import pandas as pd
 import pytest
 
@@ -113,7 +114,7 @@ def test_parameters_reach_the_kernel(monkeypatch):
             "bargaining": {"enabled": True, "beta": 0.5, "theta": 0.5,
                            "labour_share": 0.65, "wage_floor_share": 0.7}}}
 
-    class W:
+    class W(IndividualViews):
         cfg_reader = R()
 
     cfg = search_config(W())
@@ -136,7 +137,7 @@ def test_reservation_wage_decays_on_failed_search():
     from conftest import FakeConfig, FakeQueue, FakeLogger
     from core.event_handlers import handle_start_job_search
 
-    class W:
+    class W(IndividualViews):
         pass
     w = W()
     w.cfg_reader = FakeConfig({"reservation_decay_per_search": 0.9,
@@ -745,7 +746,7 @@ def test_employer_wage_effect_actually_reaches_the_jobs():
 # Årlig lönerevision (0067)
 # ---------------------------------------------------------------------------
 
-class _RevWorld:
+class _RevWorld(IndividualViews):
     """Minimal värld: två anställda på samma jobb, en som växt i q och en som
     stått stilla."""
     def __init__(self, q_last, q_now, markup=0.025, beta_q=0.10, enabled=True):

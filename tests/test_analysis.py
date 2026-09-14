@@ -6,6 +6,7 @@ tillståndsfilerna med varsin logik. Fem tolkningar av samma data."""
 import os
 
 import numpy as np
+from core.individual_views import IndividualViews
 import pandas as pd
 import pytest
 
@@ -246,7 +247,7 @@ def test_wage_stock_is_measured_annually_not_per_event():
 
     assert "wage_snapshot" not in RULE_SWITCH
 
-    class W:
+    class W(IndividualViews):
         individuals = pd.DataFrame({
             "status": ["employed"] * 100 + ["unemployed"] * 20,
             "w_neg": list(np.linspace(0.5, 1.5, 100)) + [np.nan] * 20,

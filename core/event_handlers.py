@@ -16,7 +16,7 @@ def _become_unemployed(world, idx, t_now, free_job=True):
     """
     ind = world.individuals
     if free_job and 'job_id' in ind.columns:
-        held = ind.at[idx, 'job_id']
+        held = world.get_ind(idx, 'job_id')
         if pd.notna(held):
             pos = world.job_index().get(held)
             jobs = world.jobs
@@ -88,13 +88,13 @@ def handle_start_job(event, world):
         # gamla positionen tillsatt med hennes id men utan sysselsatt
         # innehavare -- 28 sådana fall i en femårskörning (kategori E i
         # scripts/check_invariants.py).
-        held = individuals.at[idx, 'job_id'] if 'job_id' in individuals.columns else None
+        held = world.get_ind(idx, 'job_id') if 'job_id' in individuals.columns else None
         held_pos = world.job_index().get(held) if pd.notna(held) else None
         still_holds = (
             held_pos is not None
             and bool(jobs.iat[held_pos, jobs.columns.get_loc('active')])
             and jobs.iat[held_pos, jobs.columns.get_loc('individual_id')]
-                == individuals.at[idx, 'individual_id']
+                == world.get_ind(idx, 'individual_id')
         )
         if still_holds:
             if 'accepted_job_id' in individuals.columns:
@@ -115,7 +115,7 @@ def handle_start_job(event, world):
     # Ett jobbyte måste frigöra den gamla positionen. Utan det blir den kvar
     # med arbetarens id utan innehavare, och antalet tillsatta positioner
     # överstiger antalet sysselsatta.
-    prev = individuals.at[idx, 'job_id'] if 'job_id' in individuals.columns else None
+    prev = world.get_ind(idx, 'job_id') if 'job_id' in individuals.columns else None
 
     # JOBBYTE fångas HÄR, medan prev fortfarande finns. Kontrollen låg
     # tidigare efter 'individuals.at[idx, "job_id"] = job_id', så den jämförde
@@ -124,8 +124,8 @@ def handle_start_job(event, world):
     # som därför aldrig skapades.
     _job_to_job = bool(pd.notna(prev) and str(prev) != str(job_id)
                        and 'status' in individuals.columns
-                       and individuals.at[idx, 'status'] == 'employed')
-    _w_prev = individuals.at[idx, 'w_neg'] if _job_to_job else np.nan
+                       and world.get_ind(idx, 'status') == 'employed')
+    _w_prev = world.get_ind(idx, 'w_neg') if _job_to_job else np.nan
 
     if pd.notna(prev) and prev != job_id:
         prev_pos = world.job_index().get(prev)
@@ -135,7 +135,7 @@ def handle_start_job(event, world):
 
     # Källyrket läses INNAN det skrivs över: u_R_occ mäts från det yrke hon
     # kom från. Att uppdatera först gav u_R_occ = 0 för varje övergång.
-    prev_onet = (individuals.at[idx, 'last_onet_code']
+    prev_onet = (world.get_ind(idx, 'last_onet_code')
                  if 'last_onet_code' in individuals.columns else None)
 
     individuals.at[idx, 'status'] = 'employed'
@@ -150,7 +150,7 @@ def handle_start_job(event, world):
     # Positionen är känd; ingen boolesk skanning behövs. Skriv kolumnvärdet,
     # inte radindexet.
     jobs.iat[pos, jobs.columns.get_loc('individual_id')] = (
-        individuals.at[idx, 'individual_id'] if 'individual_id' in individuals.columns else idx)
+        world.get_ind(idx, 'individual_id') if 'individual_id' in individuals.columns else idx)
 
     # Uppsägningen är avslutad. Den gamla positionen frigörs av prev-blocket
     # ovan, som redan fanns; 0079:s egen frigörning här var dubbelarbete.
@@ -172,8 +172,8 @@ def handle_start_job(event, world):
     # mobilitetsfördelningen (median 1.03 task-radier, CPS 2020-2024).
     extra = {'job_id': job_id}
     try:
-        d_task = float(np.hypot(individuals.at[idx, 'x_occ'] - job_row['x_occ'],
-                                individuals.at[idx, 'y_occ'] - job_row['y_occ']))
+        d_task = float(np.hypot(world.get_ind(idx, 'x_occ') - job_row['x_occ'],
+                                world.get_ind(idx, 'y_occ') - job_row['y_occ']))
         r_o = float(job_row.get('r_o', np.nan))
         extra['d_task'] = round(d_task, 4)
         if r_o and not np.isnan(r_o) and r_o > 0:
@@ -252,7 +252,7 @@ def handle_start_job(event, world):
         # jämföras med SCB:s pendlingsmatris.
         if 'municipal_code' in jobs.columns:
             extra['job_municipality'] = str(job_row.get('municipal_code'))
-        _iid = individuals.at[idx, 'individual_id'] if 'individual_id' in individuals.columns else None
+        _iid = world.get_ind(idx, 'individual_id') if 'individual_id' in individuals.columns else None
         if isinstance(_iid, str) and '_i' in _iid:
             extra['home_municipality'] = _iid.split('_i', 1)[0]
         # Vakansens ålder vid tillsättning
@@ -277,7 +277,7 @@ def handle_start_job(event, world):
             extra['r_req'] = round(float(rq), 3)
     world.event_logger.log_event(world, event, extra=extra)
     n_employees = job_row['employer_size']
-    prop_training = individuals.at[idx, 'propensity_internal_training']
+    prop_training = world.get_ind(idx, 'propensity_internal_training')
     P_training = prop_training * world.employer_training_prob(n_employees)
 
     training_timing = world.cfg_reader.get_event_timing('start_internal_training')
@@ -298,7 +298,7 @@ def handle_start_job(event, world):
         world._push_event(training_event)
 
     job_change_timing = world.cfg_reader.get_event_timing('internal_job_change')
-    prop_job_change = individuals.at[idx, 'propensity_internal_job_change']
+    prop_job_change = world.get_ind(idx, 'propensity_internal_job_change')
     if np.random.rand() < prop_job_change:
         if job_change_timing['dist'] == 'exponential':
             interval = np.random.exponential(job_change_timing['mean'])
@@ -353,11 +353,11 @@ def handle_start_job_search(event, world):
     if due is None:
         raise KeyError(f"start_job_search utan 'due' för {idx}: alla sökhändelser "
                        "går genom World.schedule_search")
-    if float(due) != float(world.individuals.at[idx, 'next_search_time']):
+    if float(due) != float(world.get_ind(idx, 'next_search_time')):
         world.event_logger.log_event(world, event, extra={'event_detail': 'search_superseded'})
         return
 
-    status = world.individuals.at[idx, 'status']
+    status = world.get_ind(idx, 'status')
     t_now = float(event['time'])
 
     # Statusvakt, möte, val och ansökan ligger i matching_core.apply_once och
@@ -373,7 +373,7 @@ def handle_start_job_search(event, world):
             'surplus': round(surplus, 4), 'w_neg': round(w_neg, 4),
             'q_hire': round(q_hire, 4), 'commute_km': round(commute_km, 3)})
     elif status == 'unemployed':
-        current_prop = world.individuals.at[idx, 'propensity_start_education']
+        current_prop = world.get_ind(idx, 'propensity_start_education')
         new_prop = min(current_prop + 0.1, 1.0)
         world.individuals.at[idx, 'propensity_start_education'] = new_prop
         _decay_reservation(world, idx)
@@ -396,7 +396,7 @@ def _decay_reservation(world, idx):
     decay = float(sim.get('reservation_decay_per_search', 1.0))
     floor = float(sim.get('reservation_floor', 0.0))
     if 'w_res' in world.individuals.columns and decay < 1.0:
-        w_res = float(world.individuals.at[idx, 'w_res'])
+        w_res = float(world.get_ind(idx, 'w_res'))
         world.individuals.at[idx, 'w_res'] = max(w_res * decay, floor)
 
 
@@ -423,7 +423,7 @@ def start_delay_days(world, idx):
     dagar = float(sim.get('hiring_decision_days', 10.0))
     if ('status' in world.individuals.columns
             and idx in world.individuals.index
-            and world.individuals.at[idx, 'status'] == 'employed'):
+            and world.get_ind(idx, 'status') == 'employed'):
         dagar += float(sim.get('notice_period_days', 30.0))
     return dagar
 
@@ -485,16 +485,16 @@ def handle_close_vacancy(event, world):
         # 0095 fångade det inte: överskottet prövas mot hennes läge vid
         # STÄNGNINGEN, och då var hon fortfarande arbetslös med låg
         # reservation. Löftet, inte statusen, är det som gör henne otillgänglig.
-        if 'accepted_job_id' in ind.columns and pd.notna(ind.at[k, 'accepted_job_id']):
+        if 'accepted_job_id' in ind.columns and pd.notna(world.get_ind(k, 'accepted_job_id')):
             return False
-        st = ind.at[k, 'status']
+        st = world.get_ind(k, 'status')
         if st == 'unemployed':
-            return pd.isna(ind.at[k, 'job_id'])
+            return pd.isna(world.get_ind(k, 'job_id'))
         if st != 'employed':
             return False
         if 'notice_job_id' not in ind.columns:
             return True
-        return pd.isna(ind.at[k, 'notice_job_id'])
+        return pd.isna(world.get_ind(k, 'notice_job_id'))
 
     lediga = [a for a in apps if _behörig(a['idx'])]
 
@@ -549,7 +549,7 @@ def handle_close_vacancy(event, world):
             'event_detail': 'offer_declined', 'job_id': job_id, 'agent_id': a['idx'],
             'surplus_at_application': round(float(a.get('surplus') or 0.0), 4),
             'surplus_now': round(float(s_nu), 4),
-            'status': ind.at[a['idx'], 'status']})
+            'status': world.get_ind(a['idx'], 'status')})
     if win is None:
         world.event_logger.log_event(world, event, extra={
             'event_detail': 'vacancy_closed_unfilled', 'job_id': job_id,
@@ -585,15 +585,15 @@ def handle_close_vacancy(event, world):
     # och bokföringen är oberörd. Den gamla positionen blir därmed ledig UTAN
     # att någon blivit arbetslös, vilket är byteskedjan: Burdett-Mortensens
     # stege i uppgiftsrummet.
-    if ('status' in ind.columns and ind.at[idx, 'status'] == 'employed'
-            and pd.notna(ind.at[idx, 'job_id'])):
+    if ('status' in ind.columns and world.get_ind(idx, 'status') == 'employed'
+            and pd.notna(world.get_ind(idx, 'job_id'))):
         if 'notice_job_id' not in ind.columns:
             ind['notice_job_id'] = pd.Series([None] * len(ind), index=ind.index,
                                              dtype="object")
         ind.at[idx, 'notice_job_id'] = job_id
         world.event_logger.log_event(world, event, extra={
             'event_detail': 'quit_job', 'agent_id': idx,
-            'job_id': ind.at[idx, 'job_id'], 'to_job_id': job_id,
+            'job_id': world.get_ind(idx, 'job_id'), 'to_job_id': job_id,
             'notice_days': round(float(lag), 1)})
     world._push_event({
         "time": t_now + lag, "agent_id": idx, "event_type": "start_job",
@@ -614,7 +614,7 @@ def handle_close_vacancy(event, world):
         'agent_id': idx, 'n_applicants': len(lediga),
         'surplus': round(win['surplus'], 4), 'w_neg': round(win['w_neg'], 4),
         'q_hire': round(win['q'], 4), 'commute_km': round(win['commute_km'], 3),
-        'winner_employed': bool(ind.at[idx, 'status'] == 'employed'),
+        'winner_employed': bool(world.get_ind(idx, 'status') == 'employed'),
         # FÖRDRÖJNINGEN, MÄTT (0103). Vakansens ålder vid tillträdet är exakt
         # 80.1 dagar i median över femton körningar -- ett moduvärde, inte en
         # median över en blandad population, och 80 = fönstret 40 plus
@@ -624,7 +624,7 @@ def handle_close_vacancy(event, world):
         # eller mekanismen som är fel; fördröjningen och statusen den
         # beräknades ur loggas därför vid källan.
         'start_delay_days': round(float(lag), 1),
-        'delay_status': str(ind.at[idx, 'status']),
+        'delay_status': str(world.get_ind(idx, 'status')),
     }
     _extra.update(_pool)
     world.event_logger.log_event(world, event, extra=_extra)
@@ -654,7 +654,7 @@ def handle_start_education(event, world):
     ind = world.individuals
 
     target = retraining_target(
-        ind.loc[idx], world.jobs, np.flatnonzero(world.vacant_mask()),
+        world.ind_row(idx), world.jobs, np.flatnonzero(world.vacant_mask()),
         arrays=world.job_arrays(),
         commute_cost_per_km=sim.get('commute_cost_per_km', 0.005),
         min_surplus=sim.get('min_surplus', 0.0),
@@ -665,14 +665,14 @@ def handle_start_education(event, world):
             'event_detail': 'education_no_target'})
         return
 
-    x0, y0 = float(ind.at[idx, 'x_occ']), float(ind.at[idx, 'y_occ'])
+    x0, y0 = float(world.get_ind(idx, 'x_occ')), float(world.get_ind(idx, 'y_occ'))
     share = float(sim.get('retraining_share', 0.5))     # andel av vägen dit
     x1 = x0 + share * (target[0] - x0)
     y1 = y0 + share * (target[1] - y0)
     move = float(np.hypot(x1 - x0, y1 - y0))
 
     # Studier utesluter anställning: ett utlovat jobb släpps tillbaka.
-    held = ind.at[idx, 'job_id'] if 'job_id' in ind.columns else None
+    held = world.get_ind(idx, 'job_id') if 'job_id' in ind.columns else None
     if pd.notna(held):
         pos = world.job_index().get(held)
         if pos is not None:
@@ -694,7 +694,7 @@ def handle_start_education(event, world):
         'x_from': round(x0, 4), 'y_from': round(y0, 4),
         'x_to': round(x1, 4), 'y_to': round(y1, 4),
         'move': round(move, 4), 'duration_days': round(duration, 1),
-        'municipal_code': ind.at[idx, 'municipal_code']
+        'municipal_code': world.get_ind(idx, 'municipal_code')
         if 'municipal_code' in ind.columns else None})
 
     world._push_event({
@@ -710,7 +710,7 @@ def handle_end_education(event, world):
     idx = event['agent_id']
     ind = world.individuals
 
-    if ind.at[idx, 'status'] == 'employed':
+    if world.get_ind(idx, 'status') == 'employed':
         # Skydd mot äldre löften i kön; med den nya mekanismen ska det inte ske.
         world.event_logger.log_event(world, event, extra={
             'event_detail': 'education_finished_already_employed'})
@@ -731,7 +731,7 @@ def handle_end_education(event, world):
         world._write_competence_summary()
         if 'w_res' in ind.columns:
             rho = float(sim.get('rho_reservation', 0.7))
-            ind.at[idx, 'w_res'] = rho * float(ind.at[idx, 'w_res'])
+            ind.at[idx, 'w_res'] = rho * float(world.get_ind(idx, 'w_res'))
     _become_unemployed(world, idx, event['time'])
     # Den färdigutbildade sökte förr aldrig igen: hennes kedja dog när status
     # blev in_education.
@@ -752,7 +752,7 @@ def handle_start_internal_training(event, world):
             world.circles.mass[idx, j[0]] += world.competence_params().a * extra_years
     world.event_logger.log_event(world, event, extra={'event_detail': 'start_internal_training'})
 
-    if world.individuals.at[idx, 'status'] == 'employed' and np.random.rand() < 0.15:
+    if world.get_ind(idx, 'status') == 'employed' and np.random.rand() < 0.15:
         training_timing = world.cfg_reader.get_event_timing('start_internal_training')
         if training_timing['dist'] == 'uniform':
             interval = np.random.uniform(training_timing['min'], training_timing['max'])
@@ -783,7 +783,7 @@ def handle_career_break(event, world):
     individuals = world.individuals
     jobs = world.jobs
     # Nolla jobb-koppling om den finns
-    job_id = individuals.at[idx, 'job_id']
+    job_id = world.get_ind(idx, 'job_id')
     if pd.notna(job_id):
         _clear_holder(world, job_id)
         world.set_job_filled(job_id, False, event['time'])
@@ -819,7 +819,7 @@ def handle_destroy_job(event, world):
         ind.at[idx, 'job_id'] = np.nan
         if 'w_res' in ind.columns:
             rho = world.cfg_reader.config.get('simulation', {}).get('rho_reservation', 0.7)
-            ind.at[idx, 'w_res'] = rho * float(ind.at[idx, 'w_res'])
+            ind.at[idx, 'w_res'] = rho * float(world.get_ind(idx, 'w_res'))
         world.schedule_search(idx, world.search_interval(idx, float(event['time'])))
         # agent_id med: förstörelsen är en JOBBhändelse, så händelsens agent_id
         # är None, och den som mister jobbet gick inte att följa i loggen.
@@ -873,6 +873,9 @@ def handle_new_month(event, world):
     m_extra.update(_wage_flow_quantiles(world))
     world.event_logger.log_event(world, event, extra=m_extra, print_line=True)
     world.census_open_vacancies(float(event['time']))    # folkräkning av de lediga (0107)
+    # Kolumnvyerna prövas mot tabellen och byggs om (0110). Har de tappat
+    # kontakten sedan förra månaden kastas det här -- inte tyst.
+    world.refresh_ind(verify=True)
     # Reset match-counter
     world.n_matched_in_month = 0
 
@@ -942,7 +945,7 @@ def _wage_stock_stats(world):
                  if 'wage_eta' in jobs.columns else None)
         over, n_par = 0, 0
         for i in w.index:
-            pos = pos_of.get(ind.at[i, 'job_id'])
+            pos = pos_of.get(world.get_ind(i, 'job_id'))
             if pos is None:
                 continue
             pi_j = float(jobs.iat[pos, c])
@@ -1055,7 +1058,7 @@ def _apply_wage_revision(world, t_now):
     qs = np.zeros(len(idxs))
     giltig = np.zeros(len(idxs), dtype=bool)
     for k, i in enumerate(idxs):
-        pos = pos_of.get(ind.at[i, 'job_id'])
+        pos = pos_of.get(world.get_ind(i, 'job_id'))
         if pos is None:
             continue
         q_now = float(world.circles.competitiveness(
@@ -1063,7 +1066,7 @@ def _apply_wage_revision(world, t_now):
         qs[k] = q_now
         giltig[k] = True
         try:
-            q_prev = float(ind.at[i, 'q_last'])
+            q_prev = float(world.get_ind(i, 'q_last'))
         except (TypeError, ValueError):
             q_prev = np.nan
         if np.isfinite(q_prev) and q_prev > 0 and q_now > 0:
@@ -1078,7 +1081,7 @@ def _apply_wage_revision(world, t_now):
         if not giltig[k]:
             continue
         g = max(0.0, markup + beta_q * (ds[k] - d_bar))
-        ind.at[i, 'w_neg'] = float(ind.at[i, 'w_neg']) * (1.0 + g) / (1.0 + markup)
+        ind.at[i, 'w_neg'] = float(world.get_ind(i, 'w_neg')) * (1.0 + g) / (1.0 + markup)
         if qs[k] > 0:
             ind.at[i, 'q_last'] = qs[k]
         gs.append(g)
@@ -1115,6 +1118,7 @@ def handle_new_year(event, world):
     }
     extra.update(_wage_stock_stats(world))          # FÖRE revisionen
     extra.update(_apply_wage_revision(world, float(event['time'])))
+    world.refresh_ind()      # revisionen skriver med en Series levande: bygg om vyerna (0110)
     world.event_logger.log_event(world, event, extra=extra, print_line=True)
 
 RULE_SWITCH = {

@@ -338,8 +338,10 @@ def retraining_target(ind, jobs_df, cand_idx, arrays=None,
     if cand_idx.size == 0:
         return None
     A = arrays if arrays is not None else build_job_arrays(jobs_df)
-    gx = float(ind["x"]) if "x" in ind.index else 0.0
-    gy = float(ind["y"]) if "y" in ind.index else 0.0
+    # ind är en Series (tester) eller en dict ur World.ind_row (0110); båda
+    # svarar på "x" in ind.
+    gx = float(ind["x"]) if "x" in ind else 0.0
+    gy = float(ind["y"]) if "y" in ind else 0.0
     km = np.hypot(A["x"][cand_idx] - gx, A["y"][cand_idx] - gy) / 1000.0
     val = A["wage"][cand_idx] - commute_cost_per_km * km
     ok = val > min_surplus

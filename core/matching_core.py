@@ -86,9 +86,9 @@ def current_surplus(world, idx, w_off, commute_km):
     samma uttryck som search_once använder, med reservationen ur
     _with_current_reservation."""
     ind = world.individuals
-    st = ind.at[idx, 'status'] if 'status' in ind.columns else 'unemployed'
+    st = world.get_ind(idx, 'status') if 'status' in ind.columns else 'unemployed'
     cfg = search_config(world)
-    rad = _with_current_reservation(world, idx, ind.loc[idx], st, cfg)
+    rad = _with_current_reservation(world, idx, world.ind_row(idx), st, cfg)
     w_res = float(rad.get('w_res') or 0.0)
     return float(w_off) - float(cfg['commute_cost_per_km']) * float(commute_km) - w_res
 
@@ -105,16 +105,16 @@ def apply_once(world, idx, t_now):
     from core.occupations.utils import search_once
 
     ind = world.individuals
-    st = ind.at[idx, 'status'] if 'status' in ind.columns else 'unemployed'
+    st = world.get_ind(idx, 'status') if 'status' in ind.columns else 'unemployed'
     if st not in ('employed', 'unemployed'):
         return (None,) * 5
     # Den som redan sagt upp sig för ett annat jobb söker inte vidare
     if st == 'employed' and 'notice_job_id' in ind.columns \
-            and pd.notna(ind.at[idx, 'notice_job_id']):
+            and pd.notna(world.get_ind(idx, 'notice_job_id')):
         return (None,) * 5
 
     cfg = search_config(world)
-    rad = _with_current_reservation(world, idx, ind.loc[idx], st, cfg)
+    rad = _with_current_reservation(world, idx, world.ind_row(idx), st, cfg)
     job_pos, surplus, w_neg, q_hire, km = search_once(
         rad, world.jobs,
         np.flatnonzero(world.vacant_mask()),
@@ -273,14 +273,14 @@ def bootstrap_matching(world, t_now=0.0, log=print):
         före = dict(zip(ind.index, ind['job_id']))
         fyllda = close_all_windows(world, t_now, immediate=True)
         for i in omgång:
-            j = ind.at[i, 'job_id']
+            j = world.get_ind(i, 'job_id')
             if j is not None and str(j) != 'nan' and före.get(i) != j:
-                par.append({"individual_id": ind.at[i, 'individual_id']
+                par.append({"individual_id": world.get_ind(i, 'individual_id')
                             if 'individual_id' in ind.columns else i,
                             "job_id": j,
-                            "utility": float(ind.at[i, 'w_neg'])
+                            "utility": float(world.get_ind(i, 'w_neg'))
                             if 'w_neg' in ind.columns
-                            and ind.at[i, 'w_neg'] == ind.at[i, 'w_neg'] else 0.0})
+                            and world.get_ind(i, 'w_neg') == world.get_ind(i, 'w_neg') else 0.0})
         omgångar += 1
         totalt += fyllda
         per_omgång.append(fyllda)
