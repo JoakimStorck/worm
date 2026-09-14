@@ -116,6 +116,21 @@ def create_schema(db_path="data/worm.sqlite3"):
         )
     """)
 
+    # SCB:s pendlingsflöden mellan kommuner. Referensen
+    # share_hires_cross_municipality ställs mot, och den enda kalibreringen av
+    # commute_cost_per_km. Diagonalen ingår: andelen som pendlar över gräns
+    # behöver en nämnare, och nämnaren är alla sysselsatta med bostad i
+    # kommunen.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS commuting (
+            home_municipality TEXT,
+            work_municipality TEXT,
+            year INTEGER,
+            employed INTEGER,
+            PRIMARY KEY (home_municipality, work_municipality, year)
+        )
+    """)
+
     # SNI-based employment per municipality
     c.execute("""
         CREATE TABLE IF NOT EXISTS employment_municipality_sni (

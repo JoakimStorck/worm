@@ -85,6 +85,16 @@ MANIFEST = [
     {"type": "scb_geo", "dest": os.path.join(DATA_DIR, "Fritidshusomraden_2020.gpkg"),
      "url": "TODO_FRITIDSHUS_GPKG_URL", "wfs_layer": None},
 
+    # SCB:s statistikdatabas, pendling mellan kommuner. Referensen för
+    # share_hires_cross_municipality och för commute_cost_per_km.
+    {"type": "scb_manual",
+     "dest": os.path.join(DATA_DIR,
+                          "Sysselsatta 15-74 år arbetsställekommun bostadskommun.csv"),
+     "url": "https://www.statistikdatabasen.scb.se/ (Arbetsmarknad > "
+            "Registerbaserad arbetsmarknadsstatistik > pendling)",
+     "note": "Uttag med bostadskommun som rad och arbetsställekommun som "
+             "kolumn, samtliga kommuner, kön totalt. Diagonalen måste ingå."},
+
     # --- Härledda filer: hämtas EJ, genereras av modellen ------------------
     {"type": "derived", "note": "onet_occupation_space-*.csv byggs av loader.load_onet_occupation_space (skill-PCA)."},
     {"type": "derived", "note": "worm.sqlite3 byggs av scripts/create_database.py ur filerna ovan."},

@@ -134,10 +134,10 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
                 p90 = pd.to_numeric(df.get("p90_commute_km"), errors="coerce").dropna()
                 A(f"Medianpendling: **{km.median():.1f} km**"
                   + (f", p90 {p90.median():.1f} km" if len(p90) else "")
-                  + ". Kalibreras mot tabellen `commuting` (SCB:s flöden mellan "
-                    "kommuner); inom en enda kommun går pendlingsmekanismen inte "
-                    "att pröva, eftersom de högst betalda arbetsgivarna ligger "
-                    "centralt.\n")
+                  + ". Referensen är tabellen `commuting` (SCB:s flöden mellan "
+                    "kommuner) när den finns laddad; inom en enda kommun går "
+                    "pendlingsmekanismen inte att pröva, eftersom de högst "
+                    "betalda arbetsgivarna ligger centralt.\n")
 
     # Konkurrensen om vakansen. Utan den gar det inte att skilja "ingen sokte"
     # fran "urvalet var svagt", och det avgor helt olika atgarder.
@@ -264,7 +264,25 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
               "går till ett jobb i en annan kommun än individens"
               + (f", med medianpendling {ci.median():.0f} km mot {cw.median():.0f} km inom "
                  "kommunen" if len(ci) and len(cw) else "")
-              + ". Jämförs med SCB:s pendlingsmatris för de ingående kommunerna.\n")
+              + ".\n")
+            kommuner = set()
+            for rad in df.get("municipalities", pd.Series(dtype=str)).dropna():
+                kommuner.update(str(rad).split(","))
+            scb, scb_ar = scb_pendlingsandel(kommuner)
+            if scb is not None:
+                A(f"SCB:s motsvarande andel för samma kommuner är "
+                  f"**{100*scb:.1f} %**"
+                  + (f" ({scb_ar})" if scb_ar else "")
+                  + f", alltså en kvot modell/observerat på {cm.median()/scb:.2f}. "
+                    "Talen är inte samma sak: modellens andel gäller "
+                    "TILLSÄTTNINGAR under körningen, SCB:s gäller STOCKEN av "
+                    "sysselsatta. Ett flöde kan rimligen avvika från den stock "
+                    "det bygger upp, men storleksordningen ska stämma.\n")
+            else:
+                A("SCB:s pendlingsmatris saknas i databasen, så andelen har "
+                  "ingen observerad motsvarighet att ställas mot. Ladda den med "
+                  "`python -m core.database.load_commuting_matrix <SCB-fil>`; "
+                  "till dess är `commute_cost_per_km` satt, inte kalibrerad.\n")
         sd = _kol("start_delay_median")
         sdu = _kol("start_delay_median_unemployed")
         sde = _kol("start_delay_median_employed")
@@ -397,6 +415,44 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     print(f"Sparad: {path}")
+
+
+def scb_pendlingsandel(kommuner, db_path="data/worm.sqlite3"):
+    """SCB:s andel sysselsatta som arbetar i en ANNAN av körningens kommuner.
+
+    Avgränsad till samma kommuner som scenariot, eftersom modellen bara känner
+    dem: en Morabo som pendlar till Falun är i SCB:s tal en pendlare, men i
+    modellen finns Falun inte och hon kan inte pendla dit. Jämförs modellens
+    andel med SCB:s hela utpendling mäts skillnaden mellan två olika frågor.
+
+    Returnerar (andel, år) eller (None, None) om tabellen saknas.
+    """
+    import sqlite3
+    if not os.path.isfile(db_path):
+        return None, None
+    try:
+        conn = sqlite3.connect(db_path)
+        df = pd.read_sql("SELECT * FROM commuting", conn)
+        conn.close()
+    except Exception:
+        return None, None
+    if df.empty:
+        return None, None
+    koder = {str(k).strip() for k in kommuner if str(k).strip()}
+    df["home_municipality"] = df["home_municipality"].astype(str)
+    df["work_municipality"] = df["work_municipality"].astype(str)
+    df = df[df["home_municipality"].isin(koder) & df["work_municipality"].isin(koder)]
+    if df.empty:
+        return None, None
+    ar = None
+    if "year" in df.columns and df["year"].notna().any():
+        ar = int(df["year"].max())
+        df = df[df["year"] == ar]
+    tot = float(df["employed"].sum())
+    if tot <= 0:
+        return None, None
+    over = float(df[df["home_municipality"] != df["work_municipality"]]["employed"].sum())
+    return over / tot, ar
 
 
 def main():

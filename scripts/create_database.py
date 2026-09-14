@@ -97,6 +97,22 @@ try:
 except Exception as e:
     log(f"Fel vid skapande av O*NET occupation space: {e}")
 
+# Ladda SCB:s pendlingsmatris. Två uttag duger och laddaren känner båda;
+# det bredare och nyare tas först. Utan tabellen saknar
+# share_hires_cross_municipality sin referens.
+for pendel_csv in ("data/Sysselsatta 15-74 år arbetsställekommun bostadskommun.csv",
+                   "data/Förvärvsarbetande 16-74 år pendlare över kommungräns "
+                   "efter bostadskommun, arbetsställekommun, kön och år.csv"):
+    if file_exists(pendel_csv):
+        try:
+            from core.database.load_commuting_matrix import load_commuting_matrix
+            load_commuting_matrix(pendel_csv, db_path=DB_PATH)
+            break
+        except Exception as e:
+            log(f"Fel vid laddning av pendlingsmatrisen ur {pendel_csv}: {e}")
+else:
+    log("OBS: Laddar inte commuting, ingen av SCB:s pendlingsfiler finns.")
+
 # Ladda utbildningsnivåer från SCB (JSON)
 edu_json = "data/Utbildningsnivaer_2024.json"
 if file_exists(edu_json):
