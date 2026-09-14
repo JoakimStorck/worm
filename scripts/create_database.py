@@ -77,19 +77,12 @@ else:
     log("OBS: Laddar inte sysselsatta per DeSO, filen saknas.")
 
 # Ladda O*NET-data (yrken och skills)
-onet_occ_path = "onet_data/Occupation Data.txt"
-onet_skills_path = "onet_data/Skills.txt"
-
-if file_exists(onet_occ_path):
-    loader.load_onet_occupations(onet_occ_path, db_path=DB_PATH)
-else:
-    log("OBS: Laddar inte onet_occupations, filen saknas.")
-
-if file_exists(onet_skills_path):
-    loader.load_onet_skills(onet_skills_path, db_path=DB_PATH)
-    loader.load_occupation_skill_link(onet_skills_path, db_path=DB_PATH)
-else:
-    log("OBS: Laddar inte onet_skills/occupation_skill_link, filen saknas.")
+# O*NET:s råtabeller laddas inte längre. onet_occupations, onet_skills och
+# occupation_skill_link lästes bara av skill-PCA:n, som var uppgiftsrummet
+# innan inbäddningsgeometrin tog över, och av individual_history för
+# yrkestitlar -- titlar som onet_occupation_space redan bär för varje kod
+# modellen känner. Med dem borta går beroendet på onet_data/ med, och
+# databasen kan byggas ur enbart filerna i data/.
 
 # Uppgiftsrummet SKRIVS INTE HÄR. Tabellen onet_occupation_space ägs av
 # scripts/load_task_geometry.py, som är den enda skrivare vars kolumner

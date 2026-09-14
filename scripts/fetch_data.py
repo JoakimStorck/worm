@@ -96,7 +96,12 @@ MANIFEST = [
              "kolumn, samtliga kommuner, kön totalt. Diagonalen måste ingå."},
 
     # --- Härledda filer: hämtas EJ, genereras av modellen ------------------
-    {"type": "derived", "note": "onet_occupation_space-*.csv byggs av loader.load_onet_occupation_space (skill-PCA)."},
+    {"type": "external_project", "dest": os.path.join(DATA_DIR, "geometry"),
+     "note": "Uppgiftsrummet kommer INTE härifrån. Fyra CSV-filer plus "
+             "radial_scale.json kopieras från geometry-of-works valda körning "
+             "(openai text-embedding-3-large d3072 v30_1) och läses in med "
+             "scripts/load_task_geometry.py --write. De går inte att hämta: "
+             "de måste köras om i det projektet."},
     {"type": "derived", "note": "worm.sqlite3 byggs av scripts/create_database.py ur filerna ovan."},
 ]
 

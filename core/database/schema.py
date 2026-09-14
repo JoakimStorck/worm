@@ -154,53 +154,14 @@ def create_schema(db_path="data/worm.sqlite3"):
         )
     """)
 
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS onet_occupations (
-            onet_code TEXT PRIMARY KEY,
-            title TEXT,
-            description TEXT
-        )
-    """)
-
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS onet_skills (
-            skill_id TEXT PRIMARY KEY,
-            skill_name TEXT,
-            domain TEXT,
-            category TEXT,
-            description TEXT
-        )
-    """)
     
 
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS occupation_skill_link (
-            onet_code TEXT,
-            skill_id TEXT,
-            scale_id TEXT,
-            data_value REAL,
-            FOREIGN KEY (onet_code) REFERENCES onet_occupations(onet_code),
-            FOREIGN KEY (skill_id) REFERENCES onet_skills(skill_id)
-        )
-    """)
+    # onet_occupation_space definieras INTE här. Tabellen skapas av
+    # scripts/load_task_geometry.py med to_sql, och dess kolumner är
+    # geometrins (x_occ, y_occ, r_o, r_req, w_rel, pi_rel). Den definition som
+    # stod här beskrev skill-PCA:ns kolumner och stämde inte med något som
+    # längre skrivs.
 
-    # Table for O*NET occupation space clustering
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS onet_occupation_space (
-            onet_code TEXT,
-            n_clusters INTEGER,
-            title TEXT,
-            pc1 REAL,
-            pc2 REAL,
-            cluster INTEGER,
-            cluster_name TEXT,
-            chi REAL,
-            xi REAL,
-            h REAL,
-            PRIMARY KEY (onet_code, n_clusters),
-            FOREIGN KEY (onet_code) REFERENCES onet_occupations(onet_code)
-        )
-    """)
     # Cross table for SNI-codes to O*NET occupations, that occur in that industry
     c.execute("""
         CREATE TABLE IF NOT EXISTS sni_onet_link (

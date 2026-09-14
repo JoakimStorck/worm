@@ -6,8 +6,6 @@ import sqlite3
 import locale
 import json
 
-from core.occupations.utils import select_representative_occupations, name_clusters_by_representative_titles, reorder_clusters_by_angle
-
 from core.log import log 
 
 locale.setlocale(locale.LC_NUMERIC, "C")
@@ -361,56 +359,8 @@ def load_employment_municipality_sni(csv_file, db_path="data/worm.sqlite3", year
     df.to_sql("employment_municipality_sni", conn, if_exists="replace", index=False)
     conn.close()
 
-def load_onet_occupations(occupation_path, db_path="data/worm.sqlite3"):
-    df = pd.read_csv(occupation_path, sep='\t', encoding='utf-8')
-    for col in ["O*NET-SOC Code", "Title", "Description"]:
-        if col not in df.columns:
-            df[col] = ""
-    df = df.rename(columns={
-        "O*NET-SOC Code": "onet_code",
-        "Title": "title",
-        "Description": "description"
-    })[["onet_code", "title", "description"]]
-    conn = sqlite3.connect(db_path)
-    df.to_sql("onet_occupations", conn, if_exists="replace", index=False)
-    conn.close()
-    log(f"Loaded {len(df)} occupations into onet_occupations.")
 
-def load_onet_skills(skills_path, db_path="data/worm.sqlite3"):
-    df = pd.read_csv(skills_path, sep='\t', encoding='utf-8')
-    # Skapa tomma kolumner om de saknas
-    for col in ["Element ID", "Element Name", "Domain Source", "Element Type", "Description"]:
-        if col not in df.columns:
-            df[col] = ""
-    skills = df[["Element ID", "Element Name", "Domain Source", "Element Type", "Description"]].drop_duplicates()
-    skills = skills.rename(columns={
-        "Element ID": "skill_id",
-        "Element Name": "skill_name",
-        "Domain Source": "domain",
-        "Element Type": "category",
-        "Description": "description"
-    })[["skill_id", "skill_name", "domain", "category", "description"]]
-    conn = sqlite3.connect(db_path)
-    skills.to_sql("onet_skills", conn, if_exists="replace", index=False)
-    conn.close()
-    log(f"Loaded {len(skills)} skills into onet_skills.")
 
-def load_occupation_skill_link(skills_path, db_path="data/worm.sqlite3"):
-    df = pd.read_csv(skills_path, sep='\t', encoding='utf-8')
-    for col in ["O*NET-SOC Code", "Element ID", "Scale ID", "Data Value"]:
-        if col not in df.columns:
-            df[col] = ""
-    link = df[["O*NET-SOC Code", "Element ID", "Scale ID", "Data Value"]].copy()
-    link = link.rename(columns={
-        "O*NET-SOC Code": "onet_code",
-        "Element ID": "skill_id",
-        "Scale ID": "scale_id",
-        "Data Value": "data_value"
-    })[["onet_code", "skill_id", "scale_id", "data_value"]]
-    conn = sqlite3.connect(db_path)
-    link.to_sql("occupation_skill_link", conn, if_exists="replace", index=False)
-    conn.close()
-    log(f"Loaded {len(link)} rows into occupation_skill_link.")
 
 def load_education_level_scb_json(json_path, db_path="data/worm.sqlite3", year=2024):
     with open(json_path, encoding="utf-8") as f:
@@ -455,89 +405,7 @@ from sklearn.cluster import KMeans
 from scipy.stats import entropy
 
 # Importera ev. egna hjälpfunktioner här
-# from .your_helpers import reorder_clusters_by_angle, select_representative_occupations, name_clusters_by_representative_titles
 
-def load_onet_occupation_space(n_clusters=50, db_path="data/worm.sqlite3"):
-    # SKRIVER INTE LÄNGRE TILL onet_occupation_space UTAN ATT DU BER OM DET.
-    # Tabellen ägs av scripts/load_task_geometry.py, vars kolumner
-    # scenariobuilder läser (x_occ, y_occ, r_o, r_req). Den här funktionen
-    # skriver en ANNAN kolumnuppsättning (pc1, pc2, cluster, cluster_name, h)
-    # till samma namn med if_exists="replace", och raderade därmed geometrin
-    # varje gång create_database.py kördes. Kvar för att PCA-klustringen är
-    # ett eget resultat, men den skriver till ett eget tabellnamn.
-    """
-    Bygger och laddar O*NET occupation space till tabellen onet_occupation_space.
-    """
-    # Läs från databas
-    conn = sqlite3.connect(db_path)
-    occ_df = pd.read_sql("SELECT onet_code, title FROM onet_occupations", conn)
-    skill_df = pd.read_sql("SELECT skill_id, skill_name FROM onet_skills", conn)
-    link_df = pd.read_sql("SELECT onet_code, skill_id, scale_id, data_value FROM occupation_skill_link", conn)
-    conn.close()
-
-    imp_df = link_df[link_df['scale_id'] == 'IM']
-    lvl_df = link_df[link_df['scale_id'] == 'LV']
-    merged = pd.merge(
-        imp_df[['onet_code', 'skill_id', 'data_value']],
-        lvl_df[['onet_code', 'skill_id', 'data_value']],
-        on=['onet_code', 'skill_id'],
-        suffixes=('_IM', '_LV')
-    )
-    merged['Weighted'] = merged['data_value_IM'].astype(float) * merged['data_value_LV'].astype(float)
-    skill_matrix = merged.pivot(index='onet_code', columns='skill_id', values='Weighted').fillna(0)
-
-    # PCA och klustring
-    pca = PCA(n_components=2)
-    skill_coords = pca.fit_transform(skill_matrix.values)
-    kmeans = KMeans(n_clusters=n_clusters, n_init=10, random_state=0)
-    labels = kmeans.fit_predict(skill_coords)
-
-    def scaled_entropy(row):
-        values = row.values + 1e-9
-        probs = values / values.sum()
-        base_entropy = entropy(probs, base=2)
-        #logsum = np.log2(values.sum())
-        logsum=1
-        return base_entropy * logsum
-
-    H = skill_matrix.apply(scaled_entropy, axis=1)
-
-    xi = np.arctan2(skill_coords[:, 1], skill_coords[:, 0])  # [-pi, pi)
-    xi = xi % (2 * np.pi)                                   # [0, 2*pi)
-    chi = np.linalg.norm(skill_coords, axis=1)
-
-    # --- SKALNING (med bevarad H/chi-kvot) ---
-    # Skala chi till [0, 1]
-    chi_min, chi_max = chi.min(), chi.max()
-    chi_scaled = chi / chi_max
-    H_scaled = H / chi_max
-
-    occ_titles = occ_df.set_index('onet_code').reindex(skill_matrix.index)['title']
-
-    final_df = pd.DataFrame({
-        'onet_code': skill_matrix.index,
-        'title': occ_titles.values,
-        'pc1': skill_coords[:, 0],
-        'pc2': skill_coords[:, 1],
-        'cluster': labels,
-        'chi': chi_scaled,    # <-- använd skalad chi här!
-        'xi': xi,
-        'h': H_scaled.values
-    })    
-
-    # -- Omordning och klusternamn (lägg in om du vill, annars ta bort eller importera egna funktioner) --
-    final_df = reorder_clusters_by_angle(final_df)
-    reps = select_representative_occupations(final_df)
-    names = name_clusters_by_representative_titles(reps)
-    final_df['cluster_name'] = final_df['cluster'].map(names)
-
-    final_df['n_clusters'] = n_clusters
-    cols = ['onet_code', 'n_clusters', 'title', 'pc1', 'pc2', 'cluster', 'cluster_name', 'chi', 'xi', 'h']
-    conn = sqlite3.connect(db_path)
-    final_df[cols].to_sql("onet_skill_clusters", conn, if_exists="replace", index=False)
-    conn.close()
-    print(f"Sparade {len(final_df)} rader till onet_skill_clusters (n_clusters={n_clusters})")
-    return final_df
 
 def load_sni_onet_link(csv_path, db_path="data/worm.sqlite3"):
     df = pd.read_csv(csv_path, usecols=["SNI-kod", "O*NET-yrkes-id", "Freq"])

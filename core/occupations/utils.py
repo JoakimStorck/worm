@@ -7,38 +7,9 @@ import math
 from scipy.optimize import linear_sum_assignment
 
 
-def select_representative_occupations(df):
-    representatives = []
-    for cluster_id in df['cluster'].unique():
-        cluster_df = df[df['cluster'] == cluster_id]
-        centroid = cluster_df[['pc1', 'pc2']].mean().values
-        distances = ((cluster_df[['pc1', 'pc2']].values - centroid) ** 2).sum(axis=1)
-        best_idx = distances.argmin()
-        representatives.append(cluster_df.iloc[best_idx])
-    return pd.DataFrame(representatives)
 
 
-def name_clusters_by_representative_titles(df):
-    names = {}
-    for _, row in df.iterrows():
-        short_title = row['title'].split(',')[0].split('(')[0].strip()
-        names[row['cluster']] = f"{short_title} ({row['cluster']})"
-    return names
 
-
-def reorder_clusters_by_angle(df):
-    centroids = df.groupby('cluster')[['chi', 'xi']].mean()
-    sorted_clusters = centroids.sort_values('xi').index.tolist()
-    mapping = {old: new for new, old in enumerate(sorted_clusters)}
-    df['cluster'] = df['cluster'].map(mapping)
-    return df
-
-
-# ---------------------------------------------------------------------------
-# Matchning: euklidiskt avstånd i (x_occ, y_occ), gaussisk kärna med bredd r_o.
-# sigma^2 = H_individ^2 + r_o_jobb^2  (faltning: arbetartolerans + yrkesräckvidd)
-# alpha_chi/alpha_xi behålls i signaturen för bakåtkompatibilitet men används ej.
-# ---------------------------------------------------------------------------
 def _occ_distance(inds_df, jobs_df):
     ix = inds_df["x_occ"].values[:, None]; iy = inds_df["y_occ"].values[:, None]
     jx = jobs_df["x_occ"].values[None, :]; jy = jobs_df["y_occ"].values[None, :]

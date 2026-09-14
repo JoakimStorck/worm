@@ -59,15 +59,23 @@ def _resolve_run_dir(given):
 
 
 def _titles(db_path):
+    """Yrkestitlar ur onet_occupation_space, inte ur onet_occupations.
+
+    Geometritabellen bär Title för varje kod modellen känner, och det är
+    precis de koder som kan förekomma i en historik. onet_occupations var en
+    andra kopia av samma titlar, laddad ur O*NET:s råfiler, och den enda
+    läsaren av dem: föll den bort gick hela beroendet på onet_data/ med.
+    """
     if not os.path.isfile(db_path):
         return {}
     try:
         conn = sqlite3.connect(db_path)
-        rows = conn.execute("SELECT onet_code, title FROM onet_occupations").fetchall()
+        rows = conn.execute(
+            'SELECT onet_code, "Title" FROM onet_occupation_space').fetchall()
         conn.close()
     except sqlite3.Error:
         return {}
-    return {c: t for c, t in rows}
+    return {c: t for c, t in rows if t}
 
 
 def _day_label(t):

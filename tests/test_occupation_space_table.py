@@ -64,19 +64,24 @@ def test_klustertabellen_kanns_igen_som_fel_innehall(tmp_path):
     assert KLUSTER & k
 
 
-def test_pca_klustringen_skriver_till_eget_tabellnamn():
-    """De två PCA-skrivarna får inte längre peka på geometritabellen."""
-    import inspect
-
-    from core.database import loader
-    from core.occupations import occupational_profiles
-
-    for fn in (loader.load_onet_occupation_space,
-               occupational_profiles.transform_onet_skills_scaled_from_db):
-        kalla = inspect.getsource(fn)
-        assert 'to_sql("onet_occupation_space"' not in kalla, (
-            f"{fn.__name__} skriver till geometritabellen")
-        assert 'to_sql("onet_skill_clusters"' in kalla
+def test_bara_en_skrivare_till_geometritabellen():
+    """Skill-PCA:n var uppgiftsrummet innan inbäddningsgeometrin tog över, och
+    dess skrivare låg kvar och pekade på samma tabellnamn. Nu finns bara en
+    skrivare kvar, och testet håller det så."""
+    import os
+    import re
+    rot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    skrivare = []
+    for mapp, _, filer in os.walk(rot):
+        if any(d in mapp for d in (".git", "attic", "tests", "__pycache__")):
+            continue
+        for f in filer:
+            if not f.endswith(".py"):
+                continue
+            kalla = open(os.path.join(mapp, f), encoding="utf-8").read()
+            if re.search(r'to_sql\(\s*["\']onet_occupation_space["\']', kalla):
+                skrivare.append(os.path.relpath(os.path.join(mapp, f), rot))
+    assert skrivare == ["scripts/load_task_geometry.py"], skrivare
 
 
 def test_create_database_bygger_inte_uppgiftsrummet():
