@@ -697,8 +697,7 @@ class ScenarioBuilder:
         commute_cost_per_km kan ändra det -- parametern skalar bruttoflödena
         men kan inte skapa ett netto.
 
-        Källan är totalraden i employment_deso_sni, inte
-        employment_municipality_sni. Den senare såg ut att duga -- den räknar
+        Källan är kolumnsumman i SCB:s pendlingsmatris (tabellen commuting). Den senare såg ut att duga -- den räknar
         efter arbetsställe -- men är ett urval: den ger Mora 4 250 sysselsatta
         på 164 arbetsställen när kommunen har omkring 10 000 jobb, och
         summorna är jämna femtiotal. Andelarna blev 81/12/7 mot de riktiga
@@ -721,45 +720,51 @@ class ScenarioBuilder:
         som är fel men känd.
         """
         koder = [str(k) for k in municipalities]
-        # KÄLLAN ÄR TOTALRADEN I employment_deso_sni. DeSO-koden inleds med
-        # kommunkoden, och "A-U+US Total" är kommunens dagbefolkning summerad
-        # över dess DeSO-områden -- sysselsatta efter ARBETSSTÄLLE, alltså
-        # jobben där de ligger. Sekretessprickade celler gör att en summa över
-        # branschraderna underskattar, mest i små kommuner; totalraden prickas
-        # inte.
+        # KÄLLAN ÄR PENDLINGSMATRISENS KOLUMNSUMMA. Det är det enda underlag i
+        # databasen som otvetydigt räknar jobb efter ARBETSSTÄLLE.
         #
-        # employment_municipality_sni duger inte: den ger Mora 4 250
-        # sysselsatta på 164 arbetsställen när kommunen har omkring 10 000
-        # jobb, och summorna är jämna femtiotal. Andelarna blev 81/12/7 mot de
-        # riktiga 66/15/19, alltså Älvdalen halverat, och den fördelningen gav
-        # en körning med dag/natt 1.21 för Mora och 0.49 för Älvdalen.
+        # Två andra källor prövades och dög inte. employment_municipality_sni
+        # ger Mora 4 250 sysselsatta på 164 arbetsställen när kommunen har
+        # omkring 10 000 jobb -- ett urval, inte full statistik.
+        # employment_deso_sni är nattbefolkning: DeSO är en bostadsindelning,
+        # och totalraderna summerar till 10 163 / 3 399 / 3 450 för Mora, Orsa
+        # och Älvdalen, vilket är kommunernas BOENDE sysselsatta (10 116 /
+        # 3 348 / 3 245) och inte deras jobb. Med den källan hade fördelningen
+        # blivit densamma som den gamla, fast uppmätt i stället för antagen.
+        #
+        # PRÖVNINGEN SOM SKILJER DAG FRÅN NATT ÄR ORSA: 2 235 jobb mot 3 348
+        # boende sysselsatta. Mora skiljer bara någon procent och duger inte
+        # som kontroll.
+        #
+        # Delmatrisen och inte hela kolumnen: de jobb i Mora som innehas av
+        # Rättviks- eller Leksandsbor kan ingen i scenariot ta, eftersom de
+        # pendlarna inte finns i modellen. Det är också exakt den definition
+        # scripts/diagnose_commuting.py mäter mot, så källa och utvärdering
+        # använder samma tal.
         try:
-            df = pd.read_sql(
-                "SELECT deso_code, year, sni_code, employed "
-                "FROM employment_deso_sni", self.conn)
+            df = pd.read_sql("SELECT * FROM commuting", self.conn)
         except Exception as e:
-            log(f"[jobbandelar] employment_deso_sni saknas ({e}) -- faller "
+            log(f"[jobbandelar] tabellen commuting saknas ({e}) -- faller "
                 f"tillbaka på kommunernas egen arbetskraft.")
             return None
         if df.empty:
             return None
-        df = df[df["sni_code"].astype(str).str.upper() == "TOTAL"]
-        if df.empty:
-            log("[jobbandelar] ingen totalrad i employment_deso_sni -- "
-                "tabellen är laddad med en äldre extract_sni_code där totalen "
-                "kolliderade med näringsgren A. Ladda om den.")
-            return None
+        for kol in ("home_municipality", "work_municipality"):
+            df[kol] = df[kol].astype(str).str.strip().str.zfill(4)
         if "year" in df.columns and df["year"].notna().any():
             df = df[df["year"] == df["year"].max()]
-        df["kom"] = df["deso_code"].astype(str).str[:4]
+        inom = df[df["home_municipality"].isin(koder)
+                  & df["work_municipality"].isin(koder)]
+        if inom.empty:
+            log("[jobbandelar] commuting täcker inte scenariots kommuner -- "
+                "faller tillbaka på kommunernas egen arbetskraft.")
+            return None
         dag = {}
         for kod in koder:
-            n = float(pd.to_numeric(df[df["kom"] == str(kod)]["employed"],
-                                    errors="coerce").sum())
+            n = float(inom[inom["work_municipality"] == kod]["employed"].sum())
             if n <= 0:
-                log(f"[jobbandelar] {kod}: ingen dagbefolkning i "
-                    f"employment_deso_sni -- faller tillbaka på kommunernas "
-                    f"egen arbetskraft.")
+                log(f"[jobbandelar] {kod}: inga jobb i pendlingsmatrisen -- "
+                    f"faller tillbaka på kommunernas egen arbetskraft.")
                 return None
             dag[kod] = n
         tot = sum(dag.values())
@@ -824,7 +829,10 @@ class ScenarioBuilder:
             workforce = int(round(population * workforce_ratio))
             n_unemployed = int(round(workforce * local_unemployment_rate))
             if andelar:
-                target_jobs = int(round(total_jobs * andelar[municipal_code]))
+                # Nycklarna är strängar; kommunkoderna i scenariofilen är
+                # heltal. Uppslaget med rå kod gav KeyError vid första
+                # kommunen.
+                target_jobs = int(round(total_jobs * andelar[str(municipal_code)]))
                 log(f"  jobb: {target_jobs} (arbetsställestatistik), mot "
                     f"{workforce - n_unemployed} sysselsatta invånare "
                     f"-- dag/natt {target_jobs / max(workforce - n_unemployed, 1):.2f}")
