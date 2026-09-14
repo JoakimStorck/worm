@@ -12,7 +12,13 @@ from core.database.utils import kommunkod
 locale.setlocale(locale.LC_NUMERIC, "C")
 
 def load_municipalities(csv_path, db_path="data/worm.sqlite3"):
+    # DEN HÄR ÄR VÄGEN create_database.py FAKTISKT TAR. dtype=str bevarar vad
+    # som står i filen, och står det 180 blir det "180" -- inte "0180".
+    # Källfilen är skriven ur en gpkg där kolumnen var numerisk, så nollan var
+    # borta redan innan.
     df = pd.read_csv(csv_path, dtype={'municipal_code': str})
+    if "municipal_code" in df.columns:
+        df["municipal_code"] = kommunkod(df["municipal_code"])
     conn = sqlite3.connect(db_path)
     df.to_sql("municipalities", conn, if_exists="replace", index=False)
     conn.close()
@@ -349,6 +355,8 @@ def load_employment_municipality_sni(csv_file, db_path="data/worm.sqlite3", year
     if "year" not in df.columns:
         df["year"] = year
 
+    if "municipal_code" in df.columns:
+        df["municipal_code"] = kommunkod(df["municipal_code"])
     outcols = ["municipal_code", "year", "sni_code", "employed", "workplaces"]
     for col in outcols:
         if col not in df.columns:
@@ -397,6 +405,7 @@ def load_education_level_scb_json(json_path, db_path="data/worm.sqlite3", year=2
             })
     # Ladda till SQLite
     df = pd.DataFrame(data)
+    df["municipal_code"] = kommunkod(df["municipal_code"])
     conn = sqlite3.connect(db_path)
     df.to_sql("education_level_municipality", conn, if_exists="replace", index=False)
     conn.close()

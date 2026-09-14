@@ -56,17 +56,34 @@ def test_uppslag_mot_pendlingstabellen_traffar(tmp_path):
     assert namn["2062"] == "Mora"
 
 
-def test_loaders_gar_via_hjalparen():
-    """Varje skrivning av municipal_code ska normaliseras. En loader som
-    glöms bort skriver koder som ser riktiga ut för Dalarna och tyst fel för
-    halva Sverige."""
+def test_varje_skrivare_av_municipal_code_normaliserar():
+    """Varje laddare som skriver en tabell med municipal_code ska ha
+    normaliserat koden först.
+
+    Första försöket letade efter ett tilldelningsmönster i källkoden och
+    missade därmed load_municipalities, som är den väg create_database.py
+    faktiskt tar: den läser en CSV med dtype=str och rör aldrig kolumnen. Ett
+    test som letar efter en viss RADFORM hittar bara de ställen man redan
+    tänkt på. Det här går i stället per funktion: skriver den en tabell och
+    nämner koden, ska hjälparen ha anropats i samma funktion.
+    """
     import inspect
+    import re
 
     from core.database import loader
 
-    kalla = inspect.getsource(loader)
-    for rad in kalla.splitlines():
-        r = rad.strip()
-        if r.startswith(("gdf[\"municipal_code\"] =", "gdf['municipal_code'] =",
-                         "gdf[\"kommunkod\"] =")):
-            assert "kommunkod(" in r, r
+    brister = []
+    for namn, fn in inspect.getmembers(loader, inspect.isfunction):
+        if not namn.startswith("load_") and not namn.startswith("update_"):
+            continue
+        try:
+            kalla = inspect.getsource(fn)
+        except OSError:
+            continue
+        if "to_sql(" not in kalla:
+            continue
+        if not re.search(r"municipal_code|kommunkod\b", kalla):
+            continue
+        if "kommunkod(" not in kalla:
+            brister.append(namn)
+    assert not brister, f"normaliserar inte kommunkoden: {brister}"

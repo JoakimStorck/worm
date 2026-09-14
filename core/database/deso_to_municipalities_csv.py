@@ -38,7 +38,12 @@ municipalities["area_km2"] = municipalities["geometry"].area / 1e6
 
 # Ta fram kommunkod och namn
 df = pd.DataFrame({
-    "municipal_code": municipalities["kommunkod"],
+    # Fyrsiffrig redan här. Skrivs koden numerisk till CSV:n är nollan borta
+    # innan någon laddare hinner se den, och dtype=str vid inläsningen bevarar
+    # då bara felet.
+    "municipal_code": (municipalities["kommunkod"].astype("string")
+                       .str.strip().str.replace(r"\.0$", "", regex=True)
+                       .str.zfill(4)),
     "municipality": municipalities["kommunnamn"],
     "area_ha": municipalities["area_ha"].round(2),
     "area_km2": municipalities["area_km2"].round(4),
