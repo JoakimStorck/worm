@@ -130,6 +130,39 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
             A("Eftersom $U = L - J + V$ är $u = u\\_{min} + V/L$ exakt: u och v är "
               "samma tal två gånger, och vakansstocken är det enda som kan "
               "flyttas utan att ändra arbetskraften eller jobbstocken.\n")
+            senaste = (max(run_dirs, key=os.path.getmtime) if run_dirs else None)
+            rh = riktningsharmonik(senaste) if senaste else None
+            if rh:
+                rel_mod = rh["amplitud"] / rh["medel"] if rh["medel"] else float("nan")
+                A("\n**Rekryteringstidens riktning i uppgiftsrummet.** Vakansålder "
+                  "vid tillsättning anpassad till $T = a + \\chi(b\\cos\\xi + "
+                  "c\\sin\\xi)$ -- samma första harmonik som papprets "
+                  "löneekvation och som SCB:s rekryteringstid per bransch. "
+                  "Modellen får producera sin egen yta; den matas inte in.\n")
+                A("| | modell | SCB 2023 (näringslivet) |")
+                A("|---|---|---|")
+                A(f"| toppriktning | {rh['topp']:.0f}° | {SCB_REKRYTERING_TOPP:.0f}° "
+                  f"(pappret, lön: 89.5°) |")
+                A(f"| amplitud, dagar per enhet $\\chi$ | {rh['amplitud']:.0f} | "
+                  f"{SCB_REKRYTERING_AMPLITUD:.0f} |")
+                A(f"| amplitud relativt nivån | {rel_mod:.2f} | "
+                  f"{SCB_REKRYTERING_AMPLITUD / SCB_REKRYTERING_NIVA:.2f} |")
+                A(f"| $R^2$ plan | {rh['R2']:.3f} | 0.834 (n = 11) |")
+                A(f"| $R^2$ radiell | {rh['R2_radiell']:.3f} | 0.003 |")
+                A(f"| n | {rh['n']} tillsättningar | 11 branscher |")
+                avv = ((rh["topp"] - SCB_REKRYTERING_TOPP + 180) % 360) - 180
+                if abs(avv) < 30:
+                    A(f"\nToppriktningen ligger {abs(avv):.0f}° från SCB:s: "
+                      "mekanismen ger rätt riktning, och skillnaden i nivå kan "
+                      "kalibreras med en parameter som skalar allt lika.\n")
+                else:
+                    A(f"\nToppriktningen avviker {abs(avv):.0f}° från SCB:s. "
+                      "Mekanismen är fel på ett sätt en nivåkalibrering döljer: "
+                      "specificiteten försvårar rekryteringen i fel del av "
+                      "rummet.\n")
+                A("Vakansålder vid tillsättning är flödesviktad; vakanser som "
+                  "aldrig tillsätts syns inte, så talet underskattar. SCB:s tal "
+                  "är stock delat med flöde och gäller näringslivet.\n")
             if len(km):
                 p90 = pd.to_numeric(df.get("p90_commute_km"), errors="coerce").dropna()
                 A(f"Medianpendling: **{km.median():.1f} km**"
@@ -494,6 +527,89 @@ def scb_arbetsloshet(koder, db_path="data/worm.sqlite3"):
                             .str.zfill(4))
     df = df[df["municipal_code"].isin({str(k).strip().zfill(4) for k in koder})]
     return df.set_index("municipal_code") if not df.empty else None
+
+
+# Toppriktning och amplitud för rekryteringstidens första harmonik i SCB:s
+# data, ur scripts/rekryteringstid_mot_uppgiftsrum.py på TAB4307 för 2023:
+#   T = 47.7 + chi * (2.2 cos xi + 156.5 sin xi), R2 0.834, n = 11 branscher.
+# Samma funktionsform som papprets löneekvation (Eq. 4), vars topp ligger på
+# 89.5 grader. Talen gäller NÄRINGSLIVET och är en engångsmätning; körs
+# skriptet om med nya SCB-data ska de uppdateras här.
+SCB_REKRYTERING_TOPP = 89.2
+SCB_REKRYTERING_AMPLITUD = 156.5
+SCB_REKRYTERING_NIVA = 47.7
+
+
+def riktningsharmonik(run_dir):
+    """Rekryteringstidens första harmonik i uppgiftsrummet, ur körningen.
+
+    VARFÖR DET ÄR ETT TEST OCH INTE EN INMATNING. Rekryteringstiden är ett
+    utfall av matchningen, och att mata in SCB:s yta vore att ersätta
+    mekanismen med en uppslagstabell -- rätt siffra, ingen härledning. Lönerna
+    behandlas annorlunda med rätta: de är priser en enskild matchning tar för
+    givna. Här får modellen i stället producera sin egen yta, och den ställs
+    mot SCB:s.
+
+    Varje anställning ger en observation: vakansens ålder vid tillsättning
+    och jobbets position. Anpassningen är samma plan som mot SCB,
+
+        T = a + chi * (b cos xi + c sin xi) = a + b x_occ + c y_occ,
+
+    men på tusentals oberoende tillsättningar i stället för elva branscher.
+
+    Vakansålder vid tillsättning är flödesviktad varaktighet; SCB:s
+    rekryteringstid är stock delat med flöde. Under stationaritet är de lika,
+    och avvikelsen -- vakanser som ALDRIG tillsätts syns inte här -- går åt
+    känt håll: talet underskattar.
+    """
+    from core.analysis.eventlog import read_events
+    try:
+        h = read_events(run_dir)
+    except Exception:
+        return None
+    rader = [(r.get("job_id"), r.get("vacancy_age_days"))
+             for r in h if r.get("event") == "start_job"
+             and str(r.get("is_bootstrap", "")).lower() not in ("true", "1")
+             and not str(r.get("event_detail") or "").startswith("job_gone")]
+    if not rader:
+        return None
+    d = pd.DataFrame(rader, columns=["job_id", "dagar"])
+    d["dagar"] = pd.to_numeric(d["dagar"], errors="coerce")
+    d = d.dropna()
+    if d.empty:
+        return None
+
+    jobb = []
+    for namn in ("initial_state_jobs.csv", "final_state_jobs.csv"):
+        pth = os.path.join(run_dir, namn)
+        if os.path.isfile(pth):
+            jobb.append(pd.read_csv(pth, usecols=lambda c: c in
+                                    ("job_id", "x_occ", "y_occ", "chi", "xi")))
+    if not jobb:
+        return None
+    jobb = pd.concat(jobb).drop_duplicates("job_id", keep="last")
+    jobb["job_id"] = jobb["job_id"].astype(str)
+    d["job_id"] = d["job_id"].astype(str)
+    d = d.merge(jobb, on="job_id", how="inner").dropna(subset=["x_occ", "y_occ"])
+    if len(d) < 30:
+        return None
+
+    X = np.column_stack([np.ones(len(d)), d["x_occ"], d["y_occ"]])
+    y = d["dagar"].to_numpy(dtype=float)
+    beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+    pred = X @ beta
+    r2 = 1 - ((y - pred) ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    a, b, c = beta
+    topp = float(np.degrees(np.arctan2(c, b)) % 360)
+    amp = float(np.hypot(b, c))
+    # Radiell jämförelse: förklarar chi något utan riktning? Pappret säger nej
+    # för lön, SCB säger nej för rekryteringstid.
+    Xr = np.column_stack([np.ones(len(d)), d["chi"]])
+    br, *_ = np.linalg.lstsq(Xr, y, rcond=None)
+    r2_rad = 1 - ((y - Xr @ br) ** 2).sum() / ((y - y.mean()) ** 2).sum()
+    return {"n": int(len(d)), "niva": float(a), "topp": topp, "amplitud": amp,
+            "R2": float(r2), "R2_radiell": float(r2_rad),
+            "medel": float(y.mean())}
 
 
 def scb_pendlingsandel(kommuner, db_path="data/worm.sqlite3"):

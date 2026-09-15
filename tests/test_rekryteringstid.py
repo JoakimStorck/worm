@@ -279,3 +279,79 @@ def test_korsvalideringen_ar_utelamna_en_och_inte_insample():
         assert r[namn]["cv_rmse"] > insample, namn
     # Och R2 växer monotont med parametrarna, vilket är skälet till motvikten.
     assert r["radiell + plan"]["R2"] >= r["radiell"]["R2"] - 1e-9
+
+
+# ---------------------------------------------------------------------------
+# Modellens egen harmonik, ur körningen
+# ---------------------------------------------------------------------------
+def _korning(tmp_path, topp_grader, amplitud, n=400, brus=6.0, seed=1):
+    """Syntetisk körning: jobb spridda över skivan, vakansålder vid
+    tillsättning som en planterad första harmonik plus brus."""
+    import os
+
+    rng = np.random.default_rng(seed)
+    R = str(tmp_path / "run")
+    os.makedirs(R)
+    xi = rng.uniform(0, 2 * np.pi, n)
+    chi = rng.uniform(0.1, 0.7, n)
+    jobb = pd.DataFrame({"job_id": [f"J{i:05d}" for i in range(n)],
+                         "xi": xi, "chi": chi,
+                         "x_occ": chi * np.cos(xi), "y_occ": chi * np.sin(xi)})
+    jobb.to_csv(os.path.join(R, "initial_state_jobs.csv"), index=False)
+    t = np.radians(topp_grader)
+    T = 40 + chi * amplitud * np.cos(xi - t) + rng.normal(0, brus, n)
+    rader = ["0.00, new_month, month 1, year 2024, employed 0, unemployed 0, "
+             "unmatched_jobs 0, active_jobs 0"]
+    for i, (j, v) in enumerate(zip(jobb.job_id, T)):
+        rader.append(f"{10 + i:.2f}, start_job, agent_type individual, "
+                     f"agent_id 2062_i{i:06d}, chi 1.0, xi 1.0, r_i 0.3, "
+                     f"job_id {j}, is_bootstrap False, "
+                     f"vacancy_age_days {max(v, 1):.1f}")
+    with open(os.path.join(R, "eventlog.csv"), "w", encoding="utf-8") as f:
+        f.write("\n".join(rader) + "\n")
+    return R
+
+
+def test_toppriktningen_aterfinns(tmp_path):
+    from scripts.analysis import riktningsharmonik
+
+    r = riktningsharmonik(_korning(tmp_path, 90.0, 120.0))
+    assert abs(((r["topp"] - 90.0 + 180) % 360) - 180) < 5
+    assert r["R2"] > 0.85
+    assert r["R2_radiell"] < 0.1       # ingen riktning i chi ensamt
+
+
+def test_en_annan_toppriktning_aterfinns_ocksa(tmp_path):
+    """Testet får inte råka bli grönt bara för att 90 grader är svaret vi
+    väntar oss."""
+    from scripts.analysis import riktningsharmonik
+
+    r = riktningsharmonik(_korning(tmp_path, 225.0, 120.0))
+    assert abs(((r["topp"] - 225.0 + 180) % 360) - 180) < 5
+
+
+def test_bootstrap_och_misslyckade_starter_raknas_inte(tmp_path):
+    """Uppstartens tillsättningar har ingen vakansålder som betyder något,
+    och job_gone_before_start-raderna är inga anställningar (0118)."""
+    import os
+
+    from scripts.analysis import riktningsharmonik
+
+    R = _korning(tmp_path, 90.0, 120.0, n=200)
+    with open(os.path.join(R, "eventlog.csv"), "a", encoding="utf-8") as f:
+        for i in range(300):
+            f.write(f"{1000 + i:.2f}, start_job, agent_type individual, "
+                    f"agent_id x{i}, chi 1.0, xi 1.0, r_i 0.3, job_id J00001, "
+                    f"is_bootstrap True, vacancy_age_days 900\n")
+            f.write(f"{2000 + i:.2f}, start_job, agent_type individual, "
+                    f"agent_id y{i}, chi 1.0, xi 1.0, r_i 0.3, job_id J00002, "
+                    f"event_detail job_gone_before_start, vacancy_age_days 900\n")
+    r = riktningsharmonik(R)
+    assert r["n"] == 200
+    assert r["medel"] < 100
+
+
+def test_for_fa_tillsattningar_ger_none(tmp_path):
+    from scripts.analysis import riktningsharmonik
+
+    assert riktningsharmonik(_korning(tmp_path, 90.0, 120.0, n=10)) is None
