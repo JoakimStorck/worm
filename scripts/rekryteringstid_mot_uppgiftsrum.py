@@ -199,6 +199,120 @@ def branschernas_position(conn):
     return ut
 
 
+# ---------------------------------------------------------------------------
+# Ytor över skivan
+# ---------------------------------------------------------------------------
+# En yta T(xi, chi) anpassas till branschernas uppmätta rekryteringstider.
+# BRANSCHEN ÄR INTE EN PUNKT utan en fördelning över rummet: dess uppmätta tid
+# ska vara det sysselsättningsvägda medelvärdet av ytan över de yrken den
+# består av,
+#
+#     T_SCB(bransch) ~ summa_yrken w(yrke, bransch) * T(xi_yrke, chi_yrke)
+#
+# Det är en linjär restriktion per bransch. Med en yta som är linjär i sina
+# parametrar blir hela anpassningen minstakvadrat på elva ekvationer -- och
+# elva INTEGRALER över rummet bär mer än elva tyngdpunkter, eftersom två
+# branscher med samma tyngdpunkt men olika spridning ger olika ekvationer.
+#
+# Det är också svaret på varför chi:s tyngdpunkter inte korrelerade: de elva
+# medelvärdena ligger mellan 0.32 och 0.45, eftersom varje bransch spänner hela
+# rummet. Medelvärdesbildningen förstörde den radiella informationen; ytan
+# behöver inte förstöra den.
+YTOR = {
+    "konstant":            lambda d: {"1": np.ones(len(d))},
+    "radiell":             lambda d: {"1": np.ones(len(d)), "chi": d["chi"]},
+    "radiell kvadratisk":  lambda d: {"1": np.ones(len(d)), "chi": d["chi"],
+                                      "chi^2": d["chi"] ** 2},
+    "plan":                lambda d: {"1": np.ones(len(d)), "x": d["x_occ"],
+                                      "y": d["y_occ"]},
+    "radiell + plan":      lambda d: {"1": np.ones(len(d)), "chi": d["chi"],
+                                      "x": d["x_occ"], "y": d["y_occ"]},
+    "kravnivå":            lambda d: {"1": np.ones(len(d)), "r_req": d["r_req"]},
+    "kravnivå + radiell":  lambda d: {"1": np.ones(len(d)), "r_req": d["r_req"],
+                                      "chi": d["chi"]},
+}
+
+
+def yrkesvikter_per_bransch(conn):
+    """Yrkesnivå: en rad per bransch och O*NET-kod, med vikt och position."""
+    riket = pd.read_sql("SELECT ssyk_code, sni_code, employed "
+                        "FROM occupation_by_industry", conn)
+    riket = riket.groupby(["ssyk_code", "sni_code"], as_index=False)["employed"].sum()
+    cw = pd.read_sql("SELECT occupation_code, onet_code, share "
+                     "FROM ssyk3_onet_crosswalk", conn)
+    geo = pd.read_sql("SELECT * FROM onet_occupation_space", conn)
+    # x_occ och y_occ härleds ur polära koordinater om de saknas: de är samma
+    # punkt uttryckt två gånger, och en tabell laddad med en äldre
+    # load_task_geometry kan sakna de kartesiska kolumnerna.
+    for kol, f in (("x_occ", np.cos), ("y_occ", np.sin)):
+        if kol not in geo.columns:
+            geo[kol] = geo["chi"].astype(float) * f(geo["xi"].astype(float))
+    geo = geo[["onet_code", "chi", "xi", "x_occ", "y_occ", "r_o", "r_req"]]
+    d = (riket.merge(cw, left_on="ssyk_code", right_on="occupation_code")
+         .merge(geo, on="onet_code"))
+    d["v"] = d["employed"] * d["share"]
+    return d[d["v"] > 0]
+
+
+def designmatris(yrken, grupper, basfunktion):
+    """Rad per bransch: de sysselsattningsvagda basfunktionerna.
+
+    Vikterna normaliseras per bransch, så att raden är ett medelvärde av ytan
+    och inte en summa -- annars skulle en stor bransch predicera en längre tid
+    bara för att den är stor.
+    """
+    bas = basfunktion(yrken)
+    namn = list(bas)
+    rader = []
+    for g in grupper:
+        m = yrken["grupp"] == g
+        w = yrken.loc[m, "v"].to_numpy(dtype=float)
+        if w.sum() <= 0:
+            rader.append(np.full(len(namn), np.nan))
+            continue
+        w = w / w.sum()
+        rader.append([float(np.dot(w, np.asarray(bas[n])[m.to_numpy()]))
+                      for n in namn])
+    return np.array(rader, dtype=float), namn
+
+
+def anpassa_ytor(yrken, matt):
+    """Minstakvadrat per ytform, med R2, justerat R2 och utelämna-en-korsning.
+
+    JUSTERAT R2 OCH KORSVALIDERING STÅR BREDVID R2 med avsikt. R2 kan bara
+    växa när en parameter läggs till, så med elva punkter vinner den största
+    modellen alltid på det måttet allena. Utelämna-en-korsningen -- anpassa på
+    tio branscher, predicera den elfte -- är den enda kontroll mot
+    överanpassning som n = 11 tillåter.
+    """
+    grupper = list(matt["grupp"])
+    y = matt["dagar"].to_numpy(dtype=float)
+    ut = []
+    for namn, f in YTOR.items():
+        M, kolnamn = designmatris(yrken, grupper, f)
+        if np.isnan(M).any():
+            continue
+        beta, *_ = np.linalg.lstsq(M, y, rcond=None)
+        pred = M @ beta
+        ss_res = float(((y - pred) ** 2).sum())
+        ss_tot = float(((y - y.mean()) ** 2).sum())
+        r2 = 1 - ss_res / ss_tot
+        k = M.shape[1]
+        just = 1 - (1 - r2) * (len(y) - 1) / max(len(y) - k, 1)
+        # utelämna-en
+        fel = []
+        for i in range(len(y)):
+            m = np.ones(len(y), bool)
+            m[i] = False
+            b2, *_ = np.linalg.lstsq(M[m], y[m], rcond=None)
+            fel.append(y[i] - float(M[i] @ b2))
+        ut.append({"yta": namn, "k": k, "R2": r2, "R2_just": just,
+                   "cv_rmse": float(np.sqrt(np.mean(np.square(fel)))),
+                   "koef": dict(zip(kolnamn, np.round(beta, 1))),
+                   "residual": dict(zip(grupper, np.round(y - pred, 1)))})
+    return sorted(ut, key=lambda r: -r["R2"])
+
+
 def main():
     p = argparse.ArgumentParser(
         description="Rekryteringstid mot position i uppgiftsrummet.")
@@ -211,6 +325,7 @@ def main():
     tid = las_rekryteringstid(a.kalla, ar=a.ar)
     conn = sqlite3.connect(a.db)
     pos = branschernas_position(conn)
+    yrken = yrkesvikter_per_bransch(conn)
     conn.close()
 
     # Aggregatet A-S är summan av de övriga och ingen egen observation. Bort
@@ -247,6 +362,36 @@ def main():
     print(f"\nn = {len(d)} branscher. Sambandet prövas PER BRANSCH och inte per\n"
           "yrke: all variation i rekryteringstiden kommer från de här talen, och\n"
           "en regression på yrkesnivå hade bara replikerat dem.\n")
+
+    # --- Ytor över skivan ---
+    # Yrkena måste bära samma gruppindelning som mätvärdena, annars anpassas
+    # ytan mot fel branscher.
+    from scripts.rekryteringstid_mot_uppgiftsrum import _bokstaver as _b
+    grupp_for = {}
+    for g in d["grupp"]:
+        for bokstav in _b(g):
+            grupp_for[bokstav] = g
+    yrken = yrken.copy()
+    yrken["grupp"] = yrken["sni_code"].map(
+        lambda k: next((grupp_for[b] for b in _b(k) if b in grupp_for), None))
+    yrken = yrken.dropna(subset=["grupp"])
+
+    resultat = anpassa_ytor(yrken, d)
+    print("Ytor T(xi, chi), anpassade så att branschens uppmätta tid är det\n"
+          "sysselsättningsvägda medelvärdet av ytan över dess yrken.\n")
+    print(f"{'yta':<22}{'k':>3}{'R2':>8}{'R2 just':>9}{'cv rmse':>9}  koefficienter")
+    for r in resultat:
+        koef = ", ".join(f"{n}={v:g}" for n, v in r["koef"].items())
+        print(f"{r['yta']:<22}{r['k']:>3}{r['R2']:>8.3f}{r['R2_just']:>9.3f}"
+              f"{r['cv_rmse']:>9.1f}  {koef}")
+
+    bast = resultat[0]
+    print(f"\nResidualer för {bast['yta']} (uppmätt minus anpassad, dagar):")
+    for g, v in sorted(bast["residual"].items(), key=lambda x: -abs(x[1])):
+        print(f"  {g:<12}{v:>7.1f}")
+    print("\nR2 kan bara växa med fler parametrar, så justerat R2 och\n"
+          "utelämna-en-korsningen står bredvid. Med elva punkter är cv_rmse\n"
+          "den enda kontroll mot överanpassning som materialet tillåter.\n")
 
     if a.csv:
         d.to_csv(a.csv, index=False)

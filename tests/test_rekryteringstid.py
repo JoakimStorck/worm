@@ -17,10 +17,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from scripts.rekryteringstid_mot_uppgiftsrum import (_bokstaver,
+from scripts.rekryteringstid_mot_uppgiftsrum import (_bokstaver, anpassa_ytor,
                                                      branschernas_position,
-                                                     harmonisera,
-                                                     las_rekryteringstid)
+                                                     designmatris, harmonisera,
+                                                     las_rekryteringstid,
+                                                     yrkesvikter_per_bransch)
 
 
 def _scbfil(path, per_bransch, ar="2023", kodning="iso-8859-1"):
@@ -185,3 +186,96 @@ def test_inget_samband_ger_ingen_korrelation(tmp_path):
     tid = _tid({"I": 50.0, "F": 12.0, "B+C": 75.0, "J": 30.0})
     d = harmonisera(tid, pos)
     assert abs(d["chi"].corr(d["dagar"], method="spearman")) < 0.9
+
+
+# ---------------------------------------------------------------------------
+# Ytorna
+# ---------------------------------------------------------------------------
+def _yrken(rader):
+    """En rad per bransch och yrke, med vikt och position."""
+    d = pd.DataFrame(rader)
+    d["x_occ"] = d.chi * np.cos(d.xi)
+    d["y_occ"] = d.chi * np.sin(d.xi)
+    d["r_o"] = 0.3
+    return d
+
+
+def test_branschen_bidrar_med_sin_fordelning_inte_sin_tyngdpunkt():
+    """Kärnan i konstruktionen: raden i designmatrisen är ett vägt MEDELVÄRDE
+    av basfunktionen över branschens yrken. Två branscher med samma tyngdpunkt
+    men olika spridning ger därför olika rader för en olinjär basfunktion."""
+    smal = _yrken([{"grupp": "A", "chi": 0.5, "xi": 0.0, "v": 1.0, "r_req": 0.4},
+                   {"grupp": "A", "chi": 0.5, "xi": 0.0, "v": 1.0, "r_req": 0.4}])
+    bred = _yrken([{"grupp": "B", "chi": 0.1, "xi": 0.0, "v": 1.0, "r_req": 0.4},
+                   {"grupp": "B", "chi": 0.9, "xi": 0.0, "v": 1.0, "r_req": 0.4}])
+    d = pd.concat([smal, bred], ignore_index=True)
+    bas = lambda t: {"1": np.ones(len(t)), "chi2": t["chi"] ** 2}  # noqa: E731
+    M, namn = designmatris(d, ["A", "B"], bas)
+    # Samma tyngdpunkt i chi...
+    Mlin, _ = designmatris(d, ["A", "B"], lambda t: {"chi": t["chi"]})
+    assert Mlin[0, 0] == pytest.approx(Mlin[1, 0])
+    # ...men olika rad för chi^2.
+    assert M[0, 1] == pytest.approx(0.25)
+    assert M[1, 1] == pytest.approx(0.41)
+
+
+def test_vikterna_normaliseras_per_bransch():
+    """Utan normalisering hade en stor bransch predicerat en längre tid bara
+    för att den är stor."""
+    d = _yrken([{"grupp": "A", "chi": 0.4, "xi": 0.0, "v": 1.0, "r_req": 0.4},
+                {"grupp": "B", "chi": 0.4, "xi": 0.0, "v": 9000.0, "r_req": 0.4}])
+    M, _ = designmatris(d, ["A", "B"], lambda t: {"chi": t["chi"]})
+    assert M[0, 0] == pytest.approx(M[1, 0])
+
+
+def test_planterad_radiell_yta_aterfinns():
+    rng = np.random.default_rng(0)
+    rader, matt = [], []
+    for i, c in enumerate([0.15, 0.25, 0.40, 0.55, 0.70, 0.85]):
+        g = f"G{i}"
+        for d_ in (-0.05, 0.0, 0.05):
+            rader.append({"grupp": g, "chi": c + d_, "xi": rng.uniform(0, 6.28),
+                          "v": 1.0, "r_req": c})
+        matt.append({"grupp": g, "dagar": 10 + 80 * c})
+    r = anpassa_ytor(_yrken(rader), pd.DataFrame(matt))
+    bast = {x["yta"]: x for x in r}
+    assert bast["radiell"]["R2"] > 0.99
+    assert bast["radiell"]["koef"]["chi"] == pytest.approx(80, abs=5)
+
+
+def test_konstant_yta_ger_noll_r2():
+    """Baslinjen: en yta utan struktur ska ge R2 = 0, inte något annat."""
+    rader = [{"grupp": g, "chi": c, "xi": 0.0, "v": 1.0, "r_req": c}
+             for g, c in (("A", 0.2), ("B", 0.5), ("C", 0.8))]
+    matt = pd.DataFrame([{"grupp": "A", "dagar": 10.0},
+                         {"grupp": "B", "dagar": 40.0},
+                         {"grupp": "C", "dagar": 70.0}])
+    r = {x["yta"]: x for x in anpassa_ytor(_yrken(rader), matt)}
+    assert r["konstant"]["R2"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_korsvalideringen_ar_utelamna_en_och_inte_insample():
+    """R2 kan bara växa med fler parametrar, så cv_rmse behövs som motvikt.
+    Måttet måste vara UTELÄMNA-EN: anpassa på tio, predicera den elfte. Räknas
+    det i stället på samma data som anpassningen mäter det ingenting, och den
+    största modellen vinner alltid.
+
+    Kontrollen är därför att cv_rmse ligger ÖVER residualernas
+    in-sample-spridning -- en utelämnad punkt predikteras sämre än en
+    inkluderad -- och inte att en viss modell vinner, vilket beror på draget.
+    """
+    rng = np.random.default_rng(3)
+    rader, matt = [], []
+    for i, c in enumerate(np.linspace(0.15, 0.85, 7)):
+        g = f"G{i}"
+        for d_ in (-0.03, 0.0, 0.03):
+            rader.append({"grupp": g, "chi": c + d_, "xi": rng.uniform(0, 6.28),
+                          "v": 1.0, "r_req": c})
+        matt.append({"grupp": g, "dagar": 10 + 80 * c + rng.normal(0, 12)})
+    r = {x["yta"]: x for x in anpassa_ytor(_yrken(rader), pd.DataFrame(matt))}
+    for namn in ("radiell", "radiell + plan"):
+        res = np.array(list(r[namn]["residual"].values()), dtype=float)
+        insample = float(np.sqrt(np.mean(res ** 2)))
+        assert r[namn]["cv_rmse"] > insample, namn
+    # Och R2 växer monotont med parametrarna, vilket är skälet till motvikten.
+    assert r["radiell + plan"]["R2"] >= r["radiell"]["R2"] - 1e-9
