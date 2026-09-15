@@ -144,6 +144,23 @@ def create_schema(db_path="data/worm.sqlite3"):
         )
     """)
 
+    # Yrkesregistret. occupation_by_industry är rikets yrke x näringsgren x
+    # storleksklass; occupation_by_county länens nattbefolkning per yrke.
+    # occupation_weights_ssyk_by_municipality är IPF-skattningen ur de två plus
+    # kommunernas branschmix. Koderna är SSYK3 och inte O*NET: tabellen byter
+    # namn till occupation_weights_by_municipality först när crosswalken
+    # SSYK -> ISCO-08 -> SOC -> O*NET finns.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS occupation_by_industry (
+            ssyk_code TEXT, sni_code TEXT, size_class TEXT, employed INTEGER
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS occupation_by_county (
+            county_code TEXT, ssyk_code TEXT, employed INTEGER
+        )
+    """)
+
     # SNI-based employment per municipality
     c.execute("""
         CREATE TABLE IF NOT EXISTS employment_municipality_sni (

@@ -127,6 +127,18 @@ if file_exists(ams_csv):
 else:
     log("OBS: Laddar inte labour_market_status, filen saknas.")
 
+# Ladda yrkesregistret och skatta yrkesvikter per kommun med IPF.
+riks_csv, lan_csv = "data/TAB4347_sv.csv", "data/TAB4441_sv.csv"
+if file_exists(riks_csv) and file_exists(lan_csv):
+    try:
+        from core.database.load_yrkesregister import load_yrkesregister, load_yrkesvikter
+        load_yrkesregister(riks_csv, lan_csv, db_path=DB_PATH)
+        load_yrkesvikter(db_path=DB_PATH)
+    except Exception as e:
+        log(f"Fel vid laddning av yrkesregistret: {e}")
+else:
+    log("OBS: Laddar inte yrkesregistret, filerna saknas.")
+
 # Ladda utbildningsnivåer från SCB (JSON)
 edu_json = "data/Utbildningsnivaer_2024.json"
 if file_exists(edu_json):

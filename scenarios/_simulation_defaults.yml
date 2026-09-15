@@ -55,7 +55,15 @@ simulation:
   # riktning i scripts/diagnose_commuting.py. För Ovansiljan låg modellens
   # flöden 1.33 till 4.94 gånger SCB:s, med de svagaste paren mest
   # överskattade -- signaturen för en för flack avklingning.
-  commute_decay_km: null
+  # 25 km är mätt, inte valt: svep över 40, 25 och 15 gav RMS av log-kvoterna
+  # mot SCB:s flöden 0.786, 0.619 och 0.651, alltså ett minimum vid 25. Utan
+  # avklingning var talet 0.979. Bruttonivån förbättras monotont (1.82 -> 1.25)
+  # men spridningen mellan paren gör det inte: den är 4.4 gånger vid 25 och 7.2
+  # vid 15, eftersom exponentialformen har för tunn svans. Älvdalen mot Mora --
+  # verklighetens näst största flöde -- stryps till 0.31 vid d0 = 15 medan Orsa
+  # mot Älvdalen fortfarande ligger på 2.26. Formen bör bytas mot en med
+  # potenssvans, (1 + km/d0)^-beta, men det är en egen ändring.
+  commute_decay_km: 25
   # Koncentration i individernas yrkesfördelning. Individernas yrken dras ur
   # kommunens yrkesprofil UPPHÖJD till detta tal och omnormaliserad: vanliga
   # yrken blir vanligare, sällsynta sällsyntare. Jobben dras ur samma profil

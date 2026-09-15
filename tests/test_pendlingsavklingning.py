@@ -46,15 +46,30 @@ def test_skalan_styr_hur_snabbt():
     assert np.exp(-km / 10.0) < np.exp(-km / 25.0) < np.exp(-km / 100.0)
 
 
-def test_avstangd_som_forval():
-    """null ger exakt tidigare beteende, inklusive slumpens ordning."""
+def test_forvalet_ar_det_uppmatta():
+    """25 km är svepets minimum, inte ett valt tal: RMS av log-kvoterna mot
+    SCB:s flöden blev 0.786, 0.619 och 0.651 vid d0 = 40, 25 och 15, mot 0.979
+    utan avklingning. Ändras förvalet ska det vara för att ett nytt svep säger
+    något annat."""
     import yaml
     from core.configreader import ConfigReader
     rot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     scen = os.path.join(rot, "scenarios")
     with open(os.path.join(scen, "_simulation_defaults.yml"), encoding="utf-8") as f:
         cfg = ConfigReader.resolve_extends(yaml.safe_load(f), scen)
-    assert cfg["simulation"]["commute_decay_km"] is None
+    assert cfg["simulation"]["commute_decay_km"] == 25
+
+
+def test_null_stanger_av():
+    """Mekanismen ska gå att stänga av helt, för jämförelse mot äldre
+    körningar."""
+    import inspect
+
+    from core.occupations import utils
+
+    kalla = inspect.getsource(utils.search_once)
+    assert "if commute_decay_km:" in kalla
+    assert "else:" in kalla.split("if commute_decay_km:")[1][:400]
 
 
 def test_parametern_nar_sokningen():
