@@ -355,3 +355,93 @@ def test_for_fa_tillsattningar_ger_none(tmp_path):
     from scripts.analysis import riktningsharmonik
 
     assert riktningsharmonik(_korning(tmp_path, 90.0, 120.0, n=10)) is None
+
+
+# ---------------------------------------------------------------------------
+# Misslyckade rekryteringar
+# ---------------------------------------------------------------------------
+def _korning_med_svans(tmp_path, n_gamla=40, n_lediga=100, n=300, t_slut=3650.0):
+    """Slutläge där n_gamla av n_lediga lediga positioner är äldre än 180
+    dagar, med högre krav och norrut i rummet, och hälften av dem aldrig fått
+    en sökande."""
+    import os
+
+    R = str(tmp_path / "run")
+    os.makedirs(R)
+    jobb = pd.DataFrame({
+        "job_id": [f"J{i:05d}" for i in range(n)],
+        "individual_id": [None if i < n_lediga else f"i{i}" for i in range(n)],
+        "active": True, "pending": False,
+        "vacant_since": [t_slut - 400 if i < n_gamla else t_slut - 30 for i in range(n)],
+        "r_req": [0.6 if i < n_gamla else 0.3 for i in range(n)],
+        "y_occ": [0.3 if i < n_gamla else -0.2 for i in range(n)],
+        "municipal_code": ["2039" if i < 30 else "2062" for i in range(n)],
+        "employer_size": [8] * n})
+    jobb.to_csv(os.path.join(R, "final_state_jobs.csv"), index=False)
+    rader = [f"{t_slut:.2f}, new_month, month 12, year 2033, employed 200, "
+             "unemployed 10, unmatched_jobs 100, active_jobs 300"]
+    for i in range(n_gamla // 2, n_gamla):      # hälften har fått sökande
+        rader.append(f"100.00, open_advert, agent_type system, agent_id None, "
+                     f"event_detail advert_opened, job_id J{i:05d}, "
+                     f"wait_first_applicant_days 5")
+        for k in range(3):
+            rader.append(f"{200 + k * 50}.00, close_vacancy, agent_type individual, "
+                         f"agent_id x, event_detail vacancy_closed_unfilled, "
+                         f"job_id J{i:05d}")
+    with open(os.path.join(R, "eventlog.csv"), "w", encoding="utf-8") as f:
+        f.write("\n".join(rader) + "\n")
+    return R
+
+
+def test_svansen_raknas(tmp_path):
+    from scripts.analysis import misslyckade_rekryteringar
+
+    r = misslyckade_rekryteringar(_korning_med_svans(tmp_path))
+    assert r["n_lediga"] == 100 and r["n_lang"] == 40
+    assert r["andel_lang"] == pytest.approx(0.4)
+    assert r["alder_median_lang"] == pytest.approx(400.0)
+
+
+def test_aldrig_sokta_och_tomma_fonster(tmp_path):
+    """Skiljer positioner som ingen söker från positioner som söks men inte
+    fylls. De två kräver olika åtgärder."""
+    from scripts.analysis import misslyckade_rekryteringar
+
+    r = misslyckade_rekryteringar(_korning_med_svans(tmp_path))
+    assert r["aldrig_sokt_lang"] == pytest.approx(0.5)
+    # Hälften har tre tomma fönster, hälften noll: medianen ligger emellan.
+    assert 0 < r["tomma_median_lang"] < 3
+
+
+def test_kravniva_och_riktning_for_svansen(tmp_path):
+    from scripts.analysis import misslyckade_rekryteringar
+
+    r = misslyckade_rekryteringar(_korning_med_svans(tmp_path))
+    assert r["r_req_lang"] == pytest.approx(0.6)
+    assert r["r_req_kort"] == pytest.approx(0.3)
+    assert r["andel_norr_lang"] == pytest.approx(1.0)
+    assert r["andel_norr_alla"] == pytest.approx(0.4)
+
+
+def test_per_kommun_mot_kommunens_egen_stock(tmp_path):
+    from scripts.analysis import misslyckade_rekryteringar
+
+    r = misslyckade_rekryteringar(_korning_med_svans(tmp_path))
+    assert r["per_kommun"] == {"2039": 30, "2062": 10}
+    assert r["stock_per_kommun"]["2039"] == 30       # alla Älvdalens lediga är gamla
+    assert r["stock_per_kommun"]["2062"] == 70
+
+
+def test_utan_lediga_positioner_ger_none(tmp_path):
+    import os
+
+    from scripts.analysis import misslyckade_rekryteringar
+
+    R = str(tmp_path / "run")
+    os.makedirs(R)
+    pd.DataFrame({"job_id": ["J1"], "individual_id": ["i1"], "active": True,
+                  "pending": False, "vacant_since": [0.0]}
+                 ).to_csv(os.path.join(R, "final_state_jobs.csv"), index=False)
+    with open(os.path.join(R, "eventlog.csv"), "w") as f:
+        f.write("10.00, new_month, month 1\n")
+    assert misslyckade_rekryteringar(R) is None

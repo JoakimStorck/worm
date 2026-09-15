@@ -163,6 +163,43 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
                 A("Vakansålder vid tillsättning är flödesviktad; vakanser som "
                   "aldrig tillsätts syns inte, så talet underskattar. SCB:s tal "
                   "är stock delat med flöde och gäller näringslivet.\n")
+
+            mr = misslyckade_rekryteringar(senaste) if senaste else None
+            if mr and mr["n_lang"]:
+                A("\n**Misslyckade rekryteringar.** Positioner lediga vid "
+                  "körningens slut, äldre än 180 dagar. Det är svansen som "
+                  "lyfter Littles lag från de tillsatta vakansernas 50-80 dagar "
+                  "till 150: en vakans i modellen står och annonseras om tills "
+                  "någon tar den, och ingen mekanism låter arbetsgivaren ge "
+                  "upp, hyra in eller omfördela.\n")
+                A(f"| | värde |")
+                A(f"|---|---|")
+                A(f"| lediga positioner vid slutet | {mr['n_lediga']} |")
+                A(f"| varav äldre än 180 dagar | {mr['n_lang']} ({100*mr['andel_lang']:.0f} %) |")
+                A(f"| deras medianålder | {mr['alder_median_lang']:.0f} dagar |")
+                A(f"| andel som aldrig fått en sökande | {100*mr['aldrig_sokt_lang']:.0f} % |")
+                A(f"| tomma fönster per position, median | {mr['tomma_median_lang']:.0f} |")
+                A(f"| kravnivå r_req, median: gamla / övriga | "
+                  f"{mr['r_req_lang']:.2f} / {mr['r_req_kort']:.2f} |")
+                if "andel_norr_lang" in mr:
+                    A(f"| andel i norra halvplanet: gamla / alla lediga | "
+                      f"{100*mr['andel_norr_lang']:.0f} % / {100*mr['andel_norr_alla']:.0f} % |")
+                if "storlek_median_lang" in mr:
+                    A(f"| arbetsgivarstorlek, median: gamla / alla | "
+                      f"{mr['storlek_median_lang']:.0f} / {mr['storlek_median_alla']:.0f} |")
+                if "per_kommun" in mr:
+                    A("\nGamla positioner per kommun, mot kommunens andel av alla lediga:\n")
+                    A("| kommun | >180 dagar | andel av kommunens lediga |")
+                    A("|---|---|---|")
+                    for k, n in sorted(mr["per_kommun"].items()):
+                        tot = mr["stock_per_kommun"].get(k, 0)
+                        A(f"| {k} | {n} | {100*n/tot:.0f} % |" if tot else f"| {k} | {n} | – |")
+                A("\nStiger kravnivån och andelen i norr bland de gamla är svansen "
+                  "tunnhet i uppgiftsrummet. Är andelen som aldrig fått en "
+                  "sökande hög är positionerna utom räckhåll för alla, och då "
+                  "hjälper inga fler fönster. Att sänka r_req är ingen lösning: "
+                  "det är kompetensgränsen, och att sänka den låter vem som "
+                  "helst göra vad som helst.\n")
             if len(km):
                 p90 = pd.to_numeric(df.get("p90_commute_km"), errors="coerce").dropna()
                 A(f"Medianpendling: **{km.median():.1f} km**"
@@ -538,6 +575,91 @@ def scb_arbetsloshet(koder, db_path="data/worm.sqlite3"):
 SCB_REKRYTERING_TOPP = 89.2
 SCB_REKRYTERING_AMPLITUD = 156.5
 SCB_REKRYTERING_NIVA = 47.7
+
+
+def misslyckade_rekryteringar(run_dir, t_slut=None):
+    """Positioner som inte fylls: hur många, hur gamla, vilka.
+
+    SCB:s rekryteringstid är stock delat med flöde, och modellens 150 dagar
+    mot SCB:s 32 sitter inte i de tillsatta vakanserna -- de lever 50-80
+    dagar -- utan i svansen: 39 procent av stocken är äldre än 180 dagar.
+    Vakansen i modellen är passiv, den står och annonseras om tills någon
+    tar den, och ingenting låter arbetsgivaren ge upp. Innan något sådant
+    införs ska svansen beskrivas: vilka positioner det är, om de alls får
+    sökande, hur många gånger fönstret stängts tomt, och var i uppgiftsrummet
+    och geografin de sitter.
+
+    Att sänka r_req generellt är INTE en lösning: r_req är kompetensgränsen,
+    och att sänka den låter en fastighetsmäklare göra en kirurgs jobb. Det
+    arbetsgivare kallar sänkta krav på erfarenhet är en marginaljustering
+    inom samma kompetens.
+    """
+    from core.analysis.eventlog import read_events
+    p = os.path.join(run_dir, "final_state_jobs.csv")
+    if not os.path.isfile(p):
+        return None
+    jobb = pd.read_csv(p)
+    if "vacant_since" not in jobb.columns:
+        return None
+    try:
+        h = read_events(run_dir)
+    except Exception:
+        h = []
+    if t_slut is None:
+        t_slut = max((float(r["time"]) for r in h), default=np.nan)
+    if not np.isfinite(t_slut):
+        return None
+
+    aktiv = jobb.get("active", True)
+    aktiv = aktiv.fillna(False).astype(bool) if hasattr(aktiv, "fillna") else aktiv
+    pend = jobb.get("pending", False)
+    pend = pend.fillna(False).astype(bool) if hasattr(pend, "fillna") else pend
+    ledig = jobb[jobb["individual_id"].isna() & aktiv & ~pend].copy()
+    if ledig.empty:
+        return None
+    ledig["alder"] = t_slut - pd.to_numeric(ledig["vacant_since"], errors="coerce")
+    ledig = ledig.dropna(subset=["alder"])
+    ledig["job_id"] = ledig["job_id"].astype(str)
+
+    # Misslyckade fönster och ansökningar per position, ur loggen.
+    tomma, sokt = {}, {}
+    for r in h:
+        j = r.get("job_id")
+        if not j:
+            continue
+        d = r.get("event_detail")
+        if d == "vacancy_closed_unfilled":
+            tomma[j] = tomma.get(j, 0) + 1
+        elif d == "advert_opened":
+            sokt[j] = sokt.get(j, 0) + 1
+    ledig["tomma_fonster"] = ledig["job_id"].map(tomma).fillna(0).astype(int)
+    ledig["annonser"] = ledig["job_id"].map(sokt).fillna(0).astype(int)
+
+    lang = ledig[ledig["alder"] >= 180]
+    ut = {"n_lediga": int(len(ledig)), "n_lang": int(len(lang)),
+          "andel_lang": float(len(lang) / len(ledig)),
+          "alder_median_lang": float(lang["alder"].median()) if len(lang) else np.nan,
+          "aldrig_sokt_lang": float((lang["annonser"] == 0).mean()) if len(lang) else np.nan,
+          "tomma_median_lang": float(lang["tomma_fonster"].median()) if len(lang) else np.nan,
+          "r_req_lang": float(pd.to_numeric(lang.get("r_req"), errors="coerce").median())
+              if len(lang) and "r_req" in lang.columns else np.nan,
+          "r_req_kort": float(pd.to_numeric(ledig[ledig["alder"] < 180].get("r_req"),
+                                            errors="coerce").median())
+              if "r_req" in ledig.columns else np.nan}
+    if "municipal_code" in lang.columns and len(lang):
+        ut["per_kommun"] = (lang["municipal_code"].astype(str).str.zfill(4)
+                            .value_counts().to_dict())
+        ut["stock_per_kommun"] = (ledig["municipal_code"].astype(str).str.zfill(4)
+                                  .value_counts().to_dict())
+    if "y_occ" in lang.columns and len(lang):
+        ut["andel_norr_lang"] = float((pd.to_numeric(lang["y_occ"], errors="coerce") > 0).mean())
+        ut["andel_norr_alla"] = float((pd.to_numeric(ledig["y_occ"], errors="coerce") > 0).mean())
+    if "employer_size" in lang.columns and len(lang):
+        ut["storlek_median_lang"] = float(pd.to_numeric(lang["employer_size"],
+                                                        errors="coerce").median())
+        ut["storlek_median_alla"] = float(pd.to_numeric(ledig["employer_size"],
+                                                        errors="coerce").median())
+    return ut
 
 
 def riktningsharmonik(run_dir):
