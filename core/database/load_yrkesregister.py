@@ -228,8 +228,10 @@ def yrkesvikter_per_kommun(conn, county_code, kommuner=None, ar=2023):
     if okanda:
         n_okand = kom_sni[okanda].to_numpy().sum(axis=1)
         start = start + np.outer(n_okand, riks_marginal.to_numpy())
-        print(f"[yrkesvikter] {', '.join(okanda)}: {int(n_okand.sum())} personer "
-              f"får rikets yrkesfördelning")
+        # Antalet returneras i stället för att skrivas ut här: funktionen
+        # anropas en gång per län, och 21 identiska rader i byggloggen
+        # döljer talet snarare än visar det.
+        yrkesvikter_per_kommun.senaste_okanda = (okanda, int(n_okand.sum()))
 
     lan = pd.read_sql("SELECT ssyk_code, employed FROM occupation_by_county "
                       "WHERE county_code = ?", conn, params=(str(county_code).zfill(2),))
@@ -292,16 +294,23 @@ def load_yrkesvikter(db_path="data/worm.sqlite3", county_code=None):
     if county_code:
         lan = [str(county_code).zfill(2)]
     delar = []
+    okanda_tot, okanda_namn = 0, set()
     for kod in lan:
         kommuner = pd.read_sql(
             "SELECT municipal_code FROM municipalities WHERE municipal_code LIKE ?",
             conn, params=(f"{kod}%",))["municipal_code"].tolist()
         if not kommuner:
             continue
+        yrkesvikter_per_kommun.senaste_okanda = None
         try:
             delar.append(yrkesvikter_per_kommun(conn, kod, kommuner))
         except ValueError as e:
             print(f"[yrkesvikter] län {kod}: {e}")
+            continue
+        if yrkesvikter_per_kommun.senaste_okanda:
+            namn, n = yrkesvikter_per_kommun.senaste_okanda
+            okanda_namn.update(namn)
+            okanda_tot += n
     if not delar:
         conn.close()
         raise ValueError("Inga län gick att skatta")
@@ -309,6 +318,9 @@ def load_yrkesvikter(db_path="data/worm.sqlite3", county_code=None):
     ut.to_sql("occupation_weights_ssyk_by_municipality", conn,
               if_exists="replace", index=False)
     conn.close()
+    if okanda_tot:
+        print(f"[yrkesvikter] {', '.join(sorted(okanda_namn))}: {okanda_tot} "
+              f"personer i hela riket får rikets yrkesfördelning")
     print(f"[yrkesvikter] {ut.municipal_code.nunique()} kommuner, "
           f"{ut.occupation_code.nunique()} yrken, {len(ut)} rader")
     return len(ut)

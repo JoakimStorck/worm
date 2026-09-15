@@ -248,3 +248,55 @@ if __name__ == "__main__":
     load_ssyk_onet(sys.argv[1], sys.argv[2], sys.argv[3],
                    db_path=sys.argv[4] if len(sys.argv) > 4
                    else os.path.join("data", "worm.sqlite3"))
+
+
+# ---------------------------------------------------------------------------
+def load_onet_weights(db_path="data/worm.sqlite3"):
+    """occupation_weights_ssyk_by_municipality x ssyk3_onet_crosswalk
+    -> occupation_weights_by_municipality.
+
+    Sista steget: kommunernas yrkesfördelning i SSYK3 blir en fördelning över
+    O*NET-koder, vilket är den tabell municipality_occupational_profile läser
+    när occupation_source är register.
+
+    GÄLLER HELA RIKET, inte ett scenario. Modellen ska kunna byggas av vilka
+    kommuner som helst, och tabellen fylls därför för alla 290 -- avgränsningen
+    sker när ett scenario väljer sina kommuner, inte här.
+
+    Andelarna normaliseras per kommun efter produkten. En SSYK3-grupp vars
+    O*NET-koder delvis saknas i geometrin ska inte ge kommunen lägre total; den
+    kvarvarande vikten fördelas om inom gruppen.
+    """
+    conn = sqlite3.connect(db_path)
+    try:
+        v = pd.read_sql("SELECT municipal_code, occupation_code, weight "
+                        "FROM occupation_weights_ssyk_by_municipality", conn)
+        cw = pd.read_sql("SELECT occupation_code, onet_code, share "
+                         "FROM ssyk3_onet_crosswalk", conn)
+    except Exception as e:
+        conn.close()
+        raise ValueError(f"Saknar underlagstabell: {e}")
+    if v.empty or cw.empty:
+        conn.close()
+        raise ValueError("Tom yrkesvikts- eller crosswalktabell")
+
+    ihop = v.merge(cw, on="occupation_code", how="inner")
+    ihop["w"] = ihop["weight"] * ihop["share"]
+    ut = (ihop.groupby(["municipal_code", "onet_code"], as_index=False)["w"].sum()
+          .rename(columns={"w": "weight"}))
+    ut["weight"] = ut["weight"] / ut.groupby("municipal_code")["weight"].transform("sum")
+    ut = ut[ut["weight"] > 0].reset_index(drop=True)
+    ut.to_sql("occupation_weights_by_municipality", conn,
+              if_exists="replace", index=False)
+
+    # Hur mycket av kommunernas vikt som föll bort i produkten -- de
+    # SSYK3-grupper som saknar O*NET-koppling, i huvudsak militära yrken och
+    # okänt yrke.
+    kvar = (ihop.groupby("municipal_code")["weight"].sum()
+            / v.groupby("municipal_code")["weight"].sum())
+    conn.close()
+    print(f"[onet-vikter] {ut.municipal_code.nunique()} kommuner, "
+          f"{ut.onet_code.nunique()} O*NET-koder, {len(ut)} rader")
+    print(f"[onet-vikter] andel av SSYK-vikten som nådde fram: "
+          f"median {kvar.median():.3f}, lägst {kvar.min():.3f}")
+    return len(ut)

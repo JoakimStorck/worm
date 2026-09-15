@@ -146,8 +146,9 @@ esco_cw = "data/ONET_(Occupations)_0_updated.csv"
 esco_yrken = "data/esco_1.2.1/occupations_sv.csv"
 if all(file_exists(f) for f in (nyckel_xlsx, esco_cw, esco_yrken)):
     try:
-        from core.database.load_ssyk_onet import load_ssyk_onet
+        from core.database.load_ssyk_onet import load_onet_weights, load_ssyk_onet
         load_ssyk_onet(nyckel_xlsx, esco_cw, esco_yrken, db_path=DB_PATH)
+        load_onet_weights(db_path=DB_PATH)
     except Exception as e:
         log(f"Fel vid laddning av SSYK-O*NET-crosswalken: {e}")
 else:

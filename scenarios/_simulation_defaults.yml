@@ -75,6 +75,17 @@ simulation:
   # förval för att inte ändra befintliga körningar tyst. 1.0 betyder att
   # individer och jobb dras ur samma fördelning. Sveps mot arbetslöshet per
   # kommun jämförd med SCB:s arbetsmarknadsstatus.
+  # Varifrån invånarnas yrken hämtas. "register" läser
+  # occupation_weights_by_municipality -- yrkesregistrets nattbefolkning,
+  # skattad per kommun med IPF och översatt till O*NET. "sni" är den gamla
+  # vägen: kommunens branschmix PÅ ARBETSSTÄLLENA, använd som fördelning över
+  # INVÅNARNA, vilket ger utpendlingskommuner yrken ur fel kommuns näringsliv.
+  #
+  # register faller tillbaka på sni om tabellen saknas eller inte täcker
+  # kommunen, med en rad i loggen. Databasen måste alltså inte vara byggd med
+  # yrkesregistret för att ett scenario ska gå att köra.
+  occupation_source: register
+
   occupation_concentration: 1.5
 
   # --- Kompetenscirklar (docs/individmodell.md, avsnitt 2) ---

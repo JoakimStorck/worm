@@ -193,3 +193,90 @@ def test_ssyk3_utan_koppling_faller_bort_tyst_men_matbart():
     nyckel = pd.DataFrame([{"ssyk4": "9999", "isco4": "9999"}])
     eo = pd.DataFrame([{"isco3": "121", "onet_code": "A", "vikt": 1.0}])
     assert bygg_crosswalk(nyckel, eo).empty
+
+
+# ---------------------------------------------------------------------------
+# Produkten: SSYK-vikter per kommun x crosswalk -> O*NET-vikter
+# ---------------------------------------------------------------------------
+def _db_med_vikter(tmp_path, vikter, crosswalk):
+    import sqlite3
+    db = str(tmp_path / "w.sqlite3")
+    conn = sqlite3.connect(db)
+    pd.DataFrame(vikter).to_sql("occupation_weights_ssyk_by_municipality",
+                                conn, index=False)
+    pd.DataFrame(crosswalk).to_sql("ssyk3_onet_crosswalk", conn, index=False)
+    conn.close()
+    return db
+
+
+def test_produkten_ger_onet_vikter(tmp_path):
+    import sqlite3
+
+    from core.database.load_ssyk_onet import load_onet_weights
+
+    db = _db_med_vikter(tmp_path, [
+        {"municipal_code": "2062", "occupation_code": "121", "weight": 0.6},
+        {"municipal_code": "2062", "occupation_code": "234", "weight": 0.4},
+    ], [
+        {"occupation_code": "121", "onet_code": "A", "share": 0.75},
+        {"occupation_code": "121", "onet_code": "B", "share": 0.25},
+        {"occupation_code": "234", "onet_code": "C", "share": 1.0},
+    ])
+    load_onet_weights(db_path=db)
+    conn = sqlite3.connect(db)
+    d = pd.read_sql("SELECT * FROM occupation_weights_by_municipality",
+                    conn).set_index("onet_code")
+    conn.close()
+    assert d.loc["A", "weight"] == pytest.approx(0.45)
+    assert d.loc["B", "weight"] == pytest.approx(0.15)
+    assert d.loc["C", "weight"] == pytest.approx(0.40)
+
+
+def test_vikten_normaliseras_om_nar_en_grupp_saknar_koppling(tmp_path):
+    """SSYK-grupper utan O*NET-koppling -- militära yrken och okänt yrke --
+    ska inte ge kommunen lägre total. Den kvarvarande vikten fördelas om."""
+    import sqlite3
+
+    from core.database.load_ssyk_onet import load_onet_weights
+
+    db = _db_med_vikter(tmp_path, [
+        {"municipal_code": "2062", "occupation_code": "121", "weight": 0.5},
+        {"municipal_code": "2062", "occupation_code": "011", "weight": 0.5},
+    ], [{"occupation_code": "121", "onet_code": "A", "share": 1.0}])
+    load_onet_weights(db_path=db)
+    conn = sqlite3.connect(db)
+    d = pd.read_sql("SELECT * FROM occupation_weights_by_municipality", conn)
+    conn.close()
+    assert d.weight.to_numpy() == pytest.approx([1.0])
+
+
+def test_alla_kommuner_far_vikter_inte_bara_ett_scenario(tmp_path):
+    """Modellen ska kunna byggas av vilka kommuner som helst. Avgränsningen
+    sker när ett scenario väljer sina kommuner, inte i laddaren."""
+    import sqlite3
+
+    from core.database.load_ssyk_onet import load_onet_weights
+
+    db = _db_med_vikter(tmp_path, [
+        {"municipal_code": k, "occupation_code": "121", "weight": 1.0}
+        for k in ("0180", "1280", "2062", "2584")
+    ], [{"occupation_code": "121", "onet_code": "A", "share": 1.0}])
+    load_onet_weights(db_path=db)
+    conn = sqlite3.connect(db)
+    d = pd.read_sql("SELECT * FROM occupation_weights_by_municipality", conn)
+    conn.close()
+    assert set(d.municipal_code) == {"0180", "1280", "2062", "2584"}
+
+
+def test_kolumnerna_ar_de_register_profile_laser():
+    """_register_profile gör SELECT onet_code, weight, year FROM
+    occupation_weights_by_municipality WHERE municipal_code = ?. Saknas en
+    kolumn faller den tyst tillbaka på SNI-vägen."""
+    import inspect
+
+    from core.database import load_ssyk_onet
+
+    kalla = inspect.getsource(load_ssyk_onet.load_onet_weights)
+    assert 'to_sql("occupation_weights_by_municipality"' in kalla
+    for kol in ("municipal_code", "onet_code", "weight"):
+        assert kol in kalla
