@@ -122,10 +122,15 @@ defaults:
       large: 0.40
 
 # === MUNICIPALITY-SPECIFIC OVERRIDES ===
-# Mora ärvs från mora_baseline.yml. Orsa och Älvdalen: arbetskraftsandel och
-# arbetslöshet är SATTA SOM PLATSHÅLLARE på Dalarnas nivå och ska verifieras
-# mot Arbetsförmedlingens kommunstatistik och AKU innan scenariot används för
-# något annat än att pröva pendlingsmekaniken.
+# workforce_ratio och unemployment_rate ANVÄNDS INTE när databasen bär SCB:s
+# tal: arbetskraftsandelen härleds ur pendlingsmatrisen (0137) och
+# arbetslösheten läses ur labour_market_status. De står kvar som reserv för
+# körningar mot en databas utan de tabellerna, och loggen skriver ut både det
+# härledda och det angivna talet vid varje bygge.
+#
+# Platshållarna var inte harmlösa medan de användes: 6.5, 7.5 och 7.0 procent
+# mot verklighetens 2.35, 3.51 och 3.17 satte golvet för modellens
+# arbetslöshet till 6.8 procent i stället för 2.75.
 #
 # Älvdalens siffror är de mest osäkra av de tre: kommunen är liten (6 800
 # invånare) och har en säsongstung arbetsmarknad, vilket gör årsgenomsnitt

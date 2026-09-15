@@ -751,6 +751,47 @@ class ScenarioBuilder:
 
         return df
 
+    def faktisk_arbetsloshet(self, municipalities):
+        """SCB:s arbetslöshet per kommun ur labour_market_status.
+
+        Scenariofilens unemployment_rate är en platshållare, och sedan 0137
+        back-räknas arbetskraften ur den: L = syss / (1 - u). Talet sätter
+        därmed golvet för modellens arbetslöshet direkt, eftersom
+        u = u_min + V/L med u_min = 1 - J/L. Med platshållarna 6.5, 7.5 och
+        7.0 procent för Ovansiljan blev u_min 6.8 procent; med SCB:s faktiska
+        2.35, 3.51 och 3.17 blir det 2.75. Skillnaden är inte en modellfråga
+        utan ett indatafel.
+
+        ÅLDERSINTERVALLEN SKILJER SIG: SCB:s uttag är 20-65 år, modellen räknar
+        15-74. Nivån är därför inte exakt överförbar, men den är mycket
+        närmare sanningen än en platshållare satt på fri hand, och
+        rangordningen mellan kommunerna är SCB:s.
+
+        Returnerar dict kommun -> andel, eller None om tabellen saknas eller
+        inte täcker alla kommunerna. Delvis täckning duger inte: då skulle
+        några kommuner ha uppmätt arbetslöshet och andra en gissning, och
+        jämförelsen mellan dem mäta skillnaden mellan källorna.
+        """
+        koder = [str(k).zfill(4) for k in municipalities]
+        try:
+            df = pd.read_sql("SELECT municipal_code, u_rate "
+                             "FROM labour_market_status", self.conn)
+        except Exception as e:
+            log(f"[arbetslöshet] labour_market_status saknas ({e}) -- "
+                f"scenariofilens tal används.")
+            return None
+        if df.empty:
+            return None
+        df["municipal_code"] = (df["municipal_code"].astype(str).str.strip()
+                                .str.zfill(4))
+        d = df.set_index("municipal_code")["u_rate"].to_dict()
+        saknas = [k for k in koder if k not in d or not np.isfinite(d.get(k, np.nan))]
+        if saknas:
+            log(f"[arbetslöshet] saknas för {saknas} -- scenariofilens tal "
+                f"används för alla.")
+            return None
+        return {k: float(d[k]) / 100.0 for k in koder}
+
     def jobbandelar(self, municipalities, year):
         """Hur scenariots jobb ska FÖRDELAS mellan kommunerna.
 
@@ -870,6 +911,16 @@ class ScenarioBuilder:
         # sysselsatta varje kommun har och blir bara det den bör vara: en
         # uppgift om befolkningen. Andelen härleds, och den härledda skrivs ut
         # tillsammans med den angivna så att skillnaden syns.
+        # SCB:s arbetslöshet per kommun, om den finns laddad. Se
+        # faktisk_arbetsloshet: talet sätter golvet för modellens arbetslöshet
+        # via arbetskraftens storlek, och scenariofilens platshållare låg
+        # ungefär dubbelt så högt som verkligheten.
+        if str(self.cfg_reader.config.get("simulation", {})
+               .get("unemployment_source", "register")).lower() == "register":
+            faktisk_u = self.faktisk_arbetsloshet(municipalities)
+        else:
+            faktisk_u = None
+
         marginaler = None
         if len(municipalities) > 1:
             marginaler = self.jobbandelar(municipalities, year)
@@ -893,6 +944,12 @@ class ScenarioBuilder:
             population = self.cfg_reader.get_population(municipal_code)[0]
             workforce_ratio = self.cfg_reader.get_workforce_ratio(municipal_code)[0]
             local_unemployment_rate = self.cfg_reader.get_unemployment_rate(municipal_code, year)[0]
+
+            if faktisk_u:
+                kod = str(municipal_code).zfill(4)
+                log(f"  arbetslöshet: {100*faktisk_u[kod]:.2f} % ur SCB, mot "
+                    f"{100*local_unemployment_rate:.2f} % i scenariofilen")
+                local_unemployment_rate = faktisk_u[kod]
 
             if boende_per_kommun:
                 # Arbetskraften back-räknas ur SCB:s sysselsatta och

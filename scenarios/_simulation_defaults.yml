@@ -84,6 +84,22 @@ simulation:
   # register faller tillbaka på sni om tabellen saknas eller inte täcker
   # kommunen, med en rad i loggen. Databasen måste alltså inte vara byggd med
   # yrkesregistret för att ett scenario ska gå att köra.
+  # Varifrån arbetslösheten per kommun hämtas. "register" läser
+  # labour_market_status -- SCB:s registerbaserade arbetsmarknadsstatus.
+  # "scenario" använder unemployment_rate ur scenariofilen.
+  #
+  # Talet är inte kosmetiskt. Sedan 0137 back-räknas arbetskraften ur det,
+  # L = syss / (1 - u), och eftersom u = u_min + V/L med u_min = 1 - J/L sätter
+  # det golvet för modellens arbetslöshet direkt. För Ovansiljan gav
+  # platshållarna 6.5, 7.5 och 7.0 procent ett golv på 6.8 procent; SCB:s
+  # faktiska 2.35, 3.51 och 3.17 ger 2.75.
+  #
+  # SCB:s uttag är 20-65 år medan modellen räknar 15-74, så nivån är inte
+  # exakt överförbar -- men den är närmare sanningen än en platshållare, och
+  # rangordningen mellan kommunerna är SCB:s. Faller tillbaka på
+  # scenariofilen om tabellen saknas eller inte täcker alla kommunerna.
+  unemployment_source: register
+
   occupation_source: register
 
   occupation_concentration: 1.5
