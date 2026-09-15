@@ -688,7 +688,24 @@ class ScenarioBuilder:
         # antalet uppgifter i yrket (individen utför en delmängd av dem). Det
         # ersätter den hårdkodade jittern 0.05 med en härledning som skalar med
         # yrket. Se docs/individmodell.md, avsnitt 2.
-        power = 1.5
+        # KONCENTRATIONSEXPONENTEN. Individernas yrken dras ur profilens
+        # sannolikheter UPPHÖJDA till power och omnormaliserade: vanliga yrken
+        # blir vanligare, sällsynta sällsyntare. Jobben dras ur samma profil
+        # UTAN exponent (se generate_employers_with_target_jobs, som använder
+        # sni_dist['prob'] rakt av). Arbetare och jobb får därmed olika
+        # koncentration i uppgiftsrummet by construction, vilket är en
+        # felmatchningskälla oberoende av allt annat.
+        #
+        # Värdet 1.5 stod hårdkodat utan härledning. Det ligger nu i
+        # scenariofilen så att det går att svepa: 1.0 betyder att individer
+        # och jobb dras ur samma fördelning.
+        #
+        # Mät effekten med arbetslöshet per kommun mot SCB:s
+        # arbetsmarknadsstatus. För Ovansiljan ger modellen 8.3 / 11.3 / 18.9
+        # procent mot verklighetens 2.35 / 3.51 / 3.17 (2023), alltså tre till
+        # sex gånger för högt och med Orsa och Älvdalen i omvänd ordning.
+        power = float(self.cfg_reader.config.get("simulation", {})
+                      .get("occupation_concentration", 1.5))
         w = weights ** power; w = w / w.sum()
         codes_arr = profile["onet_code"].values[valid]
         ro_arr = geom["r_o"].values[valid]

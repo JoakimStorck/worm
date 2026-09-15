@@ -40,6 +40,19 @@ simulation:
   # pendling (mätt 7.6 km vid 0.01 mot 12.1 vid 0.30) och kan kalibreras mot
   # faktiska pendlingsavstånd.
   choice_scale: 0.05
+  # Koncentration i individernas yrkesfördelning. Individernas yrken dras ur
+  # kommunens yrkesprofil UPPHÖJD till detta tal och omnormaliserad: vanliga
+  # yrken blir vanligare, sällsynta sällsyntare. Jobben dras ur samma profil
+  # utan exponent, så ett värde skilt från 1.0 ger arbetare och jobb olika
+  # koncentration i uppgiftsrummet -- en felmatchningskälla oberoende av allt
+  # annat i modellen.
+  #
+  # 1.5 stod hårdkodat i scenariobuilder utan härledning och är kvar som
+  # förval för att inte ändra befintliga körningar tyst. 1.0 betyder att
+  # individer och jobb dras ur samma fördelning. Sveps mot arbetslöshet per
+  # kommun jämförd med SCB:s arbetsmarknadsstatus.
+  occupation_concentration: 1.5
+
   # --- Kompetenscirklar (docs/individmodell.md, avsnitt 2) ---
   # Individen är en samling cirklar, en per erfarenhet. Exponering bygger
   # massa, läckage gallrar och mättar, diffusion suddar spetsen, skärpning
