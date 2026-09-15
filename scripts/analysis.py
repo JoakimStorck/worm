@@ -283,6 +283,42 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
                   "ingen observerad motsvarighet att ställas mot. Ladda den med "
                   "`python -m core.database.load_commuting_matrix <SCB-fil>`; "
                   "till dess är `commute_cost_per_km` satt, inte kalibrerad.\n")
+
+            # --- Arbetslöshet per kommun, modell mot SCB ---
+            # Senaste körningen: arbetslöshet per kommun är ett tillstånd i
+            # slutläget, inte ett medelvärde över körningar.
+            senaste = (max(run_dirs, key=os.path.getmtime) if run_dirs else None)
+            mod_u = arbetsloshet_per_kommun(senaste) if senaste else None
+            scb_u = scb_arbetsloshet(kommuner) if kommuner else None
+            if mod_u is not None and scb_u is not None:
+                A("\n**Arbetslöshet per kommun.** Modellens tal är andel av "
+                  "arbetskraften i slutläget; SCB:s avser 20-65 år och "
+                  "registerbaserad status. Åldersintervallen skiljer sig, så "
+                  "det jämförbara är rangordningen och spridningen, inte "
+                  "nivån. Modellens arbetslösa är dessutom avgränsade till "
+                  "scenariots kommuner: den som i verkligheten pendlar ut ur "
+                  "området finns inte i modellen.\n")
+                A("| kommun | modell | SCB | kvot |")
+                A("|---|---|---|---|")
+                for kod in sorted(scb_u.index):
+                    if kod not in mod_u.index:
+                        continue
+                    m = float(mod_u.loc[kod, "u_rate"])
+                    v = float(scb_u.loc[kod, "u_rate"])
+                    A(f"| {kod} | {m:.1f} % | {v:.2f} % | {m / v:.1f} |")
+                ordn_m = list(mod_u["u_rate"].sort_values().index)
+                ordn_s = list(scb_u["u_rate"].sort_values().index)
+                gem = [k for k in ordn_m if k in ordn_s]
+                if gem == [k for k in ordn_s if k in ordn_m]:
+                    A("\nRangordningen stämmer med SCB:s.\n")
+                else:
+                    A(f"\nRangordningen skiljer sig: modellen ger "
+                      f"{' < '.join(gem)}, SCB "
+                      f"{' < '.join(k for k in ordn_s if k in ordn_m)}.\n")
+            elif mod_u is not None:
+                A("\nSCB:s arbetsmarknadsstatus saknas i databasen, så "
+                  "arbetslösheten per kommun har ingen observerad "
+                  "motsvarighet. Ladda den via `python scripts/create_database.py`.\n")
         sd = _kol("start_delay_median")
         sdu = _kol("start_delay_median_unemployed")
         sde = _kol("start_delay_median_employed")
@@ -415,6 +451,49 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     print(f"Sparad: {path}")
+
+
+def arbetsloshet_per_kommun(run_dir):
+    """Modellens arbetslöshet per kommun, som andel av ARBETSKRAFTEN.
+
+    Individtabellen är hela befolkningen: status not_in_labor_force är över
+    halva den. Andelen av befolkningen är därför inte jämförbar med SCB:s tal
+    och skiljer sig med en faktor två från andelen av arbetskraften -- en
+    förväxling som en gång fick modellens arbetslöshet att se ut att ligga
+    nära verklighetens när den låg tre till sex gånger över.
+    """
+    p = os.path.join(run_dir, "final_state_individuals.csv")
+    if not os.path.isfile(p):
+        return None
+    ind = pd.read_csv(p)
+    if "status" not in ind.columns:
+        return None
+    ind["kom"] = ind["individual_id"].astype(str).str.split("_i").str[0]
+    t = ind.groupby("kom")["status"].value_counts().unstack(fill_value=0)
+    for k in ("employed", "unemployed"):
+        if k not in t.columns:
+            t[k] = 0
+    t["u_rate"] = 100 * t["unemployed"] / (t["employed"] + t["unemployed"]).replace(0, np.nan)
+    return t[["employed", "unemployed", "u_rate"]]
+
+
+def scb_arbetsloshet(koder, db_path="data/worm.sqlite3"):
+    """SCB:s arbetsmarknadsstatus per kommun, eller None om tabellen saknas."""
+    import sqlite3
+    if not os.path.isfile(db_path):
+        return None
+    try:
+        conn = sqlite3.connect(db_path)
+        df = pd.read_sql("SELECT * FROM labour_market_status", conn)
+        conn.close()
+    except Exception:
+        return None
+    if df.empty:
+        return None
+    df["municipal_code"] = (df["municipal_code"].astype(str).str.strip()
+                            .str.zfill(4))
+    df = df[df["municipal_code"].isin({str(k).strip().zfill(4) for k in koder})]
+    return df.set_index("municipal_code") if not df.empty else None
 
 
 def scb_pendlingsandel(kommuner, db_path="data/worm.sqlite3"):

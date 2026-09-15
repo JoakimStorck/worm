@@ -40,6 +40,22 @@ simulation:
   # pendling (mätt 7.6 km vid 0.01 mot 12.1 vid 0.30) och kan kalibreras mot
   # faktiska pendlingsavstånd.
   choice_scale: 0.05
+  # Geografisk avklingning i MÖTESSANNOLIKHETEN, km. Sannolikheten att en
+  # position alls är ett levande alternativ multipliceras med exp(-km/d0).
+  #
+  # Varför den behövs: relevansfiltret i search_once mäter avstånd i
+  # UPPGIFTSRUMMET. Planet kom tidigare in enbart som -commute_cost_per_km*km
+  # inuti överskottet S, och S divideras med (1 + kö). Med medel tolv sökande
+  # per vakans blir straffet 0.005 per km till 0.0004, och mot choice_scale
+  # 0.05 är femtio kilometer värt vikten 0.68 mot ett jobb runt hörnet -- utan
+  # kön hade det varit 0.007. Avståndet var bortdividerat, inte felkalibrerat.
+  #
+  # null stänger av mekanismen och ger exakt tidigare beteende. Skalan ska
+  # kalibreras mot tabellen commuting: kör scenariot och se kvoten per
+  # riktning i scripts/diagnose_commuting.py. För Ovansiljan låg modellens
+  # flöden 1.33 till 4.94 gånger SCB:s, med de svagaste paren mest
+  # överskattade -- signaturen för en för flack avklingning.
+  commute_decay_km: null
   # Koncentration i individernas yrkesfördelning. Individernas yrken dras ur
   # kommunens yrkesprofil UPPHÖJD till detta tal och omnormaliserad: vanliga
   # yrken blir vanligare, sällsynta sällsyntare. Jobben dras ur samma profil

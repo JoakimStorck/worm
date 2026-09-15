@@ -173,6 +173,7 @@ def vacant_job_indices(jobs_df):
 
 def search_once(ind, jobs_df, cand_idx, queue=None, sigma_gamma=1.0,
                 commute_cost_per_km=0.005, min_surplus=0.0,
+                commute_decay_km=None,
                 choice_scale=0.05, rng=None, arrays=None,
                 competitiveness=None, bargaining=None, requirement_k=2.0):
     """En sökomgång. Två steg, i linje med hur jobbsökning faktiskt går till.
@@ -241,7 +242,31 @@ def search_once(ind, jobs_df, cand_idx, queue=None, sigma_gamma=1.0,
     #
     # Mötesdraget är en sannolikhet och kapar q själv. Värderollen (p, lön,
     # urval) använder det okapade q: taket där gjorde Pi till ett supremum.
-    mote = rng.random(q.size) < np.minimum(1.0, q)
+    # GEOGRAFIN I MÖTET, inte bara i överskottet. Relevansfiltret ovan mäter
+    # avstånd i UPPGIFTSRUMMET; planet kom tidigare in på ett enda ställe, som
+    # -c*km inuti S. Men S divideras strax nedan med (1 + kö), och den
+    # divisionen träffar pendlingsstraffet lika hårt som allt annat: med
+    # medel tolv sökande per vakans blir 0.005 per km till 0.0004, och mot
+    # choice_scale 0.05 är femtio kilometer värt vikten 0.68 mot ett jobb runt
+    # hörnet. Utan kön hade samma tal gett 0.007. Avståndet var alltså inte
+    # felkalibrerat utan bortdividerat.
+    #
+    # Mötessannolikheten divideras inte av kön, så här biter avståndet. Formen
+    # är exponentiell avklingning med skalan commute_decay_km: sannolikheten
+    # att positionen alls är ett levande alternativ faller med exp(-km/d0).
+    # Det är samma form som pendlingsmatriser brukar anpassas med, och det
+    # motsvarar att en position tjugo mil bort inte är ett sämre alternativ
+    # utan inget alternativ.
+    #
+    # None stänger av mekanismen och ger exakt tidigare beteende, inklusive
+    # slumpens ordning. Skalan måste kalibreras mot tabellen commuting --
+    # se scripts/diagnose_commuting.py, kvoten per riktning.
+    if commute_decay_km:
+        km_all = np.hypot(A["x"][cand_idx] - gx, A["y"][cand_idx] - gy) / 1000.0
+        p_mote = np.minimum(1.0, q) * np.exp(-km_all / float(commute_decay_km))
+    else:
+        p_mote = np.minimum(1.0, q)
+    mote = rng.random(q.size) < p_mote
     if not mote.any():
         return None, None, None, None, None
     sub = np.flatnonzero(mote)

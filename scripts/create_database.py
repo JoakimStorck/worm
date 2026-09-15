@@ -115,12 +115,36 @@ for pendel_csv in ("data/Sysselsatta 15-74 år arbetsställekommun bostadskommun
 else:
     log("OBS: Laddar inte commuting, ingen av SCB:s pendlingsfiler finns.")
 
+# Ladda SCB:s arbetsmarknadsstatus per kommun. Referensen modellens
+# arbetslöshet per kommun ställs mot i analysis.py.
+ams_csv = "data/Arbetsmarknadsstatus Kommun.csv"
+if file_exists(ams_csv):
+    try:
+        from core.database.load_commuting_matrix import load_arbetsmarknadsstatus
+        load_arbetsmarknadsstatus(ams_csv, db_path=DB_PATH)
+    except Exception as e:
+        log(f"Fel vid laddning av arbetsmarknadsstatus: {e}")
+else:
+    log("OBS: Laddar inte labour_market_status, filen saknas.")
+
 # Ladda utbildningsnivåer från SCB (JSON)
 edu_json = "data/Utbildningsnivaer_2024.json"
 if file_exists(edu_json):
     loader.load_education_level_scb_json(edu_json, db_path=DB_PATH, year=2024)
 else:
     log("OBS: Laddar inte utbildningsnivåer, filen saknas.")
+
+# Ladda SCB:s arbetsmarknadsstatus per kommun. Referensen modellens
+# arbetslöshet per kommun ställs mot i analysis.py.
+ams_csv = "data/Arbetsmarknadsstatus Kommun.csv"
+if file_exists(ams_csv):
+    try:
+        from core.database.load_commuting_matrix import load_arbetsmarknadsstatus
+        load_arbetsmarknadsstatus(ams_csv, db_path=DB_PATH)
+    except Exception as e:
+        log(f"Fel vid laddning av arbetsmarknadsstatus: {e}")
+else:
+    log("OBS: Laddar inte labour_market_status, filen saknas.")
 
 # Ladda utbildningsnivåer från SCB (JSON)
 sni_onet_path = "data/onet_sni_longform.csv"

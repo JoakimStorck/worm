@@ -42,6 +42,7 @@ def search_config(world):
     return dict(
         sigma_gamma=sim.get('sigma_gamma', 1.0),
         commute_cost_per_km=sim.get('commute_cost_per_km', 0.005),
+        commute_decay_km=sim.get('commute_decay_km', None),
         min_surplus=sim.get('min_surplus', 0.0),
         choice_scale=sim.get('choice_scale', 0.05),
         requirement_k=float(sim.get('requirement_k', 2.0)),

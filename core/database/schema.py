@@ -131,6 +131,19 @@ def create_schema(db_path="data/worm.sqlite3"):
         )
     """)
 
+    # SCB:s arbetsmarknadsstatus per kommun. Referensen modellens arbetslöshet
+    # per kommun ställs mot. Åldern är 20-65 år i SCB:s uttag medan modellen
+    # räknar 15-74, så rangordningen och spridningen är det jämförbara, inte
+    # nivån.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS labour_market_status (
+            municipal_code TEXT PRIMARY KEY,
+            employed INTEGER,
+            unemployed INTEGER,
+            u_rate REAL
+        )
+    """)
+
     # SNI-based employment per municipality
     c.execute("""
         CREATE TABLE IF NOT EXISTS employment_municipality_sni (

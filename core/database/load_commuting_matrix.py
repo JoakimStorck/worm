@@ -153,3 +153,83 @@ if __name__ == "__main__":
     load_commuting_matrix(sys.argv[1],
                           db_path=sys.argv[2] if len(sys.argv) > 2
                           else os.path.join("data", "worm.sqlite3"))
+
+
+# ---------------------------------------------------------------------------
+# Arbetsmarknadsstatus per kommun
+# ---------------------------------------------------------------------------
+def las_arbetsmarknadsstatus(csv_path):
+    """SCB:s arbetsmarknadsstatus per kommun -> sysselsatta och arbetslösa.
+
+    Ligger här och inte i en egen modul därför att den delar allt utom
+    kolumnnamnen med pendlingsläsaren: samma kodningsordning, samma
+    rubrikradssökning, samma kommunkodsextraktion.
+
+    FILEN ÄR KORSKLASSIFICERAD på födelseregion med en egen totalrad. Raderna
+    ska därför FILTRERAS på totalt, inte summeras -- motsatsen till
+    yrkesregistrets uttag, som saknar totalrad och ska summeras. Att blanda
+    ihop de två konventionerna ger antingen dubbelräkning eller halvering utan
+    att något klagar, vilket är precis vad som hände med "A-U+US Total" i
+    SNI-filen.
+
+    Åldern är 20-65 år i SCB:s uttag medan modellen räknar 15-74. Nivåerna är
+    därför inte direkt jämförbara; rangordningen och den relativa spridningen
+    mellan kommuner är det som går att pröva.
+    """
+    rader, kodning = _las_rader(csv_path)
+    sep = _sep(rader)
+    start = next((i for i, r in enumerate(rader[:20])
+                  if "kommunkod" in r.lower()), None)
+    if start is None:
+        raise ValueError("Hittar ingen rubrikrad med kolumnen kommunkod")
+    df = pd.read_csv(csv_path, sep=sep, skiprows=start, dtype=str,
+                     encoding=kodning, engine="python")
+    df.columns = [str(c).strip().strip('"') for c in df.columns]
+    kol = {c.lower(): c for c in df.columns}
+
+    fodelse = kol.get("födelseregion") or kol.get("fodelseregion")
+    if fodelse is not None:
+        df = df[df[fodelse].astype(str).str.strip().str.lower() == "totalt"]
+        if df.empty:
+            raise ValueError("Ingen rad med födelseregion=totalt")
+    for nyckel in ("kön", "kon"):
+        k = kol.get(nyckel)
+        if k is not None and (df[k].astype(str).str.strip() == "totalt").any():
+            df = df[df[k].astype(str).str.strip() == "totalt"]
+
+    def _kol(nyckelord):
+        for c in df.columns:
+            if nyckelord in c.lower():
+                return c
+        return None
+
+    syss = _kol("sysselsatta")
+    arbl = _kol("arbetslösa") or _kol("arbetslosa")
+    kod = kol.get("kommunkod")
+    if not (syss and arbl and kod):
+        raise ValueError(f"Saknar kolumner i {csv_path}: {list(df.columns)}")
+
+    ut = pd.DataFrame({
+        "municipal_code": df[kod].astype(str).str.extract(KOD.pattern)[0],
+        "employed": pd.to_numeric(df[syss], errors="coerce"),
+        "unemployed": pd.to_numeric(df[arbl], errors="coerce"),
+    }).dropna()
+    ut["employed"] = ut["employed"].astype(int)
+    ut["unemployed"] = ut["unemployed"].astype(int)
+    ut = ut.groupby("municipal_code", as_index=False)[["employed", "unemployed"]].sum()
+    # EN RAD PER KOMMUN. Blir det fler har filtreringen ovan missat en
+    # dimension, och då är talen dubbelräknade.
+    if ut["municipal_code"].duplicated().any():
+        raise ValueError("Flera rader per kommun efter filtrering")
+    ut["u_rate"] = 100 * ut["unemployed"] / (ut["employed"] + ut["unemployed"])
+    return ut
+
+
+def load_arbetsmarknadsstatus(csv_path, db_path="data/worm.sqlite3"):
+    df = las_arbetsmarknadsstatus(csv_path)
+    conn = sqlite3.connect(db_path)
+    df.to_sql("labour_market_status", conn, if_exists="replace", index=False)
+    conn.close()
+    print(f"[arbetsmarknadsstatus] {len(df)} kommuner, "
+          f"arbetslöshet {df.u_rate.min():.1f}-{df.u_rate.max():.1f} procent")
+    return len(df)
