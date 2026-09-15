@@ -201,18 +201,35 @@ def yrkesvikter_per_kommun(conn, county_code, kommuner=None, ar=2023):
     if deso.empty:
         raise ValueError("Ingen branschfördelning per kommun i employment_deso_sni")
     kom_sni = (deso.groupby(["kom", "sni_code"])["employed"].sum()
-               .unstack(fill_value=0.0))
+               .unstack().astype(float).fillna(0.0))
 
     riket = pd.read_sql("SELECT ssyk_code, sni_code, employed "
                         "FROM occupation_by_industry", conn)
     p_yrke_sni = (riket.groupby(["sni_code", "ssyk_code"])["employed"].sum()
-                  .unstack(fill_value=0.0))
+                  .unstack().astype(float).fillna(0.0))
     p_yrke_sni = p_yrke_sni.div(p_yrke_sni.sum(axis=1).replace(0, np.nan), axis=0).fillna(0.0)
 
     gemensam = [c for c in kom_sni.columns if c in p_yrke_sni.index]
     if not gemensam:
         raise ValueError("Branschkoderna matchar inte mellan kommun- och rikstabellen")
+
+    # OKÄND BRANSCH FÅR RIKETS TOTALA YRKESFÖRDELNING. Kommuntabellen har koden
+    # US -- "uppgift saknas" -- som rikstabellen inte har: 93 677 personer, 1.8
+    # procent. Att bara utesluta dem hade minskat varje kommuns radsumma, och
+    # eftersom andelen okänd bransch varierar mellan kommuner hade det blivit
+    # en systematisk snedvridning snarare än en proportionell förlust. Okänd
+    # bransch betyder ingen information om yrke, inte noll sannolikhet, så de
+    # får rikets marginalfördelning över yrken.
+    riks_marginal = riket.groupby("ssyk_code")["employed"].sum()
+    riks_marginal = (riks_marginal.reindex(p_yrke_sni.columns).fillna(0.0)
+                     / max(riks_marginal.sum(), 1.0))
+    okanda = [c for c in kom_sni.columns if c not in p_yrke_sni.index]
     start = kom_sni[gemensam].to_numpy() @ p_yrke_sni.loc[gemensam].to_numpy()
+    if okanda:
+        n_okand = kom_sni[okanda].to_numpy().sum(axis=1)
+        start = start + np.outer(n_okand, riks_marginal.to_numpy())
+        print(f"[yrkesvikter] {', '.join(okanda)}: {int(n_okand.sum())} personer "
+              f"får rikets yrkesfördelning")
 
     lan = pd.read_sql("SELECT ssyk_code, employed FROM occupation_by_county "
                       "WHERE county_code = ?", conn, params=(str(county_code).zfill(2),))
@@ -222,7 +239,7 @@ def yrkesvikter_per_kommun(conn, county_code, kommuner=None, ar=2023):
     lan_v = (lan.set_index("ssyk_code")["employed"]
              .reindex(yrken).fillna(0.0).to_numpy(dtype=float))
 
-    rad_mal = kom_sni[gemensam].sum(axis=1).to_numpy(dtype=float)
+    rad_mal = kom_sni.sum(axis=1).to_numpy(dtype=float)
     # Länets yrkesprofil skalas till kommunernas sammanlagda sysselsättning:
     # scenariot är en delmängd av länet, och marginalerna måste summera lika.
     kol_mal = lan_v * (rad_mal.sum() / lan_v.sum())

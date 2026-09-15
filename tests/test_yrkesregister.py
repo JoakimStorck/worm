@@ -226,3 +226,40 @@ def test_ssyk_koderna_skrivs_inte_till_onet_tabellen():
     kalla = inspect.getsource(load_yrkesregister)
     assert 'to_sql("occupation_weights_ssyk_by_municipality"' in kalla
     assert 'to_sql("occupation_weights_by_municipality"' not in kalla
+
+
+def test_okand_bransch_far_rikets_yrkesfordelning(tmp_path):
+    """Kommuntabellen har koden US, "uppgift saknas", som rikstabellen saknar:
+    93 677 personer i riket. Utesluts de minskar varje kommuns radsumma, och
+    eftersom andelen okänd bransch varierar mellan kommuner blir det en
+    systematisk snedvridning och inte en proportionell förlust."""
+    conn = _db(tmp_path, {
+        "2062": {"A": 100, "B+C": 800, "Q": 100},           # ingen okänd
+        "2034": {"A": 100, "B+C": 100, "Q": 300, "US": 500},  # halva okänd
+    })
+    v = yrkesvikter_per_kommun(conn, "20", ["2062", "2034"])
+    conn.close()
+    # Båda kommunerna ska ha full vikt trots att den ena har US.
+    summor = v.groupby("municipal_code").weight.sum()
+    assert summor.to_numpy() == pytest.approx(1.0)
+    p = v.pivot(index="municipal_code", columns="occupation_code",
+                values="weight").fillna(0.0)
+    # Kommunen med mycket okänd bransch dras mot en jämnare fördelning,
+    # eftersom rikets marginal är jämnare än en enskild bransch profil.
+    spridning = p.max(axis=1) - p.min(axis=1)
+    assert spridning["2034"] < spridning["2062"]
+
+
+def test_radsumman_raknar_alla_branscher(tmp_path):
+    """Radmålet i IPF ska vara kommunens hela sysselsättning, inte bara den
+    del vars bransch matchar rikstabellen."""
+    conn = _db(tmp_path, {"2062": {"A": 100, "B+C": 800, "Q": 100},
+                          "2034": {"B+C": 100, "US": 900}})
+    import inspect
+
+    from core.database import load_yrkesregister
+    kalla = inspect.getsource(load_yrkesregister.yrkesvikter_per_kommun)
+    assert "rad_mal = kom_sni.sum(axis=1)" in kalla
+    v = yrkesvikter_per_kommun(conn, "20", ["2062", "2034"])
+    conn.close()
+    assert set(v.municipal_code) == {"2062", "2034"}
