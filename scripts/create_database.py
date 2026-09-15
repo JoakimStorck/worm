@@ -134,18 +134,6 @@ if file_exists(edu_json):
 else:
     log("OBS: Laddar inte utbildningsnivåer, filen saknas.")
 
-# Ladda SCB:s arbetsmarknadsstatus per kommun. Referensen modellens
-# arbetslöshet per kommun ställs mot i analysis.py.
-ams_csv = "data/Arbetsmarknadsstatus Kommun.csv"
-if file_exists(ams_csv):
-    try:
-        from core.database.load_commuting_matrix import load_arbetsmarknadsstatus
-        load_arbetsmarknadsstatus(ams_csv, db_path=DB_PATH)
-    except Exception as e:
-        log(f"Fel vid laddning av arbetsmarknadsstatus: {e}")
-else:
-    log("OBS: Laddar inte labour_market_status, filen saknas.")
-
 # Ladda utbildningsnivåer från SCB (JSON)
 sni_onet_path = "data/onet_sni_longform.csv"
 if file_exists(sni_onet_path):

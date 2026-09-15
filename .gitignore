@@ -24,6 +24,10 @@ env/
 # Windows mark-of-the-web från scp
 *:Zone.Identifier
 
+# Genererade svepscenarier (svep_parameter.sh). Ospårade med avsikt:
+# kor_0077.sh vägrar starta på ocommittade ändringar i spårade filer.
+scenarios/_svep_*.yml
+
 # Loggar och temp
 *.log
 .DS_Store
