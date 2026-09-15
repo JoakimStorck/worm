@@ -157,4 +157,5 @@ hiring_policy: "random"
 wage_policy: "market_adjust"
 
 simulation:
+  occupation_concentration: 1.0
   logfile_path: output/ovansiljan_3_kommuner.log
