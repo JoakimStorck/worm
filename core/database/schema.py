@@ -161,6 +161,22 @@ def create_schema(db_path="data/worm.sqlite3"):
         )
     """)
 
+    # SSYK -> O*NET. ssyk_isco_key är ren avskrift av SCB:s nyckel och ändras
+    # bara när SCB publicerar en ny. ssyk3_onet_crosswalk är härledd och bär
+    # fyra likformighetsantaganden, dokumenterade i load_ssyk_onet. De ligger
+    # i skilda tabeller för att SCB:s uppgift ska gå att skilja från vår
+    # approximation.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS ssyk_isco_key (
+            ssyk4 TEXT, isco4 TEXT
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS ssyk3_onet_crosswalk (
+            occupation_code TEXT, onet_code TEXT, share REAL
+        )
+    """)
+
     # SNI-based employment per municipality
     c.execute("""
         CREATE TABLE IF NOT EXISTS employment_municipality_sni (

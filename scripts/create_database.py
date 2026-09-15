@@ -139,6 +139,20 @@ if file_exists(riks_csv) and file_exists(lan_csv):
 else:
     log("OBS: Laddar inte yrkesregistret, filerna saknas.")
 
+# SSYK -> O*NET. Kräver att yrkesregistret och uppgiftsrummet redan är
+# laddade, eftersom crosswalken avgränsas till de koder som faktiskt används.
+nyckel_xlsx = "data/webb_nyckel_ssyk2012_isco-08_20160905.xlsx"
+esco_cw = "data/ONET_(Occupations)_0_updated.csv"
+esco_yrken = "data/esco_1.2.1/occupations_sv.csv"
+if all(file_exists(f) for f in (nyckel_xlsx, esco_cw, esco_yrken)):
+    try:
+        from core.database.load_ssyk_onet import load_ssyk_onet
+        load_ssyk_onet(nyckel_xlsx, esco_cw, esco_yrken, db_path=DB_PATH)
+    except Exception as e:
+        log(f"Fel vid laddning av SSYK-O*NET-crosswalken: {e}")
+else:
+    log("OBS: Laddar inte ssyk3_onet_crosswalk, någon källfil saknas.")
+
 # Ladda utbildningsnivåer från SCB (JSON)
 edu_json = "data/Utbildningsnivaer_2024.json"
 if file_exists(edu_json):

@@ -8,3 +8,4 @@ scikit-learn
 matplotlib
 tabulate
 pytest
+openpyxl
