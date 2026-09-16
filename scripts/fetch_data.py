@@ -70,9 +70,12 @@ MANIFEST = [
     {
         "type": "scb_px",
         "dest": os.path.join(DATA_DIR, "Folkmangd kommun alder.csv"),
-        # Tabell-id slås upp ur sökningen. Är det känt kan det låsas här med
-        # "table_id": "TABnnnn", vilket sparar ett anrop och gör uttaget
-        # oberoende av hur sökningen rankar träffar.
+        # Tabell-id:t är verifierat i en körning: sökningen gav TAB638, och
+        # metadatan för det id:t har rätt dimensioner. Låst här sparar det ett
+        # anrop och gör uttaget oberoende av hur sökningen rankar träffar.
+        # Slutar id:t gälla ger API:et 404, och då tar "table_query" vid om
+        # raden nedan tas bort.
+        "table_id": "TAB638",
         "table_query": "Folkmängden efter region, civilstånd, ålder och kön",
         "query_fn": "befolkning_per_alder",
         "query_args": {"ar": "2024"},
@@ -143,6 +146,27 @@ def fetch_onet_zip(item):
         print(f"  -> {out}")
 
 
+def _kontrollera(r, vad):
+    """Höjer fel med API:ets egen förklaring, inte bara statuskoden.
+
+    PxWebApi v2 svarar på fel med ProblemDetails: en JSON med title och detail
+    som säger vad som var fel med uttaget. requests raise_for_status kastar
+    bort den, och kvar blir "400 Client Error" utan besked om vilken variabel
+    eller vilket värde som inte dög.
+    """
+    if r.ok:
+        return
+    besked = ""
+    try:
+        d = r.json()
+        besked = " | ".join(str(d[k]) for k in ("title", "detail", "status")
+                            if d.get(k))
+    except Exception:
+        besked = r.text[:300].replace("\n", " ")
+    raise requests.HTTPError(f"{r.status_code} vid {vad}: {besked or '(tom kropp)'} "
+                             f"[{r.url[:200]}]", response=r)
+
+
 def valj_tabell(svar, ar, krav=("region", "ålder")):
     """Tabell-id ur ett /tables-svar.
 
@@ -188,6 +212,13 @@ def bygg_befolkningsuttag(meta, ar=None):
 
     KODER, INTE KLARTEXT. outputFormatParams=UseCodes ger "2062" i stället för
     "Mora". Läsaren behöver kommunkoden som nyckel mot resten av databasen.
+
+    Returnerar frågesträngens parametrar och selektionen som POST-kropp. Som
+    GET blev URL:en 2 900 tecken med 290 kommunkoder och 101 ettårsklasser
+    uppräknade, och API:et svarade 404: IIS avvisar query-strängar över 2 048
+    tecken, och gör det med den koden i stället för med 414. Selektionen
+    ligger därför i kroppen, vilket specifikationen har en POST-variant för.
+    Historikuttaget, som räknar upp fler år, hade träffat samma vägg.
     """
     dim = meta.get("dimension", {})
     def kategorier(namn):
@@ -202,21 +233,18 @@ def bygg_befolkningsuttag(meta, ar=None):
     if tider and tid not in tider:
         raise ValueError(f"året {tid} finns inte i tabellen "
                          f"({tider[0]}-{tider[-1]})")
+    val = [{"variableCode": "Region", "valueCodes": kommuner},
+           {"variableCode": "Alder", "valueCodes": aldrar},
+           {"variableCode": "Tid", "valueCodes": [tid]}]
     innehall = kategorier("ContentsCode")
-    params = {
-        "lang": "sv",
-        "valuecodes[Region]": ",".join(kommuner),
-        "valuecodes[Alder]": ",".join(aldrar),
-        "valuecodes[Tid]": tid,
-        "outputFormat": "csv",
-        "outputFormatParams": "UseCodes",
-    }
     if innehall:
         # Tabellen bär både folkmängd och folkökning. Utan valet får uttaget
         # bådadera, och läsaren hade tagit folkökningen för folkmängd i den
         # kolumn den råkar hamna.
-        params["valuecodes[ContentsCode]"] = innehall[0]
-    return params
+        val.append({"variableCode": "ContentsCode", "valueCodes": [innehall[0]]})
+    return {"params": {"lang": "sv", "outputFormat": "csv",
+                       "outputFormatParams": "UseCodes"},
+            "selection": {"selection": val}}
 
 
 QUERY_BUILDERS = {"befolkning_per_alder": bygg_befolkningsuttag}
@@ -240,19 +268,20 @@ def fetch_scb_px(item):
         r = requests.get(f"{SCB_API2_BASE}/tables",
                          params={"query": fraga, "lang": "sv", "pageSize": 50},
                          timeout=60)
-        r.raise_for_status()
+        _kontrollera(r, "tabellsökning")
         tabell = valj_tabell(r.json(), ar)
         print(f"  tabell {tabell}")
 
     r = requests.get(f"{SCB_API2_BASE}/tables/{tabell}/metadata",
                      params={"lang": "sv"}, timeout=60)
-    r.raise_for_status()
-    params = QUERY_BUILDERS[item["query_fn"]](r.json(), ar=ar)
+    _kontrollera(r, "metadata")
+    uttag = QUERY_BUILDERS[item["query_fn"]](r.json(), ar=ar)
 
     url = f"{SCB_API2_BASE}/tables/{tabell}/data"
-    print(f"[SCB] GET {url}")
-    r = requests.get(url, params=params, timeout=300)
-    r.raise_for_status()
+    print(f"[SCB] POST {url}")
+    r = requests.post(url, params=uttag["params"], json=uttag["selection"],
+                      timeout=300)
+    _kontrollera(r, "data")
     with open(item["dest"], "wb") as f:
         f.write(r.content)
     print(f"  -> {item['dest']} ({len(r.content)} bytes)")

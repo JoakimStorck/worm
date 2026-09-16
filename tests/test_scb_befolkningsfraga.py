@@ -10,7 +10,8 @@ svarar med json-stat2, där varje dimension har category.index.
 """
 import pytest
 
-from scripts.fetch_data import bygg_befolkningsuttag, valj_tabell
+from scripts.fetch_data import (_kontrollera, bygg_befolkningsuttag,
+                                valj_tabell)
 
 
 TABELLER = {
@@ -73,14 +74,21 @@ def test_nedlagd_tabell_valjs_inte():
 # Frågan
 # ----------------------------------------------------------------------
 
+def _koder(uttag, variabel):
+    for v in uttag["selection"]["selection"]:
+        if v["variableCode"] == variabel:
+            return v["valueCodes"]
+    return None
+
+
 def test_bara_kommuner():
     """Riket och länen hade räknat varje invånare tre gånger om de summerats."""
-    p = bygg_befolkningsuttag(META)
-    assert p["valuecodes[Region]"] == "0114,2034,2039,2062"
+    assert _koder(bygg_befolkningsuttag(META), "Region") == \
+        ["0114", "2034", "2039", "2062"]
 
 
 def test_alderstotalen_utesluts():
-    v = bygg_befolkningsuttag(META)["valuecodes[Alder]"].split(",")
+    v = _koder(bygg_befolkningsuttag(META), "Alder")
     assert "tot" not in v and "100+" in v and len(v) == 4
 
 
@@ -88,31 +96,80 @@ def test_civilstand_och_kon_utelamnas():
     """Båda har elimination = true, så SCB summerar över dem. Att räkna upp
     dem hade fyrdubblat respektive fördubblat antalet celler utan att tillföra
     något modellen använder."""
-    p = bygg_befolkningsuttag(META)
-    assert not any("Civilstand" in k or "Kon" in k for k in p)
+    assert _koder(bygg_befolkningsuttag(META), "Civilstand") is None
+    assert _koder(bygg_befolkningsuttag(META), "Kon") is None
 
 
 def test_folkmangd_inte_folkokning():
     """Tabellen bär bådadera. Utan valet hade uttaget fått två värdekolumner."""
-    assert bygg_befolkningsuttag(META)["valuecodes[ContentsCode]"] == "BE0101N1"
+    assert _koder(bygg_befolkningsuttag(META), "ContentsCode") == ["BE0101N1"]
 
 
 def test_koder_inte_klartext():
     """UseTexts hade gett "Mora" utan kommunkod, och koden är nyckeln mot
     resten av databasen."""
-    p = bygg_befolkningsuttag(META)
+    p = bygg_befolkningsuttag(META)["params"]
     assert p["outputFormat"] == "csv"
     assert p["outputFormatParams"] == "UseCodes"
 
 
+def test_selektionen_ligger_i_kroppen_inte_i_url_en():
+    """Som GET blev URL:en 2 900 tecken med alla kommuner och ettårsklasser
+    uppräknade, och IIS svarade 404 -- dess gräns för query-strängar är 2 048
+    tecken. Frågesträngen bär därför bara format och språk."""
+    p = bygg_befolkningsuttag(META)["params"]
+    assert not any("valuecodes" in k.lower() for k in p)
+    assert len("&".join(f"{k}={v}" for k, v in p.items())) < 100
+
+
 def test_senaste_aret_om_inget_anges():
-    assert bygg_befolkningsuttag(META)["valuecodes[Tid]"] == "2024"
+    assert _koder(bygg_befolkningsuttag(META), "Tid") == ["2024"]
 
 
 def test_valt_ar():
-    assert bygg_befolkningsuttag(META, ar=2023)["valuecodes[Tid]"] == "2023"
+    assert _koder(bygg_befolkningsuttag(META, ar=2023), "Tid") == ["2023"]
 
 
 def test_ar_utanfor_tabellen_kastar():
     with pytest.raises(ValueError, match="2025"):
         bygg_befolkningsuttag(META, ar=2025)
+
+
+# ----------------------------------------------------------------------
+# Felbeskedet
+# ----------------------------------------------------------------------
+
+class _Svar:
+    """Minimalt requests.Response-skal."""
+    def __init__(self, status, json_data=None, text="", url="https://x/y"):
+        self.status_code = status
+        self.ok = 200 <= status < 300
+        self._json = json_data
+        self.text = text
+        self.url = url
+
+    def json(self):
+        if self._json is None:
+            raise ValueError("ingen json")
+        return self._json
+
+
+def test_felet_bar_api_ets_egen_forklaring():
+    """PxWebApi svarar med ProblemDetails. raise_for_status kastar bort den,
+    och kvar blir "400 Client Error" utan besked om vilken variabel eller
+    vilket värde som inte dög."""
+    import requests
+    svar = _Svar(400, {"title": "Illegal value", "detail": "Alder: 101 finns inte",
+                       "status": 400})
+    with pytest.raises(requests.HTTPError, match="Alder: 101 finns inte"):
+        _kontrollera(svar, "data")
+
+
+def test_fel_utan_json_bar_kroppen():
+    import requests
+    with pytest.raises(requests.HTTPError, match="Not Found"):
+        _kontrollera(_Svar(404, None, text="<html>404 Not Found</html>"), "data")
+
+
+def test_ok_passerar():
+    assert _kontrollera(_Svar(200, {}), "data") is None
