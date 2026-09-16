@@ -369,6 +369,34 @@ händelserna på sätt som inte prövats.
 
 ---
 
+## 8b. Ålder och arbetslivets längd
+
+Individen bär en ålder. Den dras vid uppstarten ur SCB:s folkmängd per
+ettårsklass för kommunen (`population_by_age`, BE0101), ökar med ett år vid
+varje årsskifte, och bestämmer tre saker.
+
+**Arbetslivets längd.** L = ålder − inträdesålder, där inträdesåldern följer
+utbildningsnivån (19, 20 respektive 24 år). Tenure i nuvarande yrke kan inte
+överstiga L. Utan den gränsen drogs tenure exponentiellt med medel åtta år
+oberoende av allt annat, och eftersom cirkelns massa är
+m_mättnad·(1 − e^(−λ·tenure)) startade tjugofemåringar mättade.
+
+**Utträdet.** Den som når riktåldern (67) lämnar arbetskraften. Satt hon på en
+position blir den **vakant, inte förstörd**: arbetsgivaren ska tillsätta den
+igen. Ersättningsrekryteringen är det dominerande rekryteringsflödet i en
+kommun som inte växer, och den fanns inte i modellen så länge ingen lämnade av
+åldersskäl.
+
+**Vad åldern ännu inte gör.** Inget inträde sker, så arbetskraften krymper med
+avgångarna. Deltagandet behandlas som platt över arbetsför ålder, vilket är
+fel i känd riktning: de yngsta och de äldsta deltar mindre. Massan följer
+fortfarande tenure i nuvarande yrke och inte hela arbetslivet — den som bytt
+yrke har byggt massa i det tidigare, och de cirklarna finns inte i
+startpopulationen. Sökintensitet, arbetslöshetens varaktighet och lön beror
+inte på ålder.
+
+---
+
 ## 9. Validering
 
 Representationen är en teori, inte en design, om den kan vara fel. Den är
@@ -484,7 +512,11 @@ en vägg, är ett besked om att en tillståndsvariabel slutat bära information.
 - Form och skala för α(zon).
 - Programriktningar för gymnasium och högskola: kräver att utbildningar
   positioneras i skivan. Yrkets riktning är proxy tills dess.
-- Ålder finns inte på individerna; tenure dras ur en fördelning. Kohortinträde
-  och åldersstruktur är ett senare demografiskt steg.
+- Inträdet på arbetsmarknaden. Åldern finns sedan 0155 och utträdet med den,
+  men ingen kommer in. Befolkningsbanan per kommun (historik plus
+  framskrivning) och kohortinträdet är nästa demografiska steg, och med det
+  blir arbetskraftsdeltagandet ett utfall i stället för en parameter.
+- Startpopulationens tidigare yrkescirklar. Massan ur hela arbetslivet
+  kräver dem; i dag bär individen bara sitt nuvarande yrke.
 - Om en spretig karriär är ett signalproblem i sig, utöver vad cirklarnas
   överlapp ger. Parkerad.

@@ -116,6 +116,22 @@ def create_schema(db_path="data/worm.sqlite3"):
         )
     """)
 
+    # SCB:s folkmängd per ettårsklass och kommun (BE0101). Ålderspyramiden som
+    # startpopulationens åldrar dras ur. Ettårsklasser och inte intervall:
+    # pensionsavgången sker vid en bestämd ålder, och ett femårsintervall hade
+    # tvingat fram en fördelning inom intervallet som filen redan innehåller.
+    # Åldern 100 bär SCB:s klass "100+ år" och är därför ingen ren ettårsklass;
+    # den ligger utanför arbetsför ålder och påverkar inget annat än totalen.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS population_by_age (
+            municipal_code TEXT,
+            year INTEGER,
+            age INTEGER,
+            n_total INTEGER,
+            PRIMARY KEY (municipal_code, year, age)
+        )
+    """)
+
     # SCB:s pendlingsflöden mellan kommuner. Referensen
     # share_hires_cross_municipality ställs mot, och den enda kalibreringen av
     # commute_cost_per_km. Diagonalen ingår: andelen som pendlar över gräns

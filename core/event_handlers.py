@@ -1449,9 +1449,91 @@ def _apply_wage_revision(world, t_now):
     }
 
 
+def _pensionera(world, idx, t_now):
+    """Individen lämnar arbetskraften. Positionen hon satt på blir VAKANT.
+
+    Skilt från _become_unemployed: den som går i pension blir inte arbetslös,
+    hon slutar söka. Men positionen finns kvar hos arbetsgivaren och ska
+    tillsättas igen -- ersättningsrekryteringen är det dominerande
+    rekryteringsflödet i en kommun som inte växer, och den fanns inte i
+    modellen så länge ingen lämnade av åldersskäl.
+    """
+    ind = world.individuals
+    hade_jobb = False
+    held = world.get_ind(idx, 'job_id') if 'job_id' in ind.columns else np.nan
+    if pd.notna(held):
+        pos = world.job_index().get(held)
+        if pos is not None:
+            jobs = world.jobs
+            jobs.iat[pos, jobs.columns.get_loc('individual_id')] = np.nan
+            world.set_job_filled(held, False, t_now)
+            hade_jobb = True
+        ind.at[idx, 'job_id'] = np.nan
+    world.clear_active_occupation(idx)
+    ind.at[idx, 'status'] = 'not_in_labor_force'
+    # SÖKKEDJAN BRYTS UTAN ATT HÄNDELSEN PLOCKAS UR KÖN. En sökhändelse bär
+    # 'due' och kastas av handle_start_job_search när due != next_search_time.
+    # NaN är skilt från allt, även från sig självt, så varje redan schemalagd
+    # sökning för henne förfaller. Samma mekanism som vid statusbyten i övrigt.
+    if 'next_search_time' in ind.columns:
+        ind.at[idx, 'next_search_time'] = np.nan
+    return hade_jobb
+
+
+def _aldras_och_pensioneras(world, event):
+    """Alla fyller år, och de som nått riktåldern lämnar arbetskraften.
+
+    Körs vid årsskiftet, INTE vid startårets new_year: den ligger på t = 0 och
+    är kalenderns början, inte ett årsskifte. Utan undantaget hade hela
+    befolkningen åldrats ett år innan första dagen simulerats, och
+    sextiosexåringarna i startbeståndet gått i pension samma sekund.
+
+    Inget inträde sker. Arbetskraften krymper därför med avgångarna, vilket är
+    avsikten i detta steg: utträdets effekt ska kunna läsas ensam innan
+    befolkningsbanan införs.
+    """
+    ind = world.individuals
+    if 'age' not in ind.columns or float(event['time']) <= 0.0:
+        return {}
+    t_now = float(event['time'])
+    alder = pd.to_numeric(ind['age'], errors='coerce').to_numpy(float) + 1.0
+    ind['age'] = alder
+    # En hel kolumn tilldelad byter block i pandas, och kolumnvyerna (0110)
+    # kan då tappa kontakten med tabellen. Samma skäl som i
+    # _write_competence_summary. Jag har INTE lyckats framkalla felet för just
+    # den här skrivningen -- 'age' är ingen vy-kolumn, och månadsskiftets
+    # verifiering går igenom även utan anropet. Det står kvar som billig
+    # försäkring, inte som ett prövat skydd.
+    world.refresh_ind()
+
+    ra = float(world.cfg_reader.config.get('simulation', {})
+               .get('age', {}).get('retirement_age', 67))
+    status = ind['status'].to_numpy()
+    i_arbetskraft = np.isin(status, ('employed', 'unemployed', 'in_education',
+                                     'career_break'))
+    avgar = np.flatnonzero(i_arbetskraft & (alder >= ra))
+
+    fran_jobb = 0
+    for idx in ind.index[avgar]:
+        if _pensionera(world, idx, t_now):
+            fran_jobb += 1
+            world.event_logger.log_event(
+                world, event, extra={"event_detail": "retirement_vacancy",
+                                     "agent_id": idx})
+    return {"retired": int(len(avgar)),
+            "retired_from_job": int(fran_jobb),
+            "age_mean_labour_force": (
+                round(float(np.nanmean(alder[i_arbetskraft])), 2)
+                if i_arbetskraft.any() else None)}
+
+
 def handle_new_year(event, world):
     from core.statistics.basic_stats import analyze_world
     year = event['params'].get('year')
+    # FÖRE statistiken: årets tal ska beskriva beståndet efter avgången, inte
+    # före. En pensionerad som räknas som arbetslös i årsraden och som
+    # not_in_labor_force i nästa månadsrad hade sett ut som ett flöde.
+    aldrande = _aldras_och_pensioneras(world, event)
     stats = analyze_world(world)
     employed = stats['employed_individuals']
     unemployed = stats['unemployed_individuals']
@@ -1465,6 +1547,7 @@ def handle_new_year(event, world):
         "not_in_labour_force": not_in_labour_force,
         "active_jobs": stats['total_jobs'],
     }
+    extra.update(aldrande)
     extra.update(_wage_stock_stats(world))          # FÖRE revisionen
     extra.update(_apply_wage_revision(world, float(event['time'])))
     world.refresh_ind()      # revisionen skriver med en Series levande: bygg om vyerna (0110)

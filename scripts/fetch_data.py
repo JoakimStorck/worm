@@ -62,6 +62,30 @@ MANIFEST = [
             "response": {"format": "csv"},
         },
     },
+    # Folkmängd per ettårsklass och kommun. Ålderspyramiden som
+    # startpopulationens åldrar dras ur (core/database/load_population_age.py).
+    # Alder="*" ger alla ettårsklasser OCH kategorin "tot" om tabellen har en
+    # sådan; läsaren utesluter den. Region-urvalet nedan är hela värdemängden
+    # av kommuner. VÄRDEMÄNGDENS NAMN KAN ÄNDRAS mellan årgångar: stämmer det
+    # inte, hämta det aktuella ur
+    #   https://api.scb.se/OV0104/v1/doris/sv/ssd/BE/BE0101/BE0101A/BefolkningNy
+    {
+        "type": "scb_px",
+        "dest": os.path.join(DATA_DIR, "Folkmangd kommun alder.csv"),
+        "path": "BE/BE0101/BE0101A/BefolkningNy",
+        "query": {
+            "query": [
+                {"code": "Region", "selection": {"filter": "vs:RegionKommun07EjAggr",
+                                                 "values": ["*"]}},
+                {"code": "Alder", "selection": {"filter": "all", "values": ["*"]}},
+                {"code": "Kon", "selection": {"filter": "item", "values": ["1", "2"]}},
+                {"code": "ContentsCode", "selection": {"filter": "item",
+                                                       "values": ["BE0101N1"]}},
+                {"code": "Tid", "selection": {"filter": "item", "values": ["2024"]}},
+            ],
+            "response": {"format": "csv"},
+        },
+    },
     # Stubbar – ersätt path/query med dina egna uttag (tom query = hela tabellen):
     {"type": "scb_px", "dest": os.path.join(DATA_DIR, "employment_municipality_sni_2020.csv"),
      "path": "TODO/AM/...", "query": {"query": [], "response": {"format": "csv"}}},

@@ -122,6 +122,31 @@ simulation:
 
   occupation_concentration: 1.5
 
+  # --- Ålder (docs/individmodell.md, avsnitt 11) ---
+  # Åldern dras ur SCB:s befolkning per ettårsklass (population_by_age) och
+  # ökar med ett år vid varje årsskifte. Den som når riktåldern lämnar
+  # arbetskraften och hennes position blir vakant.
+  #
+  # retirement_age är riktåldern för allmän pension, 67 år från 2026. Att den
+  # är en skarp gräns och inte en fara från 63 är ett medvetet förenklande
+  # steg: förtida utträde (sjuk- och aktivitetsersättning) är vanligare i
+  # glesbygd än i riket och hör till en egen mekanism, inte till den här.
+  #
+  # work_age_min är den nedre gränsen för arbetsför ålder i
+  # dragningen. Deltagandet behandlas som platt mellan gränserna, vilket är
+  # fel i känd riktning: de yngsta och de äldsta deltar mindre. AKU:s
+  # deltagande per ålder finns inte i databasen.
+  #
+  # entry_age är inträdesåldern i arbetslivet per utbildningsnivå och sätter
+  # taket för hur lång tenure en individ kan ha dragit vid uppstarten.
+  age:
+    retirement_age: 67
+    work_age_min: 16
+    entry_age:
+      low: 19
+      medium: 20
+      high: 24
+
   # --- Kompetenscirklar (docs/individmodell.md, avsnitt 2) ---
   # Individen är en samling cirklar, en per erfarenhet. Exponering bygger
   # massa, läckage gallrar och mättar, diffusion suddar spetsen, skärpning

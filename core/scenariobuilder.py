@@ -7,6 +7,7 @@ import time
 from shapely import wkt
 import sqlite3
 
+from core.database.utils import kommunkod
 from core.geography.geoutils import assign_deso_code, random_points_in_polygon
 from core.log import log
 from core.occupations.utils import sample_from_centers_jitter, sample_centers_xy_jitter
@@ -595,6 +596,107 @@ class ScenarioBuilder:
             cols.append("n_tasks")
         return self.onet_space_df.reindex(onet_codes)[cols]
 
+    # ------------------------------------------------------------------
+    # Ålder (docs/individmodell.md, avsnitt 11)
+    # ------------------------------------------------------------------
+    def age_config(self):
+        """Åldersparametrarna ur simulation.age, med defaults."""
+        cfg = self.cfg_reader.config.get("simulation", {}).get("age", {}) or {}
+        entry = {"low": 19.0, "medium": 20.0, "high": 24.0}
+        entry.update({k: float(v) for k, v in (cfg.get("entry_age") or {}).items()})
+        return {"retirement_age": float(cfg.get("retirement_age", 67)),
+                "work_age_min": float(cfg.get("work_age_min", 16)),
+                "entry_age": entry}
+
+    def alderspyramid(self, municipal_code, year):
+        """Folkmängd per ettårsklass för kommunen, som (åldrar, antal).
+
+        Faller tillbaka på det senaste året som inte ligger efter det önskade,
+        och säger ifrån när den gör det. Saknas tabellen eller kommunen kastas
+        ett fel: en påhittad pyramid hade bestämt både hur många som står nära
+        pensionsåldern och hur långa arbetsliv individerna har bakom sig.
+        """
+        kod = kommunkod(pd.Series([municipal_code])).iloc[0]
+        try:
+            df = pd.read_sql(
+                "SELECT year, age, n_total FROM population_by_age "
+                "WHERE municipal_code = ?", self.conn, params=(kod,))
+        except Exception as e:
+            raise ValueError(
+                "tabellen population_by_age saknas i databasen. Hämta SCB:s "
+                "folkmängd per ettårsklass (BE0101) med scripts/fetch_data.py "
+                "och kör scripts/create_database.py.") from e
+        if df.empty:
+            raise ValueError(f"population_by_age saknar kommun {kod}")
+        ar = sorted(df["year"].unique())
+        valt = max([a for a in ar if a <= year], default=ar[0])
+        if valt != year:
+            print(f"[ålder] kommun {kod}: befolkning per ålder finns inte för "
+                  f"{year}, använder {valt}")
+        d = df[df["year"] == valt].sort_values("age")
+        return d["age"].to_numpy(float), d["n_total"].to_numpy(float)
+
+    @staticmethod
+    def _skala_pyramid(antal, population):
+        """Pyramiden skalad till populationen med största resten, så att
+        summan blir exakt och ingen ettårsklass tappas till noll av avrundning
+        nedåt."""
+        andel = antal / antal.sum() * float(population)
+        bas = np.floor(andel).astype(int)
+        rest = int(population) - int(bas.sum())
+        if rest > 0:
+            ordning = np.argsort(-(andel - bas))
+            bas[ordning[:rest]] += 1
+        elif rest < 0:
+            ordning = np.argsort(andel - bas)
+            bas[ordning[:-rest]] -= 1
+        return np.maximum(bas, 0)
+
+    def dra_aldrar(self, municipal_code, year, population, n_workforce, rng):
+        """Åldrar för hela befolkningen, uppdelade på arbetskraft och övriga.
+
+        Hela befolkningen får SCB:s pyramid. Arbetskraften placeras INOM den,
+        utan återläggning, i intervallet [work_age_min, retirement_age): den
+        tar platser i pyramiden i stället för att dras vid sidan av den, så
+        att summan av de två grupperna är pyramiden själv. Resten -- barn,
+        pensionärer och de i arbetsför ålder som arbetskraften inte fyller --
+        blir utanför arbetskraften.
+
+        Deltagandet är därmed platt över arbetsför ålder. Det är fel i känd
+        riktning: deltagandet är lägre vid 16-19 och 60-66 än däremellan.
+        Att rätta det kräver AKU:s deltagande per ålder, som inte finns i
+        databasen.
+        """
+        aldrar, antal = self.alderspyramid(municipal_code, year)
+        ac = self.age_config()
+        counts = self._skala_pyramid(antal, population)
+        urna = np.repeat(aldrar, counts)
+        arbetsfor = np.flatnonzero((urna >= ac["work_age_min"]) &
+                                   (urna < ac["retirement_age"]))
+        if n_workforce > len(arbetsfor):
+            raise ValueError(
+                f"kommun {municipal_code}: arbetskraften {n_workforce} är "
+                f"större än befolkningen {len(arbetsfor)} i arbetsför ålder "
+                f"[{ac['work_age_min']:.0f}, {ac['retirement_age']:.0f}). "
+                "Antingen är arbetskraften felräknad eller pyramiden fel år.")
+        valda = rng.choice(arbetsfor, size=int(n_workforce), replace=False)
+        i_arbetskraft = np.zeros(len(urna), dtype=bool)
+        i_arbetskraft[valda] = True
+        return urna[i_arbetskraft], urna[~i_arbetskraft]
+
+    def dra_tenure(self, alder, utbildningsniva, rng):
+        """Inträdesålder, arbetslivets längd och tenure i nuvarande yrke."""
+        entry = self.age_config()["entry_age"]
+        entry_default = entry.get("medium", 20.0)
+        entry_ar = np.array([entry.get(e, entry_default) if isinstance(e, str)
+                             else entry_default for e in utbildningsniva],
+                            dtype=float)
+        arbetsliv = np.maximum(0.0, np.asarray(alder, dtype=float) - entry_ar)
+        ten_mean = float(self.cfg_reader.config.get("simulation", {})
+                         .get("competence", {}).get("initial_tenure_mean_years", 8.0))
+        tenure = np.minimum(rng.exponential(ten_mean, size=len(entry_ar)), arbetsliv)
+        return entry_ar, arbetsliv, tenure
+
     def generate_individuals(self, municipal_code, population, workforce_ratio, unemployment_rate, year=2024):
         """
         Skapar individer med verklig utbildningsnivå-fördelning från SCB.
@@ -619,6 +721,14 @@ class ScenarioBuilder:
         status_list = ["unemployed"] * n_workforce + ["not_in_labor_force"] * n_not_in_labor_force
         rng.shuffle(status_list)
 
+        # 3b. Ålder ur kommunens pyramid, betingad på status. Arbetskraften
+        # ligger inom [work_age_min, retirement_age); resten av pyramiden
+        # hamnar utanför arbetskraften.
+        alder_arbetskraft, alder_ovriga = self.dra_aldrar(
+            municipal_code, year, population, n_workforce, rng)
+        alder_arbetskraft = list(alder_arbetskraft)
+        alder_ovriga = list(alder_ovriga)
+
         # 4. Fördela individer över DeSO
         deso_gdf = self.geoworld.deso_zones
         deso_gdf = deso_gdf[(deso_gdf["municipal_code"] == str(municipal_code)) & (deso_gdf["population"] > 0)].reset_index(drop=True)
@@ -633,6 +743,8 @@ class ScenarioBuilder:
         records = []
         i = 0
         edu_idx = 0
+        wf_idx = 0
+        nilf_idx = 0
         for deso_idx, n_ind in enumerate(n_per_deso):
             if n_ind == 0:
                 continue
@@ -642,6 +754,12 @@ class ScenarioBuilder:
                 status = status_list[i]
                 # Endast arbetskraften får utbildningsnivå, övriga sätts till None
                 education_level = education_levels[edu_idx] if status == "unemployed" else None
+                if status == "unemployed":
+                    age = alder_arbetskraft[wf_idx]
+                    wf_idx += 1
+                else:
+                    age = alder_ovriga[nilf_idx]
+                    nilf_idx += 1
                 records.append({
                     'municipal_code': municipal_code,
                     'status': status,
@@ -650,7 +768,8 @@ class ScenarioBuilder:
                     'x': pt.x,
                     'y': pt.y,
                     'geometry': pt,
-                    'education_level': education_level
+                    'education_level': education_level,
+                    'age': float(age),
                 })
                 if status == "unemployed":
                     edu_idx += 1
@@ -728,10 +847,25 @@ class ScenarioBuilder:
         df["chi"] = np.hypot(x_occ, y_occ)                # för visualisering/kompatibilitet
         df["xi"]  = np.arctan2(y_occ, x_occ) % (2 * np.pi)
 
-        # Tenure i nuvarande yrke: ålder saknas, så den dras ur en fördelning.
-        ten_mean = float(self.cfg_reader.config.get("simulation", {})
-                         .get("competence", {}).get("initial_tenure_mean_years", 8.0))
-        df["tenure_years"] = rng.exponential(ten_mean, size=len(df))
+        # TENURE KAN INTE ÖVERSTIGA ARBETSLIVETS LÄNGD. Dragningen var
+        # exponentiell med medel åtta år och oberoende av allt annat, vilket
+        # gav tjugofemåringar med trettio års yrkeserfarenhet. Massan i
+        # kompetenscirkeln är m_mattnad*(1 - e^{-lambda*tenure}), så felet gick
+        # rakt in i konkurrenskraften: de yngsta startade mättade.
+        #
+        # Arbetslivets längd är L = ålder - inträdesålder, där inträdesåldern
+        # följer utbildningsnivån (19/20/24 år). Dragningen trunkeras vid L.
+        #
+        # Vad detta INTE gör: massan följer fortfarande tenure i NUVARANDE
+        # yrke, inte hela arbetslivet. Den som bytt yrke har byggt massa i det
+        # tidigare, och de cirklarna finns inte i startpopulationen. Tills de
+        # införs underskattas massan för dem med långt arbetsliv och många
+        # byten.
+        entry_ar, arbetsliv, tenure = self.dra_tenure(
+            df["age"].to_numpy(float), df["education_level"].tolist(), rng)
+        df["entry_age"] = entry_ar
+        df["work_life_years"] = arbetsliv
+        df["tenure_years"] = tenure
 
         # ---- Reservationslön: rho * Π(egen position), i löneandelar ----
         # Π saknas (ingen koefficienttabell) -> w_res = 0, dvs. S = p*w - c*km.

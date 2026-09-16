@@ -127,6 +127,23 @@ if file_exists(ams_csv):
 else:
     log("OBS: Laddar inte labour_market_status, filen saknas.")
 
+# Ladda SCB:s folkmängd per ettårsklass och kommun (BE0101). Underlaget för
+# startpopulationens åldrar. Utan tabellen kastar generate_individuals.
+for bef_csv in ("data/Folkmangd kommun alder.csv",
+                "data/befolkning_kommun_alder.csv",
+                "data/BE0101_folkmangd_alder_kommun.csv"):
+    if file_exists(bef_csv):
+        try:
+            from core.database.load_population_age import load_population_by_age
+            load_population_by_age(bef_csv, db_path=DB_PATH)
+            break
+        except Exception as e:
+            log(f"Fel vid laddning av befolkning per ålder ur {bef_csv}: {e}")
+else:
+    log("OBS: Laddar inte population_by_age, ingen befolkningsfil per ålder "
+        "finns. Hämta den med scripts/fetch_data.py (BE0101, Alder per "
+        "ettårsklass) -- utan den kan individernas ålder inte dras.")
+
 # Ladda yrkesregistret och skatta yrkesvikter per kommun med IPF.
 riks_csv, lan_csv = "data/TAB4347_sv.csv", "data/TAB4441_sv.csv"
 if file_exists(riks_csv) and file_exists(lan_csv):
