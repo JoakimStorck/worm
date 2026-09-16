@@ -83,10 +83,11 @@ def test_hundraplus_blir_hundra(tmp_path):
     assert df["age"].max() == 100
 
 
-def test_csv3_med_koder(tmp_path):
-    """Formatet csv3, som fetch_data.py hämtar: koder i långt format, med
-    värdekolumnen döpt till tabellens id. Riket ("00") och länet ("20") ligger
-    i samma regionkolumn som kommunerna och faller på fyrsiffrighetskravet."""
+def test_langt_format_med_koder(tmp_path):
+    """Uttaget som fetch_data.py hämtar: koder i långt format, med
+    värdekolumnen döpt till tabellens innehållskod. Riket ("00") och länet
+    ("20") ligger i samma regionkolumn som kommunerna och faller på
+    fyrsiffrighetskravet."""
     df = las_befolkning_per_alder(_skriv(tmp_path, "csv3.csv", CSV3))
     assert set(df["municipal_code"]) == {"2062", "2039"}
     assert int(df[(df.municipal_code == "2062") & (df.age == 20)]["n_total"].iloc[0]) == 200
@@ -95,9 +96,9 @@ def test_csv3_med_koder(tmp_path):
 
 
 def test_klartext_utan_koder_ger_begripligt_fel(tmp_path):
-    """Formatet csv ger "Mora" utan kommunkod. Utan koden finns ingen nyckel
-    mot resten av databasen, och felet ska säga vilket format som duger."""
-    with pytest.raises(ValueError, match="csv3"):
+    """UseTexts ger "Mora" utan kommunkod. Utan koden finns ingen nyckel mot
+    resten av databasen, och felet ska säga vad som ska ändras."""
+    with pytest.raises(ValueError, match="UseCodes"):
         las_befolkning_per_alder(_skriv(tmp_path, "klartext.csv", KLARTEXT))
 
 

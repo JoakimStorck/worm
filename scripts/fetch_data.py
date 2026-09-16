@@ -8,7 +8,7 @@ för att bygga data/worm.sqlite3 ur de hämtade filerna.
 Källtyper
 ---------
   onet_zip   : hela O*NET-databasen som ZIP, extrahera utvalda .txt  (FUNGERAR DIREKT)
-  scb_px     : SCB-statistiktabell via PxWebApi v1 (POST JSON-fråga)  (FYLL I tabell + query)
+  scb_px     : SCB-statistiktabell via PxWebApi v2 (GET, fråga i URL:en)
   scb_geo    : SCB öppen geodata, direkt GPKG-URL eller WFS           (FYLL I url / lager)
   derived    : produceras av modellen/create_database.py             (HÄMTAS EJ)
 
@@ -29,9 +29,15 @@ DATA_DIR = "data"
 ONET_DB_VERSION = "30_3"
 ONET_ZIP_URL = f"https://www.onetcenter.org/dl_files/database/db_{ONET_DB_VERSION}_text.zip"
 
-# PxWebApi v1 (fungerar t.o.m. årsskiftet 2026/2027). Migrera senare till v2:
-#   https://statistikdatabasen.scb.se/api/v2/  (se SCB:s v1->v2-konverterare)
-SCB_PX_BASE = "https://api.scb.se/OV0104/v1/doris/sv/ssd"
+# PxWebApi v2, som SCB släppte i statistikdatabasen i oktober 2025 och som
+# ersätter v1. Uttagen görs med GET och hela frågan ligger i URL:en. Gränserna
+# är 150 000 celler per uttag och 30 anrop per tio sekunder, räknat per
+# IP-adress -- alltså delade med kollegor på samma arbetsplats.
+#
+# Tabellerna nås via ett stabilt id (TABnnnn) i stället för v1:s ämnesstig
+# (BE/BE0101/BE0101A/BefolkningNy). Stigen ändrades när databasen omstrukturerades;
+# id:t gör det inte. Specifikationen: github.com/PxTools/PxApiSpecs (PxAPI-2.yml).
+SCB_API2_BASE = "https://statistikdatabasen.scb.se/api/v2"
 
 # SCB:s WFS för öppen geodata (lagernamn fås ur GetCapabilities):
 #   https://geodata.scb.se/geoserver/stat/wfs?service=WFS&version=2.0.0&request=GetCapabilities
@@ -47,31 +53,16 @@ MANIFEST = [
     # --- O*NET (fungerar direkt) -------------------------------------------
     {"type": "onet_zip", "members": ["Occupation Data.txt", "Skills.txt"], "dest": ONET_DIR},
 
-    # --- SCB statistik via PxWebApi (fyll i path + query) ------------------
-    # Exempel, fullt ifyllt: kommunbefolkning (tabell BE0101 BefolkningNy).
-    # 'path' är tabellvägen efter .../ssd/ ; 'query' är SCB:s JSON-fråga.
-    {
-        "type": "scb_px",
-        "dest": os.path.join(DATA_DIR, "scb_population_example.csv"),
-        "path": "BE/BE0101/BE0101A/BefolkningNy",
-        "query": {
-            "query": [
-                {"code": "ContentsCode", "selection": {"filter": "item", "values": ["BE0101N1"]}},
-                {"code": "Tid", "selection": {"filter": "item", "values": ["2024"]}},
-            ],
-            "response": {"format": "csv"},
-        },
-    },
+    # --- SCB statistik via PxWebApi v2 ------------------------------------
+    # En post behöver "table_query" (eller ett låst "table_id") och ett
+    # "query_fn" som bygger frågan ur tabellens metadata.
     # Folkmängd per ettårsklass och kommun. Ålderspyramiden som
     # startpopulationens åldrar dras ur (core/database/load_population_age.py).
     #
-    # Frågan byggs ur tabellens EGEN metadata av bygg_befolkningsfraga(), inte
-    # ur en handskriven värdemängd. Ett tidigare utkast gissade
-    # "vs:RegionKommun07EjAggr"; namnet gick inte att verifiera, och en
-    # felaktig värdemängd ger 400 utan att säga vilken. Metadatan listar
-    # koderna rakt av, så gissningen behövs inte.
+    # Frågan byggs ur tabellens EGEN metadata, inte ur en handskriven
+    # värdemängd: metadatan listar kommunkoderna och ettårsklasserna rakt av.
     #
-    # BefolkningNy slutar vid 2024. Statistiken för 2025 och framåt ligger i
+    # Tabellen slutar vid 2024. Statistiken för 2025 och framåt ligger i
     # BefolkningCKM, som är röjandeskyddad med Cell Key Method: cellvärdena är
     # störda, och SCB påpekar att osäkerheten adderas när värden summeras.
     # Uppstarten tar därför 2024 ur den ostörda tabellen, som dessutom bär
@@ -79,17 +70,20 @@ MANIFEST = [
     {
         "type": "scb_px",
         "dest": os.path.join(DATA_DIR, "Folkmangd kommun alder.csv"),
-        "path": "BE/BE0101/BE0101A/BefolkningNy",
+        # Tabell-id slås upp ur sökningen. Är det känt kan det låsas här med
+        # "table_id": "TABnnnn", vilket sparar ett anrop och gör uttaget
+        # oberoende av hur sökningen rankar träffar.
+        "table_query": "Folkmängden efter region, civilstånd, ålder och kön",
         "query_fn": "befolkning_per_alder",
         "query_args": {"ar": "2024"},
     },
-    # Stubbar – ersätt path/query med dina egna uttag (tom query = hela tabellen):
+    # Stubbar – fyll i "table_query" och en "query_fn" i QUERY_BUILDERS:
     {"type": "scb_px", "dest": os.path.join(DATA_DIR, "employment_municipality_sni_2020.csv"),
-     "path": "TODO/AM/...", "query": {"query": [], "response": {"format": "csv"}}},
+     "table_query": None},
     {"type": "scb_px", "dest": os.path.join(DATA_DIR, "scb_sysselsatta_deso.csv"),
-     "path": "TODO/AM/...", "query": {"query": [], "response": {"format": "csv"}}},
+     "table_query": None},
     {"type": "scb_px", "dest": os.path.join(DATA_DIR, "scb_population_deso_2024.csv"),
-     "path": "TODO/BE/...", "query": {"query": [], "response": {"format": "csv"}}},
+     "table_query": None},
 
     # --- SCB geodata (direkt GPKG-URL eller WFS) ---------------------------
     # Föredra den statiska GPKG-länken från datasetsidan om du har den:
@@ -149,76 +143,115 @@ def fetch_onet_zip(item):
         print(f"  -> {out}")
 
 
-def bygg_befolkningsfraga(meta, ar=None):
-    """JSON-frågan för folkmängd per kommun och ettårsklass, ur tabellens
-    metadata.
+def valj_tabell(svar, ar, krav=("region", "ålder")):
+    """Tabell-id ur ett /tables-svar.
 
-    Tre saker avgörs av metadatan i stället för att skrivas för hand.
-
-    KOMMUNERNA. Region-listan blandar riket ("00"), länen (tvåsiffriga) och
-    kommunerna (fyrsiffriga) i samma platta värdemängd. Hämtas allt med "*"
-    kommer alla tre nivåerna med, och summeras de av misstag räknas varje
-    invånare tre gånger. Läsaren skyddar mot det genom att kräva fyra siffror,
-    men uttaget ska inte innehålla dem från början.
-
-    ÅLDRARNA. Kategorin "tot" ligger i samma lista som ettårsklasserna och
-    utesluts här.
-
-    CIVILSTÅND OCH KÖN. Båda har elimination = true, alltså summerar SCB över
-    dem när de utelämnas. Att räkna upp dem hade fyrdubblat respektive
-    fördubblat antalet celler utan att tillföra något: modellen använder
-    varken civilstånd eller kön.
-
-    Storleken blir 290 kommuner * 101 ettårsklasser = 29 290 celler för ett
-    år, med marginal till API:ets tak. Ett helt historikuttag måste däremot
-    delas upp, ett år per fråga.
+    Sökningen ger flera träffar -- folkmängd finns per månad, per distrikt,
+    efter födelseland och så vidare. En träff duger bara om den har alla
+    variabler vi behöver och täcker året. Blir det inte exakt en kvar kastas
+    ett fel som listar kandidaterna, så att id:t kan låsas i manifestet i
+    stället för att sökningen gissar åt oss.
     """
-    var = {v["code"]: v for v in meta["variables"]}
-    kommuner = [k for k in var["Region"]["values"] if len(k) == 4 and k.isdigit()]
-    aldrar = [a for a in var["Alder"]["values"] if a != "tot"]
+    kandidater = []
+    for t in svar.get("tables", []):
+        namn = [str(n).lower() for n in t.get("variableNames", [])]
+        if not all(any(k in n for n in namn) for k in krav):
+            continue
+        forsta, sista = str(t.get("firstPeriod", "")), str(t.get("lastPeriod", ""))
+        if forsta and sista and not (forsta <= str(ar) <= sista):
+            continue
+        if t.get("discontinued"):
+            continue
+        kandidater.append(t)
+    if len(kandidater) == 1:
+        return kandidater[0]["id"]
+    lista = "; ".join(f"{t['id']}: {t.get('label') or t.get('description')}"
+                      for t in kandidater) or "inga"
+    raise ValueError(f"sökningen gav {len(kandidater)} tabeller som täcker {ar} "
+                     f"med {krav} ({lista}). Lås en av dem med \"table_id\" i "
+                     "manifestet.")
+
+
+def bygg_befolkningsuttag(meta, ar=None):
+    """Frågesträngen för folkmängd per kommun och ettårsklass, ur tabellens
+    metadata (json-stat2 från /tables/{id}/metadata).
+
+    KOMMUNERNA. Region-dimensionen blandar riket ("00"), länen (tvåsiffriga)
+    och kommunerna (fyrsiffriga) i samma kategorilista. Hämtas allt med "*"
+    kommer alla tre nivåerna med, och summeras de av misstag räknas varje
+    invånare tre gånger.
+
+    ÅLDRARNA. Kategorin "tot" ligger i samma lista som ettårsklasserna.
+
+    CIVILSTÅND OCH KÖN utelämnas. Båda har elimination = true, alltså
+    summerar SCB över dem. Modellen använder ingendera.
+
+    KODER, INTE KLARTEXT. outputFormatParams=UseCodes ger "2062" i stället för
+    "Mora". Läsaren behöver kommunkoden som nyckel mot resten av databasen.
+    """
+    dim = meta.get("dimension", {})
+    def kategorier(namn):
+        return list(dim.get(namn, {}).get("category", {}).get("index", {}).keys())
+
+    kommuner = [k for k in kategorier("Region") if len(k) == 4 and k.isdigit()]
+    aldrar = [a for a in kategorier("Alder") if a != "tot"]
+    tider = kategorier("Tid")
     if not kommuner or not aldrar:
         raise ValueError("metadatan saknar kommuner eller ettårsklasser")
-    tider = var["Tid"]["values"]
-    tid = str(ar) if ar is not None else tider[-1]
-    if tid not in tider:
+    tid = str(ar) if ar is not None else (tider[-1] if tider else None)
+    if tider and tid not in tider:
         raise ValueError(f"året {tid} finns inte i tabellen "
                          f"({tider[0]}-{tider[-1]})")
-    return {
-        "query": [
-            {"code": "Region", "selection": {"filter": "item", "values": kommuner}},
-            {"code": "Alder", "selection": {"filter": "item", "values": aldrar}},
-            {"code": "ContentsCode", "selection": {"filter": "item",
-                                                   "values": ["BE0101N1"]}},
-            {"code": "Tid", "selection": {"filter": "item", "values": [tid]}},
-        ],
-        # CSV3 OCH INTE CSV. Formatet csv ger variablernas KLARTEXTER, alltså
-        # "Mora" utan kommunkod, och läsaren kräver fyra siffror: filen hade
-        # gett noll rader. csv3 ger koderna, en rad per cell, med variabel-
-        # namnen och tabellens id i rubrikraden.
-        "response": {"format": "csv3"},
+    innehall = kategorier("ContentsCode")
+    params = {
+        "lang": "sv",
+        "valuecodes[Region]": ",".join(kommuner),
+        "valuecodes[Alder]": ",".join(aldrar),
+        "valuecodes[Tid]": tid,
+        "outputFormat": "csv",
+        "outputFormatParams": "UseCodes",
     }
+    if innehall:
+        # Tabellen bär både folkmängd och folkökning. Utan valet får uttaget
+        # bådadera, och läsaren hade tagit folkökningen för folkmängd i den
+        # kolumn den råkar hamna.
+        params["valuecodes[ContentsCode]"] = innehall[0]
+    return params
 
 
-QUERY_BUILDERS = {"befolkning_per_alder": bygg_befolkningsfraga}
+QUERY_BUILDERS = {"befolkning_per_alder": bygg_befolkningsuttag}
 
 
 def fetch_scb_px(item):
-    if item["path"].startswith("TODO"):
-        print(f"[SCB-px] HOPPAR ÖVER {item['dest']} – fyll i 'path' och 'query'.")
+    """Hämtar en tabell ur statistikdatabasen med PxWebApi v2.
+
+    Tre GET: sök fram tabell-id (om det inte är låst i manifestet), hämta
+    tabellens metadata, hämta data med frågan som byggts ur metadatan.
+    """
+    if not item.get("table_id") and not item.get("table_query"):
+        print(f"[SCB] HOPPAR ÖVER {item['dest']} – fyll i \"table_query\" och \"query_fn\".")
         return
     os.makedirs(os.path.dirname(item["dest"]), exist_ok=True)
-    url = f"{SCB_PX_BASE}/{item['path']}"
-    query = item.get("query")
-    if query is None:
-        # Frågan byggs ur tabellens metadata: GET på samma URL ger variabler
-        # och deras värden.
-        byggare = QUERY_BUILDERS[item["query_fn"]]
-        print(f"[SCB-px] GET {url} (metadata)")
-        m = requests.get(url, timeout=60)
-        m.raise_for_status()
-        query = byggare(m.json(), **item.get("query_args", {}))
-    print(f"[SCB-px] POST {url}")
-    r = requests.post(url, json=query, timeout=120)
+    ar = item.get("query_args", {}).get("ar")
+    tabell = item.get("table_id")
+    if not tabell:
+        fraga = item["table_query"]
+        print(f"[SCB] söker tabell: {fraga}")
+        r = requests.get(f"{SCB_API2_BASE}/tables",
+                         params={"query": fraga, "lang": "sv", "pageSize": 50},
+                         timeout=60)
+        r.raise_for_status()
+        tabell = valj_tabell(r.json(), ar)
+        print(f"  tabell {tabell}")
+
+    r = requests.get(f"{SCB_API2_BASE}/tables/{tabell}/metadata",
+                     params={"lang": "sv"}, timeout=60)
+    r.raise_for_status()
+    params = QUERY_BUILDERS[item["query_fn"]](r.json(), ar=ar)
+
+    url = f"{SCB_API2_BASE}/tables/{tabell}/data"
+    print(f"[SCB] GET {url}")
+    r = requests.get(url, params=params, timeout=300)
     r.raise_for_status()
     with open(item["dest"], "wb") as f:
         f.write(r.content)

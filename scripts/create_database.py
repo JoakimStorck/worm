@@ -141,8 +141,8 @@ for bef_csv in ("data/Folkmangd kommun alder.csv",
             log(f"Fel vid laddning av befolkning per ålder ur {bef_csv}: {e}")
 else:
     log("OBS: Laddar inte population_by_age, ingen befolkningsfil per ålder "
-        "finns. Hämta den med scripts/fetch_data.py (BE0101, Alder per "
-        "ettårsklass) -- utan den kan individernas ålder inte dras.")
+        "finns. Hämta den med: python scripts/fetch_data.py --only Folkmangd "
+        "-- utan den kan individernas ålder inte dras.")
 
 # Ladda yrkesregistret och skatta yrkesvikter per kommun med IPF.
 riks_csv, lan_csv = "data/TAB4347_sv.csv", "data/TAB4441_sv.csv"

@@ -16,10 +16,15 @@ och alla tre utesluts:
 Kön väljs alltså som "totalt" om kolumnen finns, och summeras annars. Att både
 välja totalraden och summera delarna hade dubbelräknat hela befolkningen.
 
-FORMAT. Läsaren väntar sig SCB:s CSV från statistikdatabasen (PxWeb), i det
-breda formatet med ett årtal per kolumn eller i långt format med en
-årskolumn. Åldersetiketterna är "0 år", "1 år", ..., "100+ år"; siffran läses
-ur strängen och "100+" blir 100.
+FORMAT. Läsaren väntar sig SCB:s CSV från statistikdatabasen, hämtad med
+PxWebApi v2 och outputFormatParams=UseCodes (se scripts/fetch_data.py). Den
+klarar både det breda formatet med ett årtal per kolumn och det långa med en
+årskolumn, och både kodade och textade åldersetiketter: "20", "20 år" och
+"100+ år" läses alla som tal, och "100+" blir 100.
+
+KODER KRÄVS för regionkolumnen. Hämtas uttaget med UseTexts står det "Mora"
+utan kommunkod, och då finns ingen nyckel mot resten av databasen. Läsaren
+säger ifrån i stället för att lämna en tom ram.
 """
 import re
 
@@ -101,8 +106,8 @@ def las_befolkning_per_alder(csv_path, kodning="utf-8-sig"):
     tid = _kolumn(df, "tid", "år ") if not arkol else None
     varde = _kolumn(df, "folkmängd", "folkmangd", "antal", "befolkning")
     if varde is None and tid is not None:
-        # CSV3 döper värdekolumnen till tabellens id, t.ex. "BE0101N1". Den
-        # är den enda kolumnen som inte är en dimension.
+        # Långt format döper värdekolumnen till tabellens innehållskod, t.ex.
+        # "BE0101N1". Den är den enda kolumnen som inte är en dimension.
         dimensioner = {str(reg).lower(), str(ald).lower(), str(tid).lower(),
                        "kon", "kön", "civilstand", "civilstånd"}
         ovriga = [c for c in df.columns if str(c).strip().lower() not in dimensioner]
@@ -139,8 +144,8 @@ def las_befolkning_per_alder(csv_path, kodning="utf-8-sig"):
         # utan kod. Utan kod finns ingen nyckel mot resten av databasen.
         raise ValueError(
             f"regionkolumnen i {csv_path} innehåller ingen fyrsiffrig "
-            "kommunkod. Hämta uttaget i formatet csv3, som ger koderna, eller "
-            "exportera med kod och text ur statistikdatabasen.")
+            "kommunkod. Hämta uttaget med outputFormatParams=UseCodes (eller "
+            "UseCodesAndTexts), inte UseTexts.")
     ut = ut.dropna(subset=["municipal_code"])
     ut["year"] = ut["year"].astype(int)
     ut["n_total"] = ut["n_total"].astype(float).round().astype(int)
