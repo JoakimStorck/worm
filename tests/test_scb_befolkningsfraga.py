@@ -173,3 +173,12 @@ def test_fel_utan_json_bar_kroppen():
 
 def test_ok_passerar():
     assert _kontrollera(_Svar(200, {}), "data") is None
+
+
+def test_tiden_ligger_i_stub_inte_i_rubriken():
+    """Utan styrd placering hamnade Tid i rubriken tillsammans med
+    innehållskoden: kolumnen hette "BE0101N1 2024" och året fanns inte som
+    egen kolumn. Ett uttag över tjugofem år hade gett tjugofem sådana."""
+    plac = bygg_befolkningsuttag(META)["selection"]["placement"]
+    assert plac["stub"] == ["Region", "Alder", "Tid"]
+    assert plac["heading"] == ["ContentsCode"]

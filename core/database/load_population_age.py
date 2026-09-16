@@ -36,7 +36,13 @@ from core.database.utils import kommunkod
 
 # "34 år", "34", "100+ år", "100+"
 ALDER = re.compile(r"^\s*(\d{1,3})\s*\+?\s*(år)?\s*$", re.IGNORECASE)
-AR = re.compile(r"^(19|20)\d{2}$")
+# Årtalet i en värdekolumns rubrik. Ligger Tid i rubriken i stället för i
+# stub heter kolumnen "BE0101N1 2024", alltså innehållskoden plus året, och
+# ett uttag över flera år ger en sådan kolumn per år. Rubriken kan också vara
+# årtalet ensamt.
+AR_I_RUBRIK = re.compile(r"(?:^|\s)((?:19|20)\d{2})\s*$")
+DIMENSIONER = {"region", "kommun", "alder", "ålder", "kon", "kön", "tid",
+               "civilstand", "civilstånd", "år"}
 
 
 def _sep(rader):
@@ -102,9 +108,25 @@ def las_befolkning_per_alder(csv_path, kodning="utf-8-sig"):
     df = df[aldrar.notna()]
     aldrar = aldrar[aldrar.notna()].astype(int)
 
-    arkol = [c for c in df.columns if AR.match(str(c).strip())]
+    arkol = {}
+    for c in df.columns:
+        if str(c).strip().lower() in DIMENSIONER:
+            continue
+        m = AR_I_RUBRIK.search(str(c).strip())
+        if m:
+            ar = int(m.group(1))
+            if ar in arkol.values():
+                # Två värdekolumner för samma år betyder att uttaget bär både
+                # folkmängd och folkökning. Summeras de blir talen obegripliga.
+                raise ValueError(
+                    f"{csv_path} har flera värdekolumner för {ar} "
+                    f"({[str(k) for k in arkol] + [str(c)]}). Välj en "
+                    "ContentsCode i uttaget.")
+            arkol[c] = ar
     tid = _kolumn(df, "tid", "år ") if not arkol else None
     varde = _kolumn(df, "folkmängd", "folkmangd", "antal", "befolkning")
+    if varde is not None and str(varde).strip().lower() in DIMENSIONER:
+        varde = None
     if varde is None and tid is not None:
         # Långt format döper värdekolumnen till tabellens innehållskod, t.ex.
         # "BE0101N1". Den är den enda kolumnen som inte är en dimension.
@@ -119,11 +141,11 @@ def las_befolkning_per_alder(csv_path, kodning="utf-8-sig"):
     if arkol:
         # Brett format: ett årtal per kolumn.
         langt = []
-        for c in arkol:
+        for c, ar in arkol.items():
             langt.append(pd.DataFrame({
                 "municipal_code": ut["municipal_code"].to_numpy(),
                 "age": ut["age"].to_numpy(),
-                "year": int(str(c).strip()),
+                "year": ar,
                 "n_total": pd.to_numeric(df[c].astype(str).str.replace(r"\s", "", regex=True),
                                          errors="coerce").to_numpy()}))
         ut = pd.concat(langt, ignore_index=True)

@@ -244,7 +244,16 @@ def bygg_befolkningsuttag(meta, ar=None):
         val.append({"variableCode": "ContentsCode", "valueCodes": [innehall[0]]})
     return {"params": {"lang": "sv", "outputFormat": "csv",
                        "outputFormatParams": "UseCodes"},
-            "selection": {"selection": val}}
+            "selection": {"selection": val,
+                          # PLACERINGEN STYRS, annars hamnar Tid i rubriken
+                          # tillsammans med innehållskoden: kolumnen hette
+                          # "BE0101N1 2024" och året fanns inte som egen
+                          # kolumn. Med Tid i stub blir formatet långt och
+                          # förutsägbart -- en rad per kommun, ålder och år --
+                          # vilket också är vad historikuttaget behöver när
+                          # det räknar upp tjugofem år.
+                          "placement": {"stub": ["Region", "Alder", "Tid"],
+                                        "heading": ["ContentsCode"]}}}
 
 
 QUERY_BUILDERS = {"befolkning_per_alder": bygg_befolkningsuttag}

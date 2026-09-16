@@ -50,6 +50,23 @@ KLARTEXT = """\
 "Älvdalen";"20 år";90
 """
 
+# Rubrikraden som SCB faktiskt gav: Tid ligger i värdekolumnens rubrik
+# tillsammans med innehållskoden, och finns inte som egen kolumn.
+AR_I_RUBRIK = """\
+"Region","Alder","BE0101N1 2024"
+"00","20",100000
+"20","20",5000
+"2062","20",200
+"2062","100+",3
+"2062","tot",20000
+"2039","20",90
+"""
+
+TVA_INNEHALL = """\
+"Region","Alder","BE0101N1 2024","BE0101N2 2024"
+"2062","20",200,5
+"""
+
 LANGT = """\
 "region";"ålder";"kön";"tid";"Folkmängd"
 "2062 Mora";"20 år";"män";"2023";110
@@ -93,6 +110,23 @@ def test_langt_format_med_koder(tmp_path):
     assert int(df[(df.municipal_code == "2062") & (df.age == 20)]["n_total"].iloc[0]) == 200
     assert 100 in set(df["age"])
     assert set(df["year"]) == {2024}
+
+
+def test_aret_i_vardekolumnens_rubrik(tmp_path):
+    """Uttaget med Tid i rubriken ger kolumnen "BE0101N1 2024" och ingen
+    tid-kolumn. Året läses ur rubriken."""
+    df = las_befolkning_per_alder(_skriv(tmp_path, "rubrik.csv", AR_I_RUBRIK))
+    assert set(df["municipal_code"]) == {"2062", "2039"}
+    assert set(df["year"]) == {2024}
+    assert int(df[(df.municipal_code == "2062") & (df.age == 20)]["n_total"].iloc[0]) == 200
+    assert 100 in set(df["age"])
+
+
+def test_tva_vardekolumner_for_samma_ar_kastar(tmp_path):
+    """Folkmängd och folkökning i samma fil. Summeras de blir talen
+    obegripliga, så uttaget måste välja en ContentsCode."""
+    with pytest.raises(ValueError, match="flera värdekolumner"):
+        las_befolkning_per_alder(_skriv(tmp_path, "tva.csv", TVA_INNEHALL))
 
 
 def test_klartext_utan_koder_ger_begripligt_fel(tmp_path):
