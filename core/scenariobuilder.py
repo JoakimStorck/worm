@@ -752,8 +752,21 @@ class ScenarioBuilder:
         # Senaste lön och arbetslöshetens början. Den som aldrig haft en
         # anställning har ingen senaste lön, och för henne är rho * Pi rätt
         # utgångspunkt -- det är vad w_res redan är.
-        df["w_last"] = np.nan
-        df["unemployed_since"] = np.nan
+        # UPPSTARTENS ARBETSLÖSA MÅSTE HA EN KLOCKA. Utan unemployed_since och
+        # w_last returnerar _uppdatera_reservation tidigt, och deras anspråk
+        # står kvar på rho * Pi för evigt. I en körning var 2 553 av 3 233
+        # arbetslösa sådana -- fyra femtedelar -- och eftersom Pi är deras EGET
+        # yrkes pris avvisade de varje lågavlönad position vars Pi låg lägre.
+        # Stocken blev den ursprungliga kohorten, frusen: arbetslösa 3 326 år
+        # ett och 3 252 år tio.
+        #
+        # De har ingen tidigare anställning, så w_last sätts till deras
+        # ingående anspråk. Det är inte en lön de haft utan den nivå de utgår
+        # från, vilket är vad w_last betyder i mekaniken.
+        df["w_last"] = np.where(df["status"].to_numpy() == "unemployed",
+                                df["w_res"].to_numpy(), np.nan)
+        df["unemployed_since"] = np.where(df["status"].to_numpy() == "unemployed",
+                                          0.0, np.nan)
         # Relevansmängdens lönefördelning, skattad när arbetslösheten börjar.
         df["w_rel_med"] = np.nan
         df["w_rel_sd"] = np.nan

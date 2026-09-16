@@ -99,9 +99,52 @@ class World(IndividualViews):
                 f"{self.simulation_end_time:.0f}: månadsskiften, tvärsnitt och "
                 "lönerevision skulle saknas i resten av körningen.")
 
+    def _skatta_relevansfordelningar(self):
+        """Fördelningen över relevansmängden för uppstartens arbetslösa.
+
+        bli_arbetslos skattar den för var och en som blir arbetslös under
+        körningen, men uppstartens kohort blir aldrig arbetslös -- de ÄR det
+        från början. Utan skattningen faller de tillbaka på den
+        personrelativa sigmoiden, och i en körning var de fyra femtedelar av
+        stocken.
+
+        En gång, före första händelsen. Kostnaden är ett svep över
+        vakansstocken per individ, alltså samma arbete som en sökning, och
+        körningen gör 700 000 sökningar.
+        """
+        ind = self.individuals
+        if 'w_rel_med' not in ind.columns or 'status' not in ind.columns:
+            return
+        from core.matching_core import relevansfordelning
+        mask = ((ind['status'] == 'unemployed')
+                & ind['w_rel_med'].isna()).to_numpy()
+        if not mask.any():
+            return
+        from math import erf, sqrt
+        n_ok = 0
+        for idx in ind.index[mask]:
+            try:
+                f = relevansfordelning(self, idx)
+            except Exception:
+                f = None
+            if not f:
+                continue
+            med, sd, _n = f
+            ind.at[idx, 'w_rel_med'] = med
+            ind.at[idx, 'w_rel_sd'] = sd
+            w_last = float(ind.at[idx, 'w_last']) if 'w_last' in ind.columns else float('nan')
+            if np.isfinite(w_last) and w_last > 0 and sd > 0:
+                z = (np.log(w_last) - np.log(med)) / sd
+                p0 = 0.5 * (1.0 + erf(z / sqrt(2.0)))
+                ind.at[idx, 'p_claim0'] = float(min(max(p0, 0.01), 0.995))
+            n_ok += 1
+        print(f"[reservation] relevansfördelning skattad för {n_ok} av "
+              f"{int(mask.sum())} arbetslösa vid uppstart")
+
     def simulate(self):
         from core.event_handlers import RULE_SWITCH
         self.wallclock_start = time.time()
+        self._skatta_relevansfordelningar()
         self._init_events()
         self._check_calendar_covers_run()
         n_handelser = 0

@@ -363,3 +363,46 @@ def test_varaktighetsmattet(tmp_path):
     assert v["andel_12man"] == pytest.approx(0.5)
     assert v["andel_6man"] == pytest.approx(0.5)
     assert v["median"] == pytest.approx(225.0)
+
+
+def test_uppstartens_arbetslosa_far_klocka():
+    """Utan unemployed_since och w_last returnerar _uppdatera_reservation
+    tidigt, och anspråket står kvar på rho * Pi för evigt. I en körning var
+    2 553 av 3 233 arbetslösa sådana -- fyra femtedelar -- och eftersom Pi är
+    deras EGET yrkes pris avvisade de varje lågavlönad position vars Pi låg
+    lägre. Stocken blev den ursprungliga kohorten, frusen."""
+    df = pd.DataFrame({"status": ["unemployed", "employed", "not_in_labor_force"],
+                       "pi_o": [1.0, 1.2, 0.9]})
+    rho = 0.7
+    df["w_res"] = rho * df["pi_o"]
+    df["w_last"] = np.where(df["status"].to_numpy() == "unemployed",
+                            df["w_res"].to_numpy(), np.nan)
+    df["unemployed_since"] = np.where(df["status"].to_numpy() == "unemployed",
+                                      0.0, np.nan)
+    assert df.at[0, "w_last"] == pytest.approx(0.7)
+    assert df.at[0, "unemployed_since"] == 0.0
+    assert np.isnan(df.at[1, "w_last"])          # anställd: ingen klocka
+    assert np.isnan(df.at[2, "unemployed_since"])
+
+
+def test_scenariobuilder_satter_klockan():
+    import inspect
+
+    from core import scenariobuilder
+
+    kalla = inspect.getsource(scenariobuilder)
+    assert 'df["unemployed_since"] = np.where' in kalla
+    assert 'df["w_last"] = np.where' in kalla
+
+
+def test_uppstartens_fordelning_skattas_en_gang():
+    """Och att passet finns: utan den faller kohorten tillbaka på den
+    personrelativa sigmoiden i stället för percentilvägen."""
+    import inspect
+
+    from core.world import World
+
+    assert "_skatta_relevansfordelningar" in inspect.getsource(World.simulate)
+    kalla = inspect.getsource(World._skatta_relevansfordelningar)
+    assert "relevansfordelning" in kalla
+    assert "p_claim0" in kalla
