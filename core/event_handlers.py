@@ -441,30 +441,126 @@ def bli_arbetslos(world, idx, t_now):
     if 'unemployed_since' in ind.columns:
         ind.at[idx, 'unemployed_since'] = float(t_now)
 
+    # RELEVANSMÄNGDENS LÖNEFÖRDELNING, en gång per arbetslöshetsperiod.
+    # Anspråket mäts i percentil i HENNES mängd, och ingångspercentilen är den
+    # hennes senaste lön motsvarar där. Den som låg över sitt yrkes medel får
+    # hög ingångspercentil, den som låg under får låg -- asymmetrin faller ut
+    # utan ett eget steg.
+    if 'w_rel_med' in ind.columns:
+        try:
+            from core.matching_core import relevansfordelning
+            f = relevansfordelning(world, idx)
+        except Exception:
+            f = None
+        if f:
+            med, sd, _n = f
+            ind.at[idx, 'w_rel_med'] = med
+            ind.at[idx, 'w_rel_sd'] = sd
+            w_last = _tal(world, idx, 'w_last')
+            if np.isfinite(w_last) and w_last > 0 and sd > 0:
+                z = (np.log(w_last) - np.log(med)) / sd
+                # Percentilen hennes senaste lön motsvarar, kapad så att en
+                # extrem historik inte ger ett anspråk utanför fördelningen.
+                from math import erf
+                p0 = 0.5 * (1.0 + erf(z / np.sqrt(2.0)))
+                ind.at[idx, 'p_claim0'] = float(min(max(p0, 0.01), 0.995))
+            else:
+                ind.at[idx, 'p_claim0'] = np.nan
+        else:
+            ind.at[idx, 'w_rel_med'] = np.nan
+            ind.at[idx, 'w_rel_sd'] = np.nan
+            ind.at[idx, 'p_claim0'] = np.nan
+
 
 def reservationsgolv(world, idx):
-    """Lägsta löneanspråk: relativt den egna historiken OCH absolut i yrket.
+    """Lägsta löneanspråk i FALLBACK-vägen: en andel av senaste lön.
 
-    Två golv, och det bindande är det högsta. Det relativa -- en andel av
-    senaste lön -- fångar att ingen halverar sitt anspråk hur länge hon än
-    söker. Det absoluta fångar kollektivavtalens lägstalöner, som inte ligger
-    på en andel av DEN EGNA tidigare lönen utan på en andel av yrkets nivå:
-    den som haft hög lön och sjunker till sextio procent ligger fortfarande
-    över avtalet, medan den som haft låg lön hamnar under vad någon
-    arbetsgivare får betala.
+    Används bara när relevansmängden är för tunn för att skatta en
+    lönefördelning. I huvudvägen är botten endogen -- den lägst betalda
+    position hon faktiskt ser -- och behöver inget golv alls.
+
+    AVTALSGOLVET LIGGER INTE HÄR. Jag lade in det som en Pi-andel i 0151 och
+    tog bort det igen: det finns redan på positionens sida, som
+    wage_floor_share * Pi i negotiated_wage, och där hör det hemma. Ett
+    avtalsgolv påfört HENNES anspråk hade skalats med hennes tidigare lön,
+    men avtalet i vården är detsamma oavsett vad hon tjänade förut.
     """
     sim = world.cfg_reader.config.get('simulation', {})
     andel = float(sim.get('reservation_floor_fraction', 0.6))
-    pi_andel = float(sim.get('reservation_floor_pi_fraction', 0.0))
     absolut = float(sim.get('reservation_floor', 0.0))
-
     w_last = _tal(world, idx, 'w_last')
     golv = andel * w_last if np.isfinite(w_last) else absolut
-    if pi_andel > 0:
-        pi_o = _tal(world, idx, 'pi_o')
-        if np.isfinite(pi_o):
-            golv = max(golv, pi_andel * pi_o)
     return max(golv, absolut)
+
+
+def _normkvantil(p):
+    """Normalfördelningens kvantil. Acklams rationella approximation, fel
+    under 1.15e-9 -- gott och väl inom vad en lognormal approximation av
+    lönefördelningen tål, och utan scipy-anrop i den varma slingan."""
+    a = (-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+         1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00)
+    b = (-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
+         6.680131188771972e+01, -1.328068155288572e+01)
+    c = (-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
+         -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00)
+    d = (7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
+         3.754408661907416e+00)
+    pl, ph = 0.02425, 1 - 0.02425
+    if p < pl:
+        q = np.sqrt(-2 * np.log(p))
+        return float((((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])
+                     / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1))
+    if p > ph:
+        q = np.sqrt(-2 * np.log(1 - p))
+        return float(-(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])
+                     / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1))
+    q = p - 0.5
+    r = q * q
+    return float((((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q
+                 / (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1))
+
+
+def _sigmoidandel(dt, t_halv, bredd):
+    """Normaliserad logistisk: exakt 1 vid dt = 0, mot 0 för stora dt.
+
+    En logistisk kurva centrerad på 150 dagar har redan gett vika 8 procent
+    vid dt = 0, så anspråket hade startat under senaste lön i stället för på
+    den. Kvoten mot värdet vid noll ger exakt utgångspunkten i det ögonblick
+    hon blir arbetslös. Priset är att t_halv ligger några dagar före den
+    verkliga halvvägspunkten -- 159 dagar för förvalen 150 och 60.
+    """
+    def _s(z):
+        return 1.0 / (1.0 + np.exp(np.clip(z, -700.0, 700.0)))
+
+    andel = _s((float(dt) - t_halv) / bredd) / _s(-t_halv / bredd)
+    return float(min(max(andel, 0.0), 1.0))
+
+
+def _med_takt(world, idx, mal, t_now):
+    """Begränsar hur snabbt anspråket får falla.
+
+    PERCENTILSKALAN KAN FÖRSTÄRKA RÖRELSEN. En liten förändring i percentil
+    blir en stor löneförändring i fördelningens svansar, och en person som
+    sitter högt upp kan annars tappa tjugo procent på en månad. Trögheten är
+    hela mekanismen -- det är den som gör att arbetslösheten får en längd --
+    så den får inte kringgås av att skalan är olinjär.
+
+    Taket är en största relativ sänkning per månad. Uppåt finns ingen gräns:
+    anspråket stiger bara när hon får jobb, och då sätts det direkt.
+    """
+    ind = world.individuals
+    sim = world.cfg_reader.config.get('simulation', {})
+    tak = float(sim.get('reservation_max_drop_per_month', 0.0))
+    nuvarande = _tal(world, idx, 'w_res')
+    if tak <= 0 or not np.isfinite(nuvarande) or nuvarande <= 0:
+        return float(mal)
+    sist = _tal(world, idx, 'w_res_time')
+    dt_dagar = (float(t_now) - sist) if np.isfinite(sist) else 30.44
+    manader = max(dt_dagar, 0.0) / 30.44
+    lagsta = nuvarande * ((1.0 - tak) ** manader)
+    if 'w_res_time' in ind.columns:
+        ind.at[idx, 'w_res_time'] = float(t_now)
+    return float(max(mal, lagsta))
 
 
 def _uppdatera_reservation(world, idx, t_now=None):
@@ -472,22 +568,36 @@ def _uppdatera_reservation(world, idx, t_now=None):
 
     TVÅ LÄGEN, styrda av reservation_mode.
 
-    duration (förval): anspråket startar på senaste lön och faller SIGMOIDALT
-    med arbetslöshetens längd mot golvet,
+    duration (förval): anspråket är en PERCENTIL i lönefördelningen över
+    individens egen relevansmängd, och percentilen faller sigmoidalt med
+    arbetslöshetens längd. Hon tar de bästa X procenten av vad hon ser, och X
+    sjunker. Ingångspercentilen är den hennes senaste lön motsvarar i just
+    hennes mängd, så den som låg över sitt yrkes medel börjar högre.
 
-        w_res(t) = golv + (w_last - golv) / (1 + exp((t - t_halv) / bredd))
+    VARFÖR PERCENTIL OCH INTE KRONOR. Yrkets medel behöver ingen egen
+    referens -- det ÄR percentil femtio i hennes mängd så länge hennes yrke
+    dominerar den. Övergången till andra yrken kräver ingen mekanism: när
+    percentilen sjunker kommer sämre passande positioner med, och de betalar
+    mindre av sig själva genom p = q ** (k * r_req). Och botten blir endogen,
+    den lägst betalda position hon faktiskt ser, i stället för en andel av
+    hennes historik.
 
-    Tiden och inte antalet sökningar är rätt variabel. Det gamla förfallet låg
-    på 0.95 per MISSLYCKAD SÖKNING, och arbetslösa söker tretton gånger om
-    året: anspråket halverades på ett år, men bara för att sökintensiteten
-    råkade vara tretton. Den som sökte sällan behöll sitt anspråk längre,
-    vilket är bakvänt. Med tiden som variabel blir hur ofta hon söker och hur
-    hennes anspråk sjunker oberoende, som de bör vara.
+    AVTALSGOLVET LIGGER INTE HÄR. Det finns redan på positionens sida som
+    wage_floor_share * Pi i negotiated_wage -- en egenskap hos jobbet, inte
+    hos henne. Att lägga det på anspråket hade gett en person med hög tidigare
+    lön ett högt avtalsgolv påfört, vilket är fel: avtalet i vården är
+    detsamma oavsett vad hon tjänade förut.
+
+    Saknas fördelningen -- för tunn relevansmängd, ingen tidigare lön --
+    används den personrelativa sigmoiden mot ett golv, som är ärligare än att
+    skatta en fördelning på tre positioner.
+
+    Tiden och inte antalet sökningar är variabeln. Det gamla förfallet låg på
+    0.95 per MISSLYCKAD SÖKNING, och arbetslösa söker tretton gånger om året:
+    den som sökte sällan behöll sitt anspråk längre, vilket är bakvänt.
 
     Mittpunkten har ett svenskt ankare: a-kassan ger 80 procent av tidigare
-    lön de första 100 dagarna, sedan 70, och efter ett år grundnivå. Det är en
-    dokumenterad trappa i inkomsten under arbetslöshet och sätter tidsskalan
-    för när anspråket ger vika.
+    lön de första 100 dagarna, sedan 70, och efter ett år grundnivå.
 
     per_search: det gamla beteendet, kvar för jämförelse.
     """
@@ -512,26 +622,27 @@ def _uppdatera_reservation(world, idx, t_now=None):
     w_last = _tal(world, idx, 'w_last')
     if not np.isfinite(w_last) or w_last <= 0:
         return
+
+    t_halv = float(sim.get('reservation_half_days', 150.0))
+    bredd = max(float(sim.get('reservation_width_days', 60.0)), 1e-6)
+    andel = _sigmoidandel(float(t_now) - start, t_halv, bredd)
+
+    med = _tal(world, idx, 'w_rel_med')
+    sd = _tal(world, idx, 'w_rel_sd')
+    p0 = _tal(world, idx, 'p_claim0')
+    if np.isfinite(med) and np.isfinite(sd) and sd > 0 and np.isfinite(p0):
+        p_min = float(sim.get('reservation_min_percentile', 0.05))
+        p_claim = min(max(p_min + (p0 - p_min) * andel, 1e-4), 0.9999)
+        mal = float(med * np.exp(sd * _normkvantil(p_claim)))
+        ind.at[idx, 'w_res'] = _med_takt(world, idx, mal, t_now)
+        return
+
     golv = reservationsgolv(world, idx)
     if golv >= w_last:
         ind.at[idx, 'w_res'] = w_last
         return
-    t_halv = float(sim.get('reservation_half_days', 150.0))
-    bredd = max(float(sim.get('reservation_width_days', 60.0)), 1e-6)
-    # NORMALISERAD SIGMOID. En logistisk kurva centrerad på 150 dagar har
-    # redan gett vika 8 procent vid t = 0, så anspråket hade startat på 0.97
-    # av senaste lön i stället för på den. Kvoten mot värdet vid noll ger
-    # exakt senaste lön i det ögonblick hon blir arbetslös, vilket är
-    # egenskapen som betyder något: hon börjar med anspråket från sin
-    # föregående anställning. Priset är att t_halv inte längre är exakt
-    # halvvägspunkten -- den ligger några dagar senare, vid 159 dagar för
-    # förvalen 150 och 60.
-    def _s(z):
-        return 1.0 / (1.0 + np.exp(np.clip(z, -700, 700)))
-
-    dt = float(t_now) - start
-    andel = _s((dt - t_halv) / bredd) / _s(-t_halv / bredd)
-    ind.at[idx, 'w_res'] = golv + (w_last - golv) * float(min(max(andel, 0.0), 1.0))
+    ind.at[idx, 'w_res'] = _med_takt(world, idx,
+                                     golv + (w_last - golv) * andel, t_now)
 
 
 def _decay_reservation(world, idx):

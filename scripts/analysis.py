@@ -164,6 +164,29 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
                   "aldrig tillsätts syns inte, så talet underskattar. SCB:s tal "
                   "är stock delat med flöde och gäller näringslivet.\n")
 
+            av = arbetsloshetens_varaktighet(senaste) if senaste else None
+            if av:
+                A("\n**Arbetslöshetens varaktighet.** Pågående perioder vid "
+                  "körningens slut. Det är det mått tidskonstanterna i "
+                  "löneanspråket ska kalibreras mot: sedan anspråket faller med "
+                  "arbetslöshetens LÄNGD är det trögheten som sätter hur länge "
+                  "någon står utanför, och därmed stocken.\n")
+                A(f"| | modell |")
+                A(f"|---|---|")
+                A(f"| median | {av['median']:.0f} dagar |")
+                A(f"| p90 | {av['p90']:.0f} dagar |")
+                A(f"| andel över 6 månader | {100*av['andel_6man']:.0f} % |")
+                A(f"| andel över 12 månader | {100*av['andel_12man']:.0f} % |")
+                A(f"| n | {av['n']} arbetslösa |")
+                if av["utan_klocka"]:
+                    A(f"\n{av['utan_klocka']} arbetslösa saknar startpunkt -- de "
+                      "har varit det sedan uppstarten och har ingen uppmätt "
+                      "längd.\n")
+                A("\nMåttet är censurerat: pågående perioder, inte avslutade, "
+                  "så de långa underskattas. Arbetsförmedlingens andel "
+                  "inskrivna över sex respektive tolv månader räknar också "
+                  "pågående inskrivningar och är därmed jämförbar.\n")
+
             mr = misslyckade_rekryteringar(senaste) if senaste else None
             if mr and mr["n_lang"]:
                 A("\n**Misslyckade rekryteringar.** Positioner lediga vid "
@@ -575,6 +598,47 @@ def scb_arbetsloshet(koder, db_path="data/worm.sqlite3"):
 SCB_REKRYTERING_TOPP = 89.2
 SCB_REKRYTERING_AMPLITUD = 156.5
 SCB_REKRYTERING_NIVA = 47.7
+
+
+def arbetsloshetens_varaktighet(run_dir, t_slut=None):
+    """Hur länge de arbetslösa har varit det, vid körningens slut.
+
+    TIDSKONSTANTERNA SKA MÄTAS MOT DET HÄR, inte mot arbetslöshetsnivån.
+    Sedan anspråket faller med arbetslöshetens längd är det trögheten som
+    sätter hur länge någon står utanför, och därmed stocken: u = u_min + V/L.
+    Att kalibrera reservation_half_days mot nivån vore att justera en
+    tidskonstant efter ett utfall den bara delvis bestämmer.
+
+    Måttet är CENSURERAT: pågående perioder, inte avslutade. Det underskattar
+    därför de långa, eftersom den som fått jobb inte längre syns. Jämförelsen
+    mot Arbetsförmedlingens andel inskrivna över sex respektive tolv månader
+    har samma karaktär -- den räknar också pågående inskrivningar -- så de är
+    jämförbara storheter.
+    """
+    p = os.path.join(run_dir, "final_state_individuals.csv")
+    if not os.path.isfile(p):
+        return None
+    ind = pd.read_csv(p)
+    if "unemployed_since" not in ind.columns or "status" not in ind.columns:
+        return None
+    if t_slut is None:
+        from core.analysis.eventlog import read_events
+        try:
+            t_slut = max((float(r["time"]) for r in read_events(run_dir)), default=np.nan)
+        except Exception:
+            return None
+    if not np.isfinite(t_slut):
+        return None
+    arbl = ind[ind["status"] == "unemployed"].copy()
+    arbl["dagar"] = t_slut - pd.to_numeric(arbl["unemployed_since"], errors="coerce")
+    d = arbl["dagar"].dropna()
+    if len(d) < 20:
+        return None
+    return {"n": int(len(d)), "median": float(d.median()),
+            "andel_6man": float((d >= 182.6).mean()),
+            "andel_12man": float((d >= 365.25).mean()),
+            "p90": float(d.quantile(0.9)),
+            "utan_klocka": int(len(arbl) - len(d))}
 
 
 def misslyckade_rekryteringar(run_dir, t_slut=None):

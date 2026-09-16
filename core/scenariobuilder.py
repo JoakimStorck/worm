@@ -754,6 +754,11 @@ class ScenarioBuilder:
         # utgångspunkt -- det är vad w_res redan är.
         df["w_last"] = np.nan
         df["unemployed_since"] = np.nan
+        # Relevansmängdens lönefördelning, skattad när arbetslösheten börjar.
+        df["w_rel_med"] = np.nan
+        df["w_rel_sd"] = np.nan
+        df["p_claim0"] = np.nan
+        df["w_res_time"] = np.nan
 
         # r_i är härledd ur kompetenscirklarna (World.init_competence). Tills
         # cirklarna byggts: 0, dvs. samma som en färsk arbetare med en cirkel.

@@ -94,6 +94,80 @@ def current_surplus(world, idx, w_off, commute_km):
     return float(w_off) - float(cfg['commute_cost_per_km']) * float(commute_km) - w_res
 
 
+def relevansfordelning(world, idx, min_antal=5):
+    """Lönefördelningen över individens relevansmängd, som median och log-sd.
+
+    ANSPRÅKET MÄTS I PERCENTIL, INTE I KRONOR, och percentilen ska läsas i
+    HENNES fördelning: de positioner q släpper igenom, viktade med
+    mötessannolikheten. Det är individens perspektiv -- hon tar de bästa X
+    procenten av vad hon ser, och X faller med tiden.
+
+    MÄNGDEN FÅR INTE VARA DAGENS SÖKOMGÅNG. Vore w_res kvantilen av det hon
+    möter just nu accepterar hon alltid något så snart hon möter tillräckligt
+    många: tröskeln följer med draget, och en reservationslön som aldrig kan
+    leda till avslag är ingen reservationslön. Fördelningen beräknas därför
+    över hela vakansstocken en gång per arbetslöshetsperiod, inte per sökning.
+
+    TVÅ TAL RÄCKER. Lognormal är en rimlig approximation för löner -- rapporten
+    kontrollerar den redan via P90/P50 mot P50/P10 -- så medianen och
+    log-spridningen bär fördelningen, och kvantilen blir
+    med * exp(sd * z(p)). Att lagra hela fördelningen per individ vore två
+    kolumner mot hundratals utan att svaret blev bättre.
+
+    Returnerar (median, log_sd, n) eller None om mängden är för tunn. En
+    fördelning skattad på färre än min_antal positioner är brus, och då är
+    den personrelativa sigmoiden från 0151 det ärligare fallbacket.
+    """
+    from core.occupations.utils import negotiated_wage
+    from core.occupations.requirement import productivity
+
+    cand = np.flatnonzero(world.vacant_mask())
+    if cand.size < min_antal:
+        return None
+    A = world.job_arrays()
+    cfg = search_config(world)
+    rad = world.ind_row(idx)
+
+    jx, jy = A["x_occ"][cand], A["y_occ"][cand]
+    if hasattr(world, "circles"):
+        q = world.circles.competitiveness(idx, jx, jy, A["r_o"][cand],
+                                          world.competence_params())
+    else:
+        ix, iy = float(rad["x_occ"]), float(rad["y_occ"])
+        ri = float(rad.get("r_i", 0.0) or 0.0)
+        d2 = (jx - ix) ** 2 + (jy - iy) ** 2
+        sig2 = np.maximum((float(cfg.get("sigma_gamma", 1.0)) ** 2)
+                          * (A["r_o"][cand] ** 2 + ri ** 2), 1e-9)
+        q = np.exp(-0.5 * d2 / sig2)
+
+    km = np.hypot(A["x"][cand] - float(rad["x"]),
+                  A["y"][cand] - float(rad["y"])) / 1000.0
+    vikt = np.minimum(1.0, q)
+    d0 = cfg.get("commute_decay_km")
+    if d0:
+        vikt = vikt * np.exp(-km / float(d0))
+
+    pkt = productivity(q, A["r_req"][cand], k=float(cfg.get("requirement_k", 2.0)))
+    brg = cfg.get("bargaining")
+    if brg:
+        # w_res = 0 här: vi vill ha positionens lönebud oberoende av hennes
+        # nuvarande anspråk, annars definieras anspråket av sig självt.
+        w_off = negotiated_wage(pkt, A["wage"][cand], 0.0, **brg)
+    else:
+        w_off = A["wage"][cand]
+
+    ok = np.isfinite(w_off) & (w_off > 0) & (vikt > 0)
+    if ok.sum() < min_antal:
+        return None
+    lw = np.log(w_off[ok])
+    v = vikt[ok] / vikt[ok].sum()
+    mu = float(np.dot(v, lw))
+    var = float(np.dot(v, (lw - mu) ** 2))
+    if not np.isfinite(var) or var <= 0:
+        return None
+    return float(np.exp(mu)), float(np.sqrt(var)), int(ok.sum())
+
+
 def apply_once(world, idx, t_now):
     """En sökomgång för en arbetslös: möte, val, ANSÖKAN.
 

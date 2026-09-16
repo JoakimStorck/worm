@@ -243,8 +243,30 @@ simulation:
   # halverar sitt anspråk hur länge hon än söker; det absoluta fångar
   # kollektivavtalens lägstalöner, som ligger på en andel av YRKETS nivå och
   # inte av den egna tidigare lönen. 0.0 stänger av Pi-golvet.
+  # ANSPRÅKET ÄR EN PERCENTIL i lönefördelningen över individens egen
+  # relevansmängd -- de positioner q släpper igenom, viktade med
+  # mötessannolikheten. Hon tar de bästa X procenten av vad hon ser, och X
+  # faller sigmoidalt med arbetslöshetens längd. Ingångspercentilen är den
+  # hennes senaste lön motsvarar i just hennes mängd.
+  #
+  # Yrkets medel behöver därmed ingen egen referens: det ÄR percentil femtio
+  # så länge hennes yrke dominerar mängden. Övergången till andra yrken kräver
+  # ingen mekanism -- när percentilen sjunker kommer sämre passande positioner
+  # med, och de betalar mindre av sig själva genom p = q ** (k * r_req).
+  #
+  # AVTALSGOLVET LIGGER INTE HÄR utan på positionens sida, som
+  # wage_floor_share * Pi i negotiated_wage. Det är en egenskap hos jobbet och
+  # inte hos henne: avtalet i vården är detsamma oavsett vad hon tjänade förut.
+  reservation_min_percentile: 0.05
+  # Största relativa sänkning per månad. Percentilskalan är olinjär, så en
+  # liten percentilförändring blir en stor löneförändring i svansarna, och en
+  # person som sitter högt upp kan annars tappa en femtedel på en månad.
+  # Trögheten ÄR mekanismen -- den ger arbetslösheten dess längd -- och får
+  # inte kringgås av att skalan är olinjär. 0 stänger av taket.
+  reservation_max_drop_per_month: 0.08
+  # Fallback när relevansmängden är för tunn för att skatta en fördelning:
+  # personrelativ sigmoid mot en andel av senaste lön.
   reservation_floor_fraction: 0.6
-  reservation_floor_pi_fraction: 0.0
   reservation_decay_per_search: 0.95   # används bara i läget per_search
   # Reservationslönens golv. 0.10 av medellönen är orimligt lågt: med a-kassa
   # och försörjningsstöd ligger den reella nivån kring 0.35-0.45.

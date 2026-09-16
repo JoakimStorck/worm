@@ -147,7 +147,8 @@ class World(IndividualViews):
         # körning mot ett äldre starttillstånd inte faller på en saknad
         # kolumn: w_last är NaN för den som aldrig varit anställd, och
         # unemployed_since NaN för den som inte är arbetslös.
-        for kol in ('w_last', 'unemployed_since', 'pi_o'):
+        for kol in ('w_last', 'unemployed_since', 'pi_o',
+                    'w_rel_med', 'w_rel_sd', 'p_claim0', 'w_res_time'):
             if kol not in self.individuals.columns:
                 self.individuals[kol] = np.nan
 
