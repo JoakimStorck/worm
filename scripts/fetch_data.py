@@ -64,27 +64,24 @@ MANIFEST = [
     },
     # Folkmängd per ettårsklass och kommun. Ålderspyramiden som
     # startpopulationens åldrar dras ur (core/database/load_population_age.py).
-    # Alder="*" ger alla ettårsklasser OCH kategorin "tot" om tabellen har en
-    # sådan; läsaren utesluter den. Region-urvalet nedan är hela värdemängden
-    # av kommuner. VÄRDEMÄNGDENS NAMN KAN ÄNDRAS mellan årgångar: stämmer det
-    # inte, hämta det aktuella ur
-    #   https://api.scb.se/OV0104/v1/doris/sv/ssd/BE/BE0101/BE0101A/BefolkningNy
+    #
+    # Frågan byggs ur tabellens EGEN metadata av bygg_befolkningsfraga(), inte
+    # ur en handskriven värdemängd. Ett tidigare utkast gissade
+    # "vs:RegionKommun07EjAggr"; namnet gick inte att verifiera, och en
+    # felaktig värdemängd ger 400 utan att säga vilken. Metadatan listar
+    # koderna rakt av, så gissningen behövs inte.
+    #
+    # BefolkningNy slutar vid 2024. Statistiken för 2025 och framåt ligger i
+    # BefolkningCKM, som är röjandeskyddad med Cell Key Method: cellvärdena är
+    # störda, och SCB påpekar att osäkerheten adderas när värden summeras.
+    # Uppstarten tar därför 2024 ur den ostörda tabellen, som dessutom bär
+    # hela historiken 1968-2024 som befolkningsbanan behöver.
     {
         "type": "scb_px",
         "dest": os.path.join(DATA_DIR, "Folkmangd kommun alder.csv"),
         "path": "BE/BE0101/BE0101A/BefolkningNy",
-        "query": {
-            "query": [
-                {"code": "Region", "selection": {"filter": "vs:RegionKommun07EjAggr",
-                                                 "values": ["*"]}},
-                {"code": "Alder", "selection": {"filter": "all", "values": ["*"]}},
-                {"code": "Kon", "selection": {"filter": "item", "values": ["1", "2"]}},
-                {"code": "ContentsCode", "selection": {"filter": "item",
-                                                       "values": ["BE0101N1"]}},
-                {"code": "Tid", "selection": {"filter": "item", "values": ["2024"]}},
-            ],
-            "response": {"format": "csv"},
-        },
+        "query_fn": "befolkning_per_alder",
+        "query_args": {"ar": "2024"},
     },
     # Stubbar – ersätt path/query med dina egna uttag (tom query = hela tabellen):
     {"type": "scb_px", "dest": os.path.join(DATA_DIR, "employment_municipality_sni_2020.csv"),
@@ -152,14 +149,76 @@ def fetch_onet_zip(item):
         print(f"  -> {out}")
 
 
+def bygg_befolkningsfraga(meta, ar=None):
+    """JSON-frågan för folkmängd per kommun och ettårsklass, ur tabellens
+    metadata.
+
+    Tre saker avgörs av metadatan i stället för att skrivas för hand.
+
+    KOMMUNERNA. Region-listan blandar riket ("00"), länen (tvåsiffriga) och
+    kommunerna (fyrsiffriga) i samma platta värdemängd. Hämtas allt med "*"
+    kommer alla tre nivåerna med, och summeras de av misstag räknas varje
+    invånare tre gånger. Läsaren skyddar mot det genom att kräva fyra siffror,
+    men uttaget ska inte innehålla dem från början.
+
+    ÅLDRARNA. Kategorin "tot" ligger i samma lista som ettårsklasserna och
+    utesluts här.
+
+    CIVILSTÅND OCH KÖN. Båda har elimination = true, alltså summerar SCB över
+    dem när de utelämnas. Att räkna upp dem hade fyrdubblat respektive
+    fördubblat antalet celler utan att tillföra något: modellen använder
+    varken civilstånd eller kön.
+
+    Storleken blir 290 kommuner * 101 ettårsklasser = 29 290 celler för ett
+    år, med marginal till API:ets tak. Ett helt historikuttag måste däremot
+    delas upp, ett år per fråga.
+    """
+    var = {v["code"]: v for v in meta["variables"]}
+    kommuner = [k for k in var["Region"]["values"] if len(k) == 4 and k.isdigit()]
+    aldrar = [a for a in var["Alder"]["values"] if a != "tot"]
+    if not kommuner or not aldrar:
+        raise ValueError("metadatan saknar kommuner eller ettårsklasser")
+    tider = var["Tid"]["values"]
+    tid = str(ar) if ar is not None else tider[-1]
+    if tid not in tider:
+        raise ValueError(f"året {tid} finns inte i tabellen "
+                         f"({tider[0]}-{tider[-1]})")
+    return {
+        "query": [
+            {"code": "Region", "selection": {"filter": "item", "values": kommuner}},
+            {"code": "Alder", "selection": {"filter": "item", "values": aldrar}},
+            {"code": "ContentsCode", "selection": {"filter": "item",
+                                                   "values": ["BE0101N1"]}},
+            {"code": "Tid", "selection": {"filter": "item", "values": [tid]}},
+        ],
+        # CSV3 OCH INTE CSV. Formatet csv ger variablernas KLARTEXTER, alltså
+        # "Mora" utan kommunkod, och läsaren kräver fyra siffror: filen hade
+        # gett noll rader. csv3 ger koderna, en rad per cell, med variabel-
+        # namnen och tabellens id i rubrikraden.
+        "response": {"format": "csv3"},
+    }
+
+
+QUERY_BUILDERS = {"befolkning_per_alder": bygg_befolkningsfraga}
+
+
 def fetch_scb_px(item):
     if item["path"].startswith("TODO"):
         print(f"[SCB-px] HOPPAR ÖVER {item['dest']} – fyll i 'path' och 'query'.")
         return
     os.makedirs(os.path.dirname(item["dest"]), exist_ok=True)
     url = f"{SCB_PX_BASE}/{item['path']}"
+    query = item.get("query")
+    if query is None:
+        # Frågan byggs ur tabellens metadata: GET på samma URL ger variabler
+        # och deras värden.
+        byggare = QUERY_BUILDERS[item["query_fn"]]
+        print(f"[SCB-px] GET {url} (metadata)")
+        m = requests.get(url, timeout=60)
+        m.raise_for_status()
+        query = byggare(m.json(), **item.get("query_args", {}))
     print(f"[SCB-px] POST {url}")
-    r = requests.post(url, json=item["query"], timeout=120)
+    r = requests.post(url, json=query, timeout=120)
     r.raise_for_status()
     with open(item["dest"], "wb") as f:
         f.write(r.content)
@@ -195,9 +254,14 @@ def fetch_scb_geo(item):
         print(f"[SCB-geo] HOPPAR ÖVER {item['dest']} – ingen 'url' och inget 'wfs_layer'.")
 
 
-def main():
+def main(bara=None):
+    """Hämtar manifestet. `bara` är en delsträng som matchas mot målfilen:
+    utan den hämtas allt, inklusive O*NET-zippen på flera hundra megabyte."""
     for item in MANIFEST:
         t = item["type"]
+        mal = str(item.get("dest", ""))
+        if bara and bara.lower() not in mal.lower():
+            continue
         try:
             if t == "onet_zip":
                 fetch_onet_zip(item)
@@ -213,4 +277,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--only", help="hämta bara poster vars målfil innehåller "
+                                   "denna delsträng, t.ex. --only Folkmangd")
+    main(ap.parse_args().only)

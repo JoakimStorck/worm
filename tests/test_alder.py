@@ -35,6 +35,21 @@ Folkmängd efter region, ålder, kön och år
 "2039 Älvdalen";"20 år";"totalt";90
 """
 
+CSV3 = """\
+"region";"alder";"tid";"BE0101N1"
+"00";"20";"2024";100000
+"20";"20";"2024";5000
+"2062";"20";"2024";200
+"2062";"100+";"2024";3
+"2039";"20";"2024";90
+"""
+
+KLARTEXT = """\
+"region";"ålder";"2024"
+"Mora";"20 år";200
+"Älvdalen";"20 år";90
+"""
+
 LANGT = """\
 "region";"ålder";"kön";"tid";"Folkmängd"
 "2062 Mora";"20 år";"män";"2023";110
@@ -66,6 +81,24 @@ def test_hundraplus_blir_hundra(tmp_path):
     df = las_befolkning_per_alder(_skriv(tmp_path, "bred.csv", BRED))
     assert 100 in set(df["age"])
     assert df["age"].max() == 100
+
+
+def test_csv3_med_koder(tmp_path):
+    """Formatet csv3, som fetch_data.py hämtar: koder i långt format, med
+    värdekolumnen döpt till tabellens id. Riket ("00") och länet ("20") ligger
+    i samma regionkolumn som kommunerna och faller på fyrsiffrighetskravet."""
+    df = las_befolkning_per_alder(_skriv(tmp_path, "csv3.csv", CSV3))
+    assert set(df["municipal_code"]) == {"2062", "2039"}
+    assert int(df[(df.municipal_code == "2062") & (df.age == 20)]["n_total"].iloc[0]) == 200
+    assert 100 in set(df["age"])
+    assert set(df["year"]) == {2024}
+
+
+def test_klartext_utan_koder_ger_begripligt_fel(tmp_path):
+    """Formatet csv ger "Mora" utan kommunkod. Utan koden finns ingen nyckel
+    mot resten av databasen, och felet ska säga vilket format som duger."""
+    with pytest.raises(ValueError, match="csv3"):
+        las_befolkning_per_alder(_skriv(tmp_path, "klartext.csv", KLARTEXT))
 
 
 def test_konen_summeras_nar_totalraden_saknas(tmp_path):

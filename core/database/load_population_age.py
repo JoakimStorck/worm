@@ -100,6 +100,14 @@ def las_befolkning_per_alder(csv_path, kodning="utf-8-sig"):
     arkol = [c for c in df.columns if AR.match(str(c).strip())]
     tid = _kolumn(df, "tid", "år ") if not arkol else None
     varde = _kolumn(df, "folkmängd", "folkmangd", "antal", "befolkning")
+    if varde is None and tid is not None:
+        # CSV3 döper värdekolumnen till tabellens id, t.ex. "BE0101N1". Den
+        # är den enda kolumnen som inte är en dimension.
+        dimensioner = {str(reg).lower(), str(ald).lower(), str(tid).lower(),
+                       "kon", "kön", "civilstand", "civilstånd"}
+        ovriga = [c for c in df.columns if str(c).strip().lower() not in dimensioner]
+        if len(ovriga) == 1:
+            varde = ovriga[0]
 
     ut = pd.DataFrame({"municipal_code": df[reg].astype(str).str.strip(),
                        "age": aldrar.to_numpy()})
@@ -126,6 +134,13 @@ def las_befolkning_per_alder(csv_path, kodning="utf-8-sig"):
     ut = ut.dropna(subset=["year", "n_total"])
     ut["municipal_code"] = kommunkod(
         ut["municipal_code"].str.extract(r"(\d{4})")[0])
+    if ut["municipal_code"].isna().all():
+        # SCB:s format csv och csv2 ger variablernas klartexter, alltså "Mora"
+        # utan kod. Utan kod finns ingen nyckel mot resten av databasen.
+        raise ValueError(
+            f"regionkolumnen i {csv_path} innehåller ingen fyrsiffrig "
+            "kommunkod. Hämta uttaget i formatet csv3, som ger koderna, eller "
+            "exportera med kod och text ur statistikdatabasen.")
     ut = ut.dropna(subset=["municipal_code"])
     ut["year"] = ut["year"].astype(int)
     ut["n_total"] = ut["n_total"].astype(float).round().astype(int)
