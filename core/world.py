@@ -143,6 +143,14 @@ class World(IndividualViews):
 
     def _apply_decision_rules(self):
         unemployed = self.individuals[self.individuals['status'] == 'unemployed']
+        # Kolumner som reservationslönen behöver. Garanteras här så att en
+        # körning mot ett äldre starttillstånd inte faller på en saknad
+        # kolumn: w_last är NaN för den som aldrig varit anställd, och
+        # unemployed_since NaN för den som inte är arbetslös.
+        for kol in ('w_last', 'unemployed_since', 'pi_o'):
+            if kol not in self.individuals.columns:
+                self.individuals[kol] = np.nan
+
         if 'next_job_search_time' in self.individuals.columns:
             ready = unemployed[unemployed['next_job_search_time'] <= self.current_time]
         else:
@@ -557,6 +565,22 @@ class World(IndividualViews):
             factor, lead = 1.0, 0.0
         elif status == 'employed':
             factor = float(sim.get('on_the_job_search_factor', 5.0))
+            # DEN UNDERBETALDA SÖKER OFTARE. Att hon byter oftare följde förut
+            # bara av att fler positioner gav positivt överskott -- men
+            # sökintensiteten var konstant oavsett om hon låg under yrkets
+            # pris. Verklighetens undersköterska med lön under Pi för vård
+            # söker mer, inte lika mycket. Intervallet kortas med
+            # 1 + gamma * (Pi - w) / Pi, avkortat nedåt vid noll: den som
+            # ligger över Pi söker inte mindre än normalt.
+            gamma = float(sim.get('underpay_search_gamma', 0.0))
+            if gamma > 0:
+                try:
+                    pi_o = float(self.individuals.at[idx, 'pi_o'])
+                    w = float(self.individuals.at[idx, 'w_res'])
+                except (KeyError, TypeError, ValueError):
+                    pi_o, w = float('nan'), float('nan')
+                if np.isfinite(pi_o) and pi_o > 0 and np.isfinite(w):
+                    factor = factor / (1.0 + gamma * max(0.0, (pi_o - w) / pi_o))
             lead = float(sim.get('on_the_job_search_ramp_days', 180.0)) if first else 0.0
         else:
             return None

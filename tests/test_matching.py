@@ -131,16 +131,22 @@ def test_parameters_reach_the_kernel(monkeypatch):
 
 
 def test_reservation_wage_decays_on_failed_search():
-    """Utan avtagande reservationslön ligger kravet kvar på 0.7 av senaste lön
-    hur länge arbetslösheten än varar, och marknaden klarerar aldrig: i en
-    körning var 97 % av de arbetslösa blockerade och träffkvoten 5.4 %."""
+    """Utan avtagande reservationslön ligger kravet kvar hur länge
+    arbetslösheten än varar, och marknaden klarerar aldrig: i en körning var
+    97 % av de arbetslösa blockerade och träffkvoten 5.4 %.
+
+    Testet prövar det GAMLA läget, per_search, som är kvar för jämförelse.
+    Förvalet är sedan 0151 duration: anspråket faller sigmoidalt med
+    arbetslöshetens längd i stället för med antalet avslag, eftersom den som
+    söker sällan annars behöll sitt anspråk längre -- vilket är bakvänt."""
     from conftest import FakeConfig, FakeQueue, FakeLogger
     from core.event_handlers import handle_start_job_search
 
     class W(IndividualViews):
         pass
     w = W()
-    w.cfg_reader = FakeConfig({"reservation_decay_per_search": 0.9,
+    w.cfg_reader = FakeConfig({"reservation_mode": "per_search",
+                               "reservation_decay_per_search": 0.9,
                                "reservation_floor": 0.2, "min_surplus": 0.0})
     w.event_queue = FakeQueue()
     w.event_logger = FakeLogger()

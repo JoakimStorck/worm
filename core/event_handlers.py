@@ -26,6 +26,7 @@ def _become_unemployed(world, idx, t_now, free_job=True):
             ind.at[idx, 'job_id'] = np.nan
     world.clear_active_occupation(idx)
     ind.at[idx, 'status'] = 'unemployed'
+    bli_arbetslos(world, idx, t_now)
 
 
 def _resolve_individual_index(world, holder):
@@ -105,6 +106,7 @@ def handle_start_job(event, world):
 
         individuals.at[idx, 'status'] = 'unemployed'
         individuals.at[idx, 'job_id'] = np.nan
+        bli_arbetslos(world, idx, float(event['time']))
         if 'accepted_job_id' in individuals.columns:
             individuals.at[idx, 'accepted_job_id'] = None
         world.schedule_search(idx, world.search_interval(idx, float(event['time'])))
@@ -209,6 +211,10 @@ def handle_start_job(event, world):
             w_eff = w_field
         individuals.at[idx, 'w_res'] = w_eff
         individuals.at[idx, 'w_neg'] = w_eff      # schemat garanteras i prepare
+        if 'w_last' in individuals.columns:
+            individuals.at[idx, 'w_last'] = w_eff
+        if 'unemployed_since' in individuals.columns:
+            individuals.at[idx, 'unemployed_since'] = np.nan
         # Utgångspunkt för nästa revision: revisionen belönar TILLVÄXT i
         # konkurrenskraft sedan förra gången, inte nivån.
         q_par0 = event['params'].get('q_hire')
@@ -344,6 +350,17 @@ def handle_start_job_search(event, world):
     den sökande får överväga.
     """
     idx = event['agent_id']
+    # ANSPRÅKET LÄSES AV KLOCKAN, inte av avslagen. Sigmoiden i
+    # arbetslöshetstid utvärderas här, vid varje sökning, så att w_res är
+    # aktuell när överskottet räknas. Uppdateringen är idempotent: den räknar
+    # om från w_last och unemployed_since och ackumulerar därför inte.
+    #
+    # BARA I duration-LÄGET. I per_search sköts sänkningen av
+    # _decay_reservation vid avslaget, och ett anrop även här hade gett två
+    # förfall per sökning -- 0.9 upphöjt till sex i stället för tre.
+    if str(world.cfg_reader.config.get('simulation', {})
+           .get('reservation_mode', 'duration')).lower() == 'duration':
+        _uppdatera_reservation(world, idx, float(event['time']))
     from core.matching_core import apply_once
 
     # Är händelsen fortfarande hennes? Varje statusbyte skriver en ny
@@ -390,14 +407,140 @@ def handle_start_job_search(event, world):
     world.schedule_search(idx, world.search_interval(idx, t_now))
 
 
-def _decay_reservation(world, idx):
-    """Ett avslag ÄR en misslyckad sökning ur hennes synvinkel."""
+def _tal(world, idx, kol):
+    """Kolumnvärdet som float, eller NaN.
+
+    INTE `float(x or np.nan)`: noll är falskt i Python, så unemployed_since =
+    0.0 -- hela uppstartens arbetslösa -- blev NaN och deras anspråk
+    uppdaterades aldrig. Felet syns inte som ett fel utan som att en grupp
+    aldrig sänker sina krav.
+    """
+    try:
+        v = float(world.individuals.at[idx, kol])
+    except (KeyError, TypeError, ValueError):
+        return float("nan")
+    return v
+
+
+def bli_arbetslos(world, idx, t_now):
+    """Markerar arbetslöshetens början och bevarar senaste lön.
+
+    ANSPRÅKET SÄNKS INTE HÄR. Tidigare skars w_res med rho -- trettio procent
+    på en gång, samma sekund jobbet försvann. Den som blir av med jobbet
+    sänker inte sitt löneanspråk med en tredjedel över natten; hon börjar med
+    anspråket från sin föregående anställning och ger vika först efter en tid
+    utan att få något. Den sänkningen sköter _uppdatera_reservation.
+    """
+    ind = world.individuals
+    if 'w_last' in ind.columns:
+        # w_res bär den förhandlade lönen så länge hon är anställd (se
+        # handle_start_job), så den ÄR senaste lön i det ögonblicket.
+        nuvarande = _tal(world, idx, 'w_res')
+        if np.isfinite(nuvarande) and nuvarande > 0:
+            ind.at[idx, 'w_last'] = nuvarande
+    if 'unemployed_since' in ind.columns:
+        ind.at[idx, 'unemployed_since'] = float(t_now)
+
+
+def reservationsgolv(world, idx):
+    """Lägsta löneanspråk: relativt den egna historiken OCH absolut i yrket.
+
+    Två golv, och det bindande är det högsta. Det relativa -- en andel av
+    senaste lön -- fångar att ingen halverar sitt anspråk hur länge hon än
+    söker. Det absoluta fångar kollektivavtalens lägstalöner, som inte ligger
+    på en andel av DEN EGNA tidigare lönen utan på en andel av yrkets nivå:
+    den som haft hög lön och sjunker till sextio procent ligger fortfarande
+    över avtalet, medan den som haft låg lön hamnar under vad någon
+    arbetsgivare får betala.
+    """
     sim = world.cfg_reader.config.get('simulation', {})
-    decay = float(sim.get('reservation_decay_per_search', 1.0))
-    floor = float(sim.get('reservation_floor', 0.0))
-    if 'w_res' in world.individuals.columns and decay < 1.0:
-        w_res = float(world.get_ind(idx, 'w_res'))
-        world.individuals.at[idx, 'w_res'] = max(w_res * decay, floor)
+    andel = float(sim.get('reservation_floor_fraction', 0.6))
+    pi_andel = float(sim.get('reservation_floor_pi_fraction', 0.0))
+    absolut = float(sim.get('reservation_floor', 0.0))
+
+    w_last = _tal(world, idx, 'w_last')
+    golv = andel * w_last if np.isfinite(w_last) else absolut
+    if pi_andel > 0:
+        pi_o = _tal(world, idx, 'pi_o')
+        if np.isfinite(pi_o):
+            golv = max(golv, pi_andel * pi_o)
+    return max(golv, absolut)
+
+
+def _uppdatera_reservation(world, idx, t_now=None):
+    """Löneanspråket under arbetslöshet.
+
+    TVÅ LÄGEN, styrda av reservation_mode.
+
+    duration (förval): anspråket startar på senaste lön och faller SIGMOIDALT
+    med arbetslöshetens längd mot golvet,
+
+        w_res(t) = golv + (w_last - golv) / (1 + exp((t - t_halv) / bredd))
+
+    Tiden och inte antalet sökningar är rätt variabel. Det gamla förfallet låg
+    på 0.95 per MISSLYCKAD SÖKNING, och arbetslösa söker tretton gånger om
+    året: anspråket halverades på ett år, men bara för att sökintensiteten
+    råkade vara tretton. Den som sökte sällan behöll sitt anspråk längre,
+    vilket är bakvänt. Med tiden som variabel blir hur ofta hon söker och hur
+    hennes anspråk sjunker oberoende, som de bör vara.
+
+    Mittpunkten har ett svenskt ankare: a-kassan ger 80 procent av tidigare
+    lön de första 100 dagarna, sedan 70, och efter ett år grundnivå. Det är en
+    dokumenterad trappa i inkomsten under arbetslöshet och sätter tidsskalan
+    för när anspråket ger vika.
+
+    per_search: det gamla beteendet, kvar för jämförelse.
+    """
+    ind = world.individuals
+    if 'w_res' not in ind.columns:
+        return
+    sim = world.cfg_reader.config.get('simulation', {})
+    lage = str(sim.get('reservation_mode', 'duration')).lower()
+
+    if lage == 'per_search':
+        decay = float(sim.get('reservation_decay_per_search', 1.0))
+        if decay < 1.0:
+            golv = float(sim.get('reservation_floor', 0.0))
+            ind.at[idx, 'w_res'] = max(_tal(world, idx, 'w_res') * decay, golv)
+        return
+
+    if t_now is None or 'unemployed_since' not in ind.columns:
+        return
+    start = _tal(world, idx, 'unemployed_since')
+    if not np.isfinite(start):
+        return
+    w_last = _tal(world, idx, 'w_last')
+    if not np.isfinite(w_last) or w_last <= 0:
+        return
+    golv = reservationsgolv(world, idx)
+    if golv >= w_last:
+        ind.at[idx, 'w_res'] = w_last
+        return
+    t_halv = float(sim.get('reservation_half_days', 150.0))
+    bredd = max(float(sim.get('reservation_width_days', 60.0)), 1e-6)
+    # NORMALISERAD SIGMOID. En logistisk kurva centrerad på 150 dagar har
+    # redan gett vika 8 procent vid t = 0, så anspråket hade startat på 0.97
+    # av senaste lön i stället för på den. Kvoten mot värdet vid noll ger
+    # exakt senaste lön i det ögonblick hon blir arbetslös, vilket är
+    # egenskapen som betyder något: hon börjar med anspråket från sin
+    # föregående anställning. Priset är att t_halv inte längre är exakt
+    # halvvägspunkten -- den ligger några dagar senare, vid 159 dagar för
+    # förvalen 150 och 60.
+    def _s(z):
+        return 1.0 / (1.0 + np.exp(np.clip(z, -700, 700)))
+
+    dt = float(t_now) - start
+    andel = _s((dt - t_halv) / bredd) / _s(-t_halv / bredd)
+    ind.at[idx, 'w_res'] = golv + (w_last - golv) * float(min(max(andel, 0.0), 1.0))
+
+
+def _decay_reservation(world, idx):
+    """Kvar för bakåtkompatibilitet: anropas från de gamla ställena utan tid.
+
+    I duration-läget gör den ingenting -- anspråket följer klockan och inte
+    avslagen -- och i per_search-läget beter den sig som förr.
+    """
+    _uppdatera_reservation(world, idx, t_now=None)
 
 
 def start_delay_days(world, idx):
@@ -819,9 +962,11 @@ def handle_destroy_job(event, world):
         ind = world.individuals
         ind.at[idx, 'status'] = 'unemployed'
         ind.at[idx, 'job_id'] = np.nan
-        if 'w_res' in ind.columns:
-            rho = world.cfg_reader.config.get('simulation', {}).get('rho_reservation', 0.7)
-            ind.at[idx, 'w_res'] = rho * float(world.get_ind(idx, 'w_res'))
+        # ANSPRÅKET SKÄRS INTE NED HÄR. Raden var en direkt multiplikation med
+        # rho -- trettio procent bort samma sekund jobbet försvann. Sänkningen
+        # sker nu sigmoidalt med arbetslöshetens längd, se
+        # _uppdatera_reservation.
+        bli_arbetslos(world, idx, float(event['time']))
         world.schedule_search(idx, world.search_interval(idx, float(event['time'])))
         # agent_id med: förstörelsen är en JOBBhändelse, så händelsens agent_id
         # är None, och den som mister jobbet gick inte att följa i loggen.

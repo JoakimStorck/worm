@@ -738,9 +738,22 @@ class ScenarioBuilder:
         rho = self.cfg_reader.config.get("simulation", {}).get("rho_reservation", 0.7)
         pf = self._price_field()
         if pf is not None:
-            df["w_res"] = rho * pf.pi_rel_cart(x_occ, y_occ)
+            # PI SPARAS PER INDIVID. Yrkets pris behövs vid körning på två
+            # ställen: som absolut golv för reservationslönen (avtalens
+            # lägstalöner ligger inte på en andel av DEN EGNA tidigare lönen
+            # utan på en andel av yrkets nivå) och för att låta den som tjänar
+            # under Pi söka oftare. Utan kolumnen skulle båda kräva ett
+            # fältuppslag per individ och sökning.
+            df["pi_o"] = pf.pi_rel_cart(x_occ, y_occ)
+            df["w_res"] = rho * df["pi_o"]
         else:
+            df["pi_o"] = np.nan
             df["w_res"] = 0.0
+        # Senaste lön och arbetslöshetens början. Den som aldrig haft en
+        # anställning har ingen senaste lön, och för henne är rho * Pi rätt
+        # utgångspunkt -- det är vad w_res redan är.
+        df["w_last"] = np.nan
+        df["unemployed_since"] = np.nan
 
         # r_i är härledd ur kompetenscirklarna (World.init_competence). Tills
         # cirklarna byggts: 0, dvs. samma som en färsk arbetare med en cirkel.

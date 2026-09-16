@@ -68,14 +68,24 @@ def test_small_deficits_are_not_rounded_away():
 def test_destroyed_job_displaces_holder():
     from core.event_handlers import handle_destroy_job
     w = make_world(n_employers=1, size=1)
+    # w_last och unemployed_since garanteras av World.prepare i en riktig
+    # körning; här byggs tabellen för hand och måste bära dem.
     w.individuals = pd.DataFrame([{"individual_id": 0, "status": "employed",
-                                   "job_id": w.jobs.at[0, "job_id"], "w_res": 1.0}])
+                                   "job_id": w.jobs.at[0, "job_id"], "w_res": 1.0,
+                                   "w_last": np.nan, "unemployed_since": np.nan}])
     w.jobs.at[0, "individual_id"] = 0
     handle_destroy_job({"time": 10.0, "agent_id": None, "event_type": "destroy_job",
                         "params": {"job_id": w.jobs.at[0, "job_id"]}}, w)
     assert not bool(w.jobs.at[0, "active"])
     assert w.individuals.at[0, "status"] == "unemployed"
-    assert w.individuals.at[0, "w_res"] == pytest.approx(0.7)     # rho * senaste lön
+    # ANSPRÅKET SKÄRS INTE NÄR JOBBET FÖRSVINNER. Raden här krävde förut
+    # rho * senaste lön, alltså trettio procent bort samma sekund. Ingen
+    # sänker sitt löneanspråk med en tredjedel över natten; hon börjar med
+    # anspråket från sin föregående anställning och ger vika först efter en
+    # tid utan att få något (0151).
+    assert w.individuals.at[0, "w_res"] == pytest.approx(1.0)
+    assert w.individuals.at[0, "w_last"] == pytest.approx(1.0)
+    assert w.individuals.at[0, "unemployed_since"] == pytest.approx(10.0)
     assert len(w.event_queue) == 1                                # ny jobbsökning
 
 

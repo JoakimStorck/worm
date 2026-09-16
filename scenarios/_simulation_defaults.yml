@@ -208,6 +208,12 @@ simulation:
   # kalibreras för sig (reservationens fall). Rampen är ett modellval, se
   # individmodell.md 6.
   on_the_job_search_factor: 10.0
+  # Den underbetalda söker oftare: sökintervallet kortas med
+  # 1 + gamma * (Pi - w)/Pi. 0 stänger av. Att hon BYTER oftare följde förut
+  # bara av att fler positioner gav positivt överskott, men intensiteten var
+  # konstant oavsett om hon låg under yrkets pris.
+  underpay_search_gamma: 0.0
+
   on_the_job_search_ramp_days: 180
   switching_cost_share: 0.05
 
@@ -215,7 +221,31 @@ simulation:
   hiring_decision_days: 10
   notice_period_days: 30
   min_surplus: 0.0          # acceptera om S > min_surplus
-  reservation_decay_per_search: 0.95   # w_res faller 5 % per misslyckad sökning
+  # LÖNEANSPRÅKET UNDER ARBETSLÖSHET. "duration" (förval) låter anspråket
+  # starta på senaste lön och falla sigmoidalt med arbetslöshetens LÄNGD mot
+  # ett golv; "per_search" är det gamla beteendet, 5 procent per misslyckad
+  # sökning, kvar för jämförelse.
+  #
+  # Tiden är rätt variabel. Med per_search halverades anspråket på ett år,
+  # men bara för att arbetslösa söker tretton gånger om året -- den som sökte
+  # sällan behöll sitt anspråk längre, vilket är bakvänt. Nu är sökintensitet
+  # och anspråkets fall oberoende.
+  #
+  # Mittpunkten har ett svenskt ankare: a-kassan ger 80 procent av tidigare
+  # lön de första 100 dagarna, sedan 70, och efter ett år grundnivå. 150 dagar
+  # ligger i den trappan. Bredden 60 dagar ger en märkbar men inte abrupt
+  # sänkning: från 95 procent av vägen kvar vid 30 dagar till 5 procent vid
+  # 270.
+  reservation_mode: duration
+  reservation_half_days: 150
+  reservation_width_days: 60
+  # Två golv, det bindande är det högsta. Det relativa fångar att ingen
+  # halverar sitt anspråk hur länge hon än söker; det absoluta fångar
+  # kollektivavtalens lägstalöner, som ligger på en andel av YRKETS nivå och
+  # inte av den egna tidigare lönen. 0.0 stänger av Pi-golvet.
+  reservation_floor_fraction: 0.6
+  reservation_floor_pi_fraction: 0.0
+  reservation_decay_per_search: 0.95   # används bara i läget per_search
   # Reservationslönens golv. 0.10 av medellönen är orimligt lågt: med a-kassa
   # och försörjningsstöd ligger den reella nivån kring 0.35-0.45.
   reservation_floor: 0.40
