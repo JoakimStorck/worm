@@ -29,10 +29,12 @@ EMPTY = -1
 
 
 class CompetenceParams:
-    __slots__ = ("a", "lam", "D", "tau_months", "m_ref", "gamma", "K")
+    __slots__ = ("a", "lam", "D", "tau_months", "m_ref", "gamma", "K",
+                 "diffusion_max_ratio")
 
-    def __init__(self, a=1.0, lam=None, D=0.015, tau_months=6.0, m_ref=2.0,
-                 gamma=0.875, K=12, half_life_years=15.0):
+    def __init__(self, a=1.0, lam=None, D=0.004, tau_months=6.0, m_ref=2.0,
+                 gamma=0.875, K=12, half_life_years=15.0,
+                 diffusion_max_ratio=4.0):
         self.a = float(a)
         self.lam = float(lam) if lam is not None else float(np.log(2) / half_life_years)
         self.D = float(D)
@@ -40,6 +42,7 @@ class CompetenceParams:
         self.m_ref = float(m_ref)
         self.gamma = float(gamma)
         self.K = int(K)
+        self.diffusion_max_ratio = float(diffusion_max_ratio)
 
     @classmethod
     def from_config(cls, sim: dict) -> "CompetenceParams":
@@ -47,7 +50,8 @@ class CompetenceParams:
         return cls(
             a=c.get("exposure_rate", 1.0),
             half_life_years=c.get("leak_half_life_years", 15.0),
-            D=c.get("diffusion", 0.015),
+            D=c.get("diffusion", 0.004),
+            diffusion_max_ratio=c.get("diffusion_max_ratio", 4.0),
             tau_months=c.get("sharpen_months", 6.0),
             m_ref=c.get("m_ref_years", 2.0),
             gamma=sim.get("sigma_gamma", 0.875),
@@ -116,6 +120,24 @@ class Circles:
         if active.any():
             f = 1.0 - np.exp(-12.0 * dt_years / p.tau_months)
             self.rho2[active] += f * (self.rho2_home[active] - self.rho2[active])
+
+        # TAK RELATIVT VILARADIEN. Diffusionen var obegränsad uppåt, och det
+        # gjorde arbetslöshet till ett ABSORBERANDE tillstånd: cirkeln suddas,
+        # bredden går in i konkurrenskraften som 2*ro2/(rho2 + ro2), q faller,
+        # hon blir inte anställd, och skärpning kräver just den anställning hon
+        # inte får. I en tioårskörning satt 596 personer fast så -- deras r_i
+        # var 0.737 mot de övriga arbetslösas 0.393, alltså en konkurrenskraft
+        # på 39 procent av deras, och 403 av dem låg i Älvdalen: tolv procent
+        # av kommunens arbetskraft permanent utanför.
+        #
+        # Ärrbildning vid långtidsarbetslöshet är väldokumenterad, så
+        # riktningen är rätt. Det som saknades var en gräns. Taket är en
+        # multipel av individens EGEN vilaradie, inte ett absolut tal: den som
+        # har en bred profil från början ska inte straffas av samma gräns som
+        # den med en smal.
+        if p.diffusion_max_ratio and p.diffusion_max_ratio > 0:
+            tak = p.diffusion_max_ratio * self.rho2_home
+            np.minimum(self.rho2, tak, out=self.rho2)
         np.minimum(self.rho2, 4.0, out=self.rho2)          # praktiskt tak
         self.mass[~occupied] = 0.0
 

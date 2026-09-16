@@ -338,6 +338,72 @@ def handle_start_job(event, world):
     # anställning slutar nu bara genom ett erbjudande (handle_close_vacancy)
     # eller genom att positionen förstörs (handle_destroy_job).
 
+def _prova_utbildning(world, idx, t_now):
+    """Drar om den arbetslösa påbörjar omskolning.
+
+    MEKANISMEN FANNS MEN UTLÖSTES ALDRIG. handle_start_education är fullt
+    byggd -- målval bland nåbara vakanser, cirkeln som läggs till vid slutet,
+    återgång till sökande -- men ingenting pushade händelsen. flows_table
+    visade noll förekomster genom hela körningen. Omskolning var inte
+    slumpmässig; den existerade inte.
+
+    FARAN STIGER MED ARBETSLÖSHETENS LÄNGD, som en logistisk kurva. Den som
+    varit utan arbete länge söker sig till utbildning; den som nyss blivit
+    arbetslös söker jobb. Det är också den enda vägen tillbaka för den vars
+    kompetenscirkel suddats ut, eftersom skärpning kräver anställning.
+
+    POISSON-TUNNING MOT FÖRFLUTEN TID, inte en sannolikhet per sökning. En
+    sannolikhet per sökning hade gjort omskolning vanligare för den som söker
+    ofta, vilket är samma fel som det gamla löneförfallet. Här är
+    p = 1 - exp(-rate * dt), där dt är tiden sedan förra dragningen, så
+    utfallet är oberoende av sökfrekvensen.
+
+    Grundtakten är individens propensity_start_education, som en ÅRLIG rat:
+    scenariot ger den medelvärde 0.12, alltså tolv procent per år vid full
+    tidseffekt. education_rate_scale skalar den för svep.
+    """
+    ind = world.individuals
+    if 'propensity_start_education' not in ind.columns:
+        return False
+    sim = world.cfg_reader.config.get('simulation', {})
+    skala = float(sim.get('education_rate_scale', 1.0))
+    if skala <= 0:
+        return False
+    start = _tal(world, idx, 'unemployed_since')
+    if not np.isfinite(start):
+        return False
+
+    t_halv = float(sim.get('education_half_days', 270.0))
+    bredd = max(float(sim.get('education_width_days', 90.0)), 1e-6)
+    z = (float(t_now) - start - t_halv) / bredd
+    tidsfaktor = 1.0 / (1.0 + np.exp(np.clip(-z, -700.0, 700.0)))
+
+    grund = _tal(world, idx, 'propensity_start_education')
+    if not np.isfinite(grund) or grund <= 0:
+        return False
+    rate = skala * grund * float(tidsfaktor)
+
+    sist = _tal(world, idx, 'last_education_draw')
+    dt_dagar = (float(t_now) - sist) if np.isfinite(sist) else (float(t_now) - start)
+    if 'last_education_draw' in ind.columns:
+        ind.at[idx, 'last_education_draw'] = float(t_now)
+    dt_ar = max(dt_dagar, 0.0) / 365.25
+    if dt_ar <= 0:
+        return False
+    p = 1.0 - np.exp(-rate * dt_ar)
+    # np.random som på de andra ställena i den här filen: modellens egen
+    # generator går via scenariots frö och används i matchningskärnan, medan
+    # händelsedragningarna här har följt np.random sedan 0109.
+    if float(np.random.rand()) >= p:
+        return False
+
+    varaktighet = float(sim.get('education_duration_days', 365.0))
+    world._push_event({"time": float(t_now) + 1.0, "agent_id": idx,
+                       "event_type": "start_education",
+                       "params": {"duration_days": varaktighet}})
+    return True
+
+
 def handle_start_job_search(event, world):
     """En sökomgång: relevansmängd i uppgiftsrummet, därefter logit-val över
     överskottet.
@@ -390,13 +456,17 @@ def handle_start_job_search(event, world):
             'surplus': round(surplus, 4), 'w_neg': round(w_neg, 4),
             'q_hire': round(q_hire, 4), 'commute_km': round(commute_km, 3)})
     elif status == 'unemployed':
-        current_prop = world.get_ind(idx, 'propensity_start_education')
-        new_prop = min(current_prop + 0.1, 1.0)
-        world.individuals.at[idx, 'propensity_start_education'] = new_prop
+        # BENÄGENHETEN RÄKNAS INTE LÄNGRE UPP PER AVSLAG. Den gjorde det med
+        # 0.1 och kapades vid 1.0, alltså full benägenhet efter tio avslag --
+        # vilket en arbetslös når på tio månader. Samma fel som det gamla
+        # löneförfallet: den som sökte sällan rörde sig långsammare, fast det
+        # är tiden utan arbete som driver omskolning. Benägenheten är nu en
+        # STABIL individegenskap och tidsberoendet ligger i faran nedan.
         _decay_reservation(world, idx)
+        prov = _prova_utbildning(world, idx, t_now)
         world.event_logger.log_event(world, event, extra={
             'event_detail': 'match_failed', 'status': status,
-            'new_propensity': round(new_prop, 3)})
+            'education_drawn': prov})
     else:
         # Den anställdes torra sökning loggas nu -- förr slutade hon söka här.
         world.event_logger.log_event(world, event, extra={

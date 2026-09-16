@@ -100,6 +100,24 @@ simulation:
   # scenariofilen om tabellen saknas eller inte täcker alla kommunerna.
   unemployment_source: register
 
+  # OMSKOLNING. handle_start_education var fullt byggd men händelsen pushades
+  # aldrig: flows_table visade noll förekomster genom hela körningen.
+  # Omskolning var inte slumpmässig -- den existerade inte.
+  #
+  # Faran stiger med arbetslöshetens längd. Den som nyss blivit arbetslös
+  # söker jobb; den som varit utan arbete länge söker sig till utbildning. Det
+  # är också den enda vägen tillbaka för den vars kompetenscirkel suddats ut,
+  # eftersom skärpning kräver anställning.
+  #
+  # Grundtakten är individens propensity_start_education som en ÅRLIG rat --
+  # scenariot ger den medelvärde 0.12 -- och dragningen är Poisson-tunning mot
+  # förfluten tid, inte en sannolikhet per sökning. En sannolikhet per sökning
+  # hade gjort omskolning vanligare för den som söker ofta.
+  education_rate_scale: 1.0
+  education_half_days: 270
+  education_width_days: 90
+  education_duration_days: 365
+
   occupation_source: register
 
   occupation_concentration: 1.5
@@ -112,7 +130,21 @@ simulation:
   competence:
     exposure_rate: 1.0            # a: massa per år i aktivt yrke (enhet)
     leak_half_life_years: 15      # lambda = ln2/15; mättnad a/lambda ~ 21.6 år
-    diffusion: 0.015              # D: spets halverad efter ~5 år utan användning
+    # D: rho2 växer med 2D per år för den inaktiva cirkeln. 0.015 gav
+    # fördubblad rho2 på 2.4 år, alltså spetsen halverad, vilket visade sig
+    # för snabbt: arbetslöshet blev ett absorberande tillstånd. 0.004 ger
+    # samma fördubbling på ungefär nio år, vilket ligger närmare vad
+    # ärrbildningslitteraturen beskriver.
+    diffusion: 0.004
+    # Tak för diffusionen, som multipel av cirkelns EGEN vilaradie. Utan tak
+    # är arbetslöshet absorberande: cirkeln suddas, bredden går in i
+    # konkurrenskraften som 2*ro2/(rho2 + ro2), q faller, hon blir inte
+    # anställd, och skärpning kräver just den anställning hon inte får. I en
+    # tioårskörning satt 596 personer fast så, varav 403 i Älvdalen -- tolv
+    # procent av kommunens arbetskraft. Relativt och inte absolut, så att den
+    # med bred profil från början inte straffas av samma gräns som den med
+    # smal. 0 stänger av taket.
+    diffusion_max_ratio: 4.0
     sharpen_months: 6             # tau_s: månader att återfå skärpa
     m_ref_years: 2.0              # massa som ger nästan full konkurrenskraft
     max_circles: 12

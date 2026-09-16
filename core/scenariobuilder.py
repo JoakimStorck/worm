@@ -772,6 +772,7 @@ class ScenarioBuilder:
         df["w_rel_sd"] = np.nan
         df["p_claim0"] = np.nan
         df["w_res_time"] = np.nan
+        df["last_education_draw"] = np.nan
 
         # r_i är härledd ur kompetenscirklarna (World.init_competence). Tills
         # cirklarna byggts: 0, dvs. samma som en färsk arbetare med en cirkel.
