@@ -1459,7 +1459,7 @@ def _pensionera(world, idx, t_now):
     modellen så länge ingen lämnade av åldersskäl.
     """
     ind = world.individuals
-    hade_jobb = False
+    lamnad_position = None
     held = world.get_ind(idx, 'job_id') if 'job_id' in ind.columns else np.nan
     if pd.notna(held):
         pos = world.job_index().get(held)
@@ -1467,7 +1467,7 @@ def _pensionera(world, idx, t_now):
             jobs = world.jobs
             jobs.iat[pos, jobs.columns.get_loc('individual_id')] = np.nan
             world.set_job_filled(held, False, t_now)
-            hade_jobb = True
+            lamnad_position = held
         ind.at[idx, 'job_id'] = np.nan
     world.clear_active_occupation(idx)
     ind.at[idx, 'status'] = 'not_in_labor_force'
@@ -1477,7 +1477,7 @@ def _pensionera(world, idx, t_now):
     # sökning för henne förfaller. Samma mekanism som vid statusbyten i övrigt.
     if 'next_search_time' in ind.columns:
         ind.at[idx, 'next_search_time'] = np.nan
-    return hade_jobb
+    return lamnad_position
 
 
 def _aldras_och_pensioneras(world, event):
@@ -1515,11 +1515,18 @@ def _aldras_och_pensioneras(world, event):
 
     fran_jobb = 0
     for idx in ind.index[avgar]:
-        if _pensionera(world, idx, t_now):
+        lamnad = _pensionera(world, idx, t_now)
+        if lamnad is not None:
             fran_jobb += 1
-            world.event_logger.log_event(
-                world, event, extra={"event_detail": "retirement_vacancy",
-                                     "agent_id": idx})
+        # EGEN HÄNDELSETYP. Raderna skrevs först med new_year-händelsen som
+        # mall, och fick därmed event = new_year utan årets stock-fält. Varje
+        # läsare som plockar årsserien på event == "new_year" fick då en rad
+        # per pensionsavgång, med NaN i varje kolumn: konvergensavsnittet
+        # blev tvåhundra tomma rader efter den enda riktiga.
+        world.event_logger.log_event(
+            world, {**event, "event_type": "retirement", "agent_id": idx},
+            extra={"left_vacancy": lamnad is not None,
+                   "job_id": lamnad})
     return {"retired": int(len(avgar)),
             "retired_from_job": int(fran_jobb),
             "age_mean_labour_force": (

@@ -404,6 +404,23 @@ def test_sokkedjan_bryts():
     assert pd.isna(w.individuals.at[0, "next_search_time"])
 
 
+def test_avgangen_loggas_som_egen_handelsetyp():
+    """Raderna skrevs först med new_year-händelsen som mall och fick därmed
+    event = new_year utan årets stock-fält. Konvergensavsnittet, som plockar
+    årsserien på den händelsetypen, blev tvåhundra tomma rader efter den enda
+    riktiga."""
+    w = _varld_med_individer([66.0, 66.0, 40.0],
+                             ["employed", "unemployed", "employed"])
+    _arsskifte(w)
+    typer = [typ for typ, _ in w.event_logger.events]
+    assert typer.count("retirement") == 2
+    assert "new_year" not in typer
+    # Båda avgångarna loggas, men bara den ena lämnade en position efter sig.
+    lamnade = sorted(str(extra.get("left_vacancy"))
+                     for _, extra in w.event_logger.events)
+    assert lamnade == ["False", "True"]
+
+
 def test_arbetslos_pensionar_raknas_inte_som_arbetslos():
     """Bokföringen: den som går i pension lämnar arbetskraften, hon blir inte
     kvar som arbetslös."""
