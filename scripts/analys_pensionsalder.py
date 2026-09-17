@@ -152,11 +152,22 @@ def riktning_per_ssyk(conn):
     return g.reset_index()
 
 
-def harmonisk(d, vikt=None, kontroller=()):
-    """A = a + b cos ξ + c sin ξ, med toppriktning och delta-metods-CI."""
+def harmonisk(d, vikt=None, kontroller=(), kluster="ssyk3", harmonik=1):
+    """A = a + b cos ξ + c sin ξ, med toppriktning och delta-metods-CI.
+
+    KLUSTRADE STANDARDFEL. Varje yrke förekommer två gånger i underlaget, en
+    gång per kön, och de två raderna är inte oberoende observationer: samma
+    yrke, samma position, i stort sett samma pensionsbeteende. Behandlas de
+    som oberoende underskattas standardfelen med ungefär en faktor roten ur
+    två. Kovariansen skattas därför med en sandwich klustrad på yrke, vilket
+    tillåter godtycklig korrelation inom yrket.
+    """
     xi = np.radians(d["xi"].to_numpy(dtype=float))
     kolumner = [np.ones(len(d)), np.cos(xi), np.sin(xi)]
     namn = ["konstant", "cos", "sin"]
+    for k in range(2, int(harmonik) + 1):
+        kolumner += [np.cos(k * xi), np.sin(k * xi)]
+        namn += [f"cos{k}", f"sin{k}"]
     for k in kontroller:
         v = pd.to_numeric(d[k], errors="coerce").to_numpy(dtype=float)
         kolumner.append(v - np.nanmean(v))
@@ -169,10 +180,24 @@ def harmonisk(d, vikt=None, kontroller=()):
     Xw, yw = X * sw[:, None], y * sw
     beta, *_ = np.linalg.lstsq(Xw, yw, rcond=None)
     resid = yw - Xw @ beta
-    dof = max(len(d) - X.shape[1], 1)
-    s2 = float(resid @ resid) / dof
     XtX_inv = np.linalg.pinv(Xw.T @ Xw)
-    kov = s2 * XtX_inv
+    if kluster is not None and kluster in d.columns:
+        # Sandwich med kluster: sum_g X_g' u_g u_g' X_g, med den vanliga
+        # korrigeringen för antalet kluster.
+        meat = np.zeros((X.shape[1], X.shape[1]))
+        grupper = pd.Series(d[kluster].to_numpy())
+        for _, i in grupper.groupby(grupper).groups.items():
+            idx = grupper.index.get_indexer(i) if hasattr(i, "__len__") else [i]
+            Xg, ug = Xw[idx], resid[idx]
+            s = Xg.T @ ug
+            meat += np.outer(s, s)
+        G = int(grupper.nunique())
+        skala = (G / max(G - 1, 1)) * ((len(d) - 1) /
+                                       max(len(d) - X.shape[1], 1))
+        kov = skala * XtX_inv @ meat @ XtX_inv
+    else:
+        dof = max(len(d) - X.shape[1], 1)
+        kov = (float(resid @ resid) / dof) * XtX_inv
     b, c = beta[1], beta[2]
     amp = float(np.hypot(b, c))
     topp = float(np.degrees(np.arctan2(c, b)) % 360.0)
@@ -188,8 +213,63 @@ def harmonisk(d, vikt=None, kontroller=()):
     r2 = 1 - float(((y - pred) ** 2 * w).sum()) / float(ss) if ss > 0 else np.nan
     return {"n": int(len(d)), "niva": float(beta[0]), "topp": topp,
             "se_topp": se_topp, "amplitud": amp, "se_amp": se_amp,
-            "R2": float(r2),
+            "R2": float(r2), "beta": beta, "kov": kov,
+            "kluster": int(pd.Series(d[kluster]).nunique())
+            if kluster in d.columns else 0,
             "koefficienter": dict(zip(namn, [float(v) for v in beta]))}
+
+
+def figur(d, r, path):
+    """Två paneler: åldern mot riktningen med den anpassade kurvan, och
+    yrkesgrupperna i planet färgade efter ålder."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure(figsize=(11, 4.8))
+    ax = fig.add_subplot(1, 2, 1)
+    storlek = 8 + 60 * (d["antal"] / d["antal"].max()) ** 0.5
+    for kon, m in (("Kvinnor", "o"), ("Män", "^")):
+        t = d[d["kon"].str.lower().str.startswith(kon[:4].lower())]
+        if len(t):
+            ax.scatter(t["xi"], t["alder"], s=storlek.loc[t.index], marker=m,
+                       alpha=0.55, edgecolor="none", label=kon)
+    grid = np.linspace(0, 360, 721)
+    b = r["beta"]
+    kurva = b[0] + b[1] * np.cos(np.radians(grid)) + b[2] * np.sin(np.radians(grid))
+    # Pointwise band via delta-metoden på (a, b, c).
+    G = np.column_stack([np.ones_like(grid), np.cos(np.radians(grid)),
+                         np.sin(np.radians(grid))])
+    kov = r["kov"][:3, :3]
+    se = np.sqrt(np.clip(np.einsum("ij,jk,ik->i", G, kov, G), 0, None))
+    ax.plot(grid, kurva, color="black", lw=1.6)
+    ax.fill_between(grid, kurva - 1.96 * se, kurva + 1.96 * se, color="black",
+                    alpha=0.12, lw=0)
+    ax.axvline(r["topp"], color="firebrick", ls="--", lw=1)
+    ax.annotate(f"topp {r['topp']:.0f}°", (r["topp"], ax.get_ylim()[1]),
+                xytext=(4, -12), textcoords="offset points", color="firebrick",
+                fontsize=9)
+    ax.set_xticks(range(0, 361, 45))
+    ax.set_xlabel("Riktning i uppgiftsrummet ξ (grader)")
+    ax.set_ylabel("Medelpensioneringsålder (år)")
+    ax.set_title("A. Ålder mot riktning", fontsize=10, loc="left")
+    ax.legend(frameon=False, fontsize=8, loc="lower right")
+    ax.grid(alpha=0.25)
+
+    axp = fig.add_subplot(1, 2, 2, projection="polar")
+    sc = axp.scatter(np.radians(d["xi"]), d["chi"], c=d["alder"],
+                     s=storlek, cmap="viridis", alpha=0.85, edgecolor="none")
+    axp.set_theta_zero_location("E")
+    axp.set_rlabel_position(135)
+    axp.set_title("B. Yrkesgrupperna i planet", fontsize=10, loc="left")
+    axp.plot([np.radians(r["topp"])] * 2, [0, d["chi"].max() * 1.05],
+             color="firebrick", ls="--", lw=1)
+    fig.colorbar(sc, ax=axp, pad=0.1, label="Medelpensioneringsålder (år)")
+
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    print(f"\nSparad: {path}")
 
 
 def main():
@@ -198,6 +278,7 @@ def main():
     ap.add_argument("--yrkesfil", default="data/TAB4441_sv.csv",
                     help="yrkesregisterfil med SSYK3-benämningar")
     ap.add_argument("--db", default=DB)
+    ap.add_argument("--figur", default="analysis/figures/pensionsalder_xi.pdf")
     a = ap.parse_args()
 
     pens = las_pensionsalder(a.pensionsfil)
@@ -223,16 +304,44 @@ def main():
     print(f"\nmedelpensioneringsålder: {d['alder'].min():.1f}-{d['alder'].max():.1f}, "
           f"viktat medel {np.average(d['alder'], weights=d['antal']):.2f}")
 
+    print("   (standardfel klustrade på yrke: de två könsraderna per yrke är "
+          "inte oberoende)")
     for etikett, kontroller in (("utan kontroll", ()),
                                 ("med intjänandeår", ("intjanandear",)),
                                 ("med intjänandeår och chi", ("intjanandear", "chi"))):
         r = harmonisk(d, vikt="antal", kontroller=kontroller)
-        print(f"\n--- {etikett} (n={r['n']})")
+        print(f"\n--- {etikett} (n={r['n']}, {r['kluster']} kluster)")
         print(f"   topp {r['topp']:.1f}° ± {r['se_topp']:.1f}   "
               f"amplitud {r['amplitud']:.3f} ± {r['se_amp']:.3f} år   "
               f"R2 {r['R2']:.3f}")
         print("   " + "  ".join(f"{k} {v:+.3f}"
                                 for k, v in r["koefficienter"].items()))
+
+    # PER KÖN. Skiljer sig riktningen mellan kvinnor och män är den inte en
+    # egenskap hos arbetet utan hos vem som utför det.
+    for kon in sorted(d["kon"].unique()):
+        del_ = d[d["kon"] == kon]
+        if len(del_) < 12:
+            continue
+        r = harmonisk(del_, vikt="antal", kontroller=("intjanandear",))
+        print(f"\n--- endast {kon} (n={r['n']})")
+        print(f"   topp {r['topp']:.1f}° ± {r['se_topp']:.1f}   "
+              f"amplitud {r['amplitud']:.3f} ± {r['se_amp']:.3f} år")
+
+    # RÄCKER FÖRSTA HARMONIKEN? Samma prövning som pappret gör för
+    # löneavkastningen: en andra harmonik läggs till och prövas.
+    h1 = harmonisk(d, vikt="antal", kontroller=("intjanandear",), harmonik=1)
+    h2 = harmonisk(d, vikt="antal", kontroller=("intjanandear",), harmonik=2)
+    print(f"\n--- andra harmoniken")
+    print(f"   R2 {h1['R2']:.3f} -> {h2['R2']:.3f}   "
+          f"cos2 {h2['koefficienter'].get('cos2', 0):+.3f}  "
+          f"sin2 {h2['koefficienter'].get('sin2', 0):+.3f}")
+
+    if a.figur:
+        os.makedirs(os.path.dirname(a.figur) or ".", exist_ok=True)
+        figur(d, harmonisk(d, vikt="antal", kontroller=("intjanandear",)),
+              a.figur)
+        d.to_csv(os.path.splitext(a.figur)[0] + ".csv", index=False)
 
     print("\nYtterligheter i materialet:")
     v = d.sort_values("alder")

@@ -130,3 +130,53 @@ def test_vikterna_anvands():
     d.loc[d.index[:5], "antal"] = 1.0
     viktad = harmonisk(d, vikt="antal")
     assert abs(viktad["topp"] - 90.0) < abs(lika["topp"] - 90.0)
+
+
+# ----------------------------------------------------------------------
+# Klustring och figur
+# ----------------------------------------------------------------------
+
+def _med_konsrader(d):
+    """Varje yrke två gånger, en rad per kön, som i underlaget."""
+    d = d.copy()
+    d["ssyk3"] = [f"{100 + i}" for i in range(len(d))]
+    d["yrke"] = [f"y{i}" for i in range(len(d))]
+    d["kon"] = "Kvinnor"
+    tva = d.assign(kon="Män", alder=d["alder"] + 0.05)
+    return pd.concat([d, tva], ignore_index=True)
+
+
+def test_klustring_vidgar_felet():
+    """De två könsraderna per yrke är inte oberoende observationer. Behandlas
+    de som det underskattas standardfelen."""
+    d = _med_konsrader(_syntetisk(topp_grader=40.0, amplitud=0.3, brus=0.3,
+                                  n=120, seed=5))
+    klustrat = harmonisk(d, vikt="antal", kluster="ssyk3")
+    naivt = harmonisk(d, vikt="antal", kluster=None)
+    assert klustrat["se_topp"] > naivt["se_topp"]
+    assert klustrat["kluster"] == 120
+
+
+def test_klustring_andrar_inte_punktskattningen():
+    """Sandwichen rör kovariansen, inte koefficienterna."""
+    d = _med_konsrader(_syntetisk(topp_grader=40.0, n=60, seed=6))
+    a = harmonisk(d, vikt="antal", kluster="ssyk3")
+    b = harmonisk(d, vikt="antal", kluster=None)
+    assert a["topp"] == pytest.approx(b["topp"], abs=1e-9)
+    assert a["amplitud"] == pytest.approx(b["amplitud"], abs=1e-9)
+
+
+def test_andra_harmoniken_far_plats():
+    d = _med_konsrader(_syntetisk(n=80, seed=7))
+    r = harmonisk(d, vikt="antal", harmonik=2)
+    assert "cos2" in r["koefficienter"] and "sin2" in r["koefficienter"]
+    assert r["R2"] >= harmonisk(d, vikt="antal", harmonik=1)["R2"] - 1e-9
+
+
+def test_figuren_ritas(tmp_path):
+    from scripts.analys_pensionsalder import figur
+    d = _med_konsrader(_syntetisk(topp_grader=38.0, n=40, seed=8))
+    r = harmonisk(d, vikt="antal")
+    p = tmp_path / "f.pdf"
+    figur(d, r, str(p))
+    assert p.exists() and p.stat().st_size > 1000
