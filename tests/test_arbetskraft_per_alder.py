@@ -12,7 +12,7 @@ import textwrap
 
 import pytest
 
-from core.database.load_participation import (las_arbetskraft_per_alder,
+from core.database.load_participation import (kod, las_arbetskraft_per_alder,
                                               normalisera_klass)
 from scripts.fetch_data import bygg_arbetskraftsuttag
 
@@ -108,15 +108,18 @@ def test_saknade_aggregat_kastar():
 # Läsaren
 # ----------------------------------------------------------------------
 
+# EXAKT DET FORMAT SCB GAV. UseCodesAndTexts skriver "kod - text" i varje
+# cell, inte bara i rubriken, och Tid hamnar i värdekolumnens rubrik även när
+# uttaget ber om den i stub.
 CSV = """\
-"Region","Alder","Tid","000001OZ antal sysselsatta och arbetslösa (arbetskraften)","000001PN antal totalt"
-"2062","16-19","2024",180,900
-"2062","060-64","2024",1050,1300
-"2062","16-64","2024",9200,12000
-"2062","16-65","2024",9280,12250
-"2062","16-66","2024",9330,12480
-"2062","65-69","2024",420,1600
-"2039","16-19","2024",60,300
+"Region - region","Kon - kön","Alder - ålder","Fodelseregion - födelseregion","000001OZ - antal sysselsatta och arbetslösa (arbetskraften) 2024 - 2024","000001PN - antal totalt 2024 - 2024"
+"2062 - 2062 Mora","1+2 - totalt","16-19 - 16-19 år","tot - totalt",180,900
+"2062 - 2062 Mora","1+2 - totalt","060-64 - 60-64 år","tot - totalt",1050,1300
+"2062 - 2062 Mora","1+2 - totalt","16-64 - 16-64 år","tot - totalt",9200,12000
+"2062 - 2062 Mora","1+2 - totalt","16-65 - 16-65 år","tot - totalt",9280,12250
+"2062 - 2062 Mora","1+2 - totalt","16-66 - 16-66 år","tot - totalt",9330,12480
+"2062 - 2062 Mora","1+2 - totalt","65-69 - 65-69 år","tot - totalt",420,1600
+"2039 - 2039 Älvdalen","1+2 - totalt","16-19 - 16-19 år","tot - totalt",60,300
 """
 
 
@@ -134,6 +137,28 @@ def test_nollutfyllnaden_normaliseras():
     assert normalisera_klass("tot") is None
 
 
+def test_koden_lases_ur_kod_och_text():
+    """UseCodesAndTexts skriver båda i varje cell. Delningen sker på FÖRSTA
+    " - ": åldersetiketten innehåller själv ett bindestreck, och SCB:s text
+    använder dessutom tankstreck där koden har bindestreck."""
+    assert kod("16-19 - 16-19 år") == "16-19"
+    assert kod("0114 - 0114 Upplands Väsby") == "0114"
+    assert kod("1+2 - totalt") == "1+2"
+    assert kod("2062") == "2062"
+    assert normalisera_klass("060-64 - 60-64 år") == "60-64"
+
+
+def test_aret_lases_ur_vardekolumnens_rubrik():
+    """Tid ligger i rubriken tillsammans med innehållskoden även när uttaget
+    ber om den i stub -- PxWeb hörsammar inte placeringen för den
+    variabeln."""
+    import tempfile, os
+    p = os.path.join(tempfile.mkdtemp(), "ar.csv")
+    open(p, "w", encoding="utf-8").write(textwrap.dedent(CSV))
+    df = las_arbetskraft_per_alder(p)
+    assert set(df["year"]) == {2024}
+
+
 def test_laser_bada_vardekolumnerna(tmp_path):
     df = las_arbetskraft_per_alder(_skriv(tmp_path, "ak.csv", CSV))
     rad = df[(df.municipal_code == "2062") & (df.age_group == "16-64")]
@@ -146,13 +171,13 @@ def test_laser_bada_vardekolumnerna(tmp_path):
 def test_kolumnerna_skiljs_pa_rubrik_inte_position(tmp_path):
     """En fil där de två värdekolumnerna bytt plats ska ge samma resultat.
     Position hade gjort deltagandet till sin egen invers."""
-    omvand = CSV.replace(
-        '"000001OZ antal sysselsatta och arbetslösa (arbetskraften)","000001PN antal totalt"',
-        '"000001PN antal totalt","000001OZ antal sysselsatta och arbetslösa (arbetskraften)"')
-    rader = [r.split(",") for r in omvand.strip().splitlines()[1:]]
-    kastad = omvand.splitlines()[0] + "\n" + "\n".join(
-        ",".join(r[:3] + [r[4], r[3]]) for r in rader)
-    df = las_arbetskraft_per_alder(_skriv(tmp_path, "omvand.csv", kastad))
+    rader = textwrap.dedent(CSV).strip().splitlines()
+    kastade = []
+    for r in rader:
+        f = r.rsplit(",", 2)
+        kastade.append(f"{f[0]},{f[2]},{f[1]}")
+    df = las_arbetskraft_per_alder(_skriv(tmp_path, "omvand.csv",
+                                          "\n".join(kastade) + "\n"))
     rad = df[(df.municipal_code == "2062") & (df.age_group == "16-64")]
     assert int(rad["in_labour_force"].iloc[0]) == 9200
     assert int(rad["total"].iloc[0]) == 12000
@@ -173,12 +198,14 @@ def test_latin1_gar_att_lasa(tmp_path):
 def test_en_rad_per_kommun_ar_och_klass(tmp_path):
     """Kommer kön eller födelseregion med som delar vid sidan av sina totaler
     är talen dubbelräknade."""
-    dubbel = CSV + '"2062","16-64","2024",4600,6000\n'
+    dubbel = textwrap.dedent(CSV) + '"2062 - 2062 Mora","1+2 - totalt","16-64 - 16-64 år","tot - totalt",4600,6000\n'
     with pytest.raises(ValueError, match="totalvärdena"):
         las_arbetskraft_per_alder(_skriv(tmp_path, "dubbel.csv", dubbel))
 
 
 def test_saknad_vardekolumn_ger_begripligt_fel(tmp_path):
-    bara_en = '"Region","Alder","Tid","000001OZ antal ... (arbetskraften)"\n"2062","16-64","2024",9200\n'
+    bara_en = ('"Region - region","Alder - ålder",'
+               '"000001OZ - antal sysselsatta och arbetslösa (arbetskraften) 2024 - 2024"\n'
+               '"2062 - 2062 Mora","16-64 - 16-64 år",9200\n')
     with pytest.raises(ValueError, match="UseCodesAndTexts"):
         las_arbetskraft_per_alder(_skriv(tmp_path, "en.csv", bara_en))

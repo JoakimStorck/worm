@@ -35,6 +35,11 @@ from core.database.utils import kommunkod, las_rader
 
 # "16-19", "060-64" (SCB:s egen nollutfyllnad), "70-74", "16-66"
 KLASS = re.compile(r"^0?(\d{2})-(\d{2})$")
+# Årtalet sist i en värdekolumns rubrik. Tid hamnar i rubriken tillsammans
+# med innehållskoden även när uttaget ber om den i stub -- PxWeb hörsammar
+# inte placeringen för den variabeln -- så rubriken ser ut som
+# "000001OZ - antal ... (arbetskraften) 2024 - 2024".
+AR_I_RUBRIK = re.compile(r"((?:19|20)\d{2})\D*$")
 
 
 def _sep(rader):
@@ -43,18 +48,37 @@ def _sep(rader):
 
 
 def _kolumn(df, *nyckelord):
+    """Kolumnen vars KOD eller text börjar med något av nyckelorden.
+    Rubriken är "Alder - ålder", så båda halvorna måste kunna träffa."""
     for c in df.columns:
         lc = str(c).strip().lower()
+        halvor = [lc, kod(lc).lower()]
         for n in nyckelord:
-            if lc == n or lc.startswith(n):
+            if any(h == n or h.startswith(n) for h in halvor):
                 return c
     return None
+
+
+def kod(v):
+    """Kodhalvan av en cell på formen "kod - text".
+
+    UseCodesAndTexts skriver båda i VARJE cell, inte bara i rubriken:
+    "16-19 - 16-19 år", "0114 - 0114 Upplands Väsby", "1+2 - totalt". Texten
+    är den som bär betydelsen i rubrikerna -- den är hur arbetskraften skiljs
+    från befolkningen -- men i cellerna är koden det som ska läsas.
+
+    Delningen sker på FÖRSTA " - ", eftersom texten kan innehålla fler:
+    åldersetiketten "16-19 år" har ett bindestreck, och SCB:s egen text
+    använder dessutom tankstreck där koden har bindestreck.
+    """
+    delar = str(v).split(" - ", 1)
+    return delar[0].strip() if len(delar) == 2 else str(v).strip()
 
 
 def normalisera_klass(v):
     """"060-64" -> "60-64". SCB nollutfyller för att sortera rätt, och den
     nollan skulle annars ge en egen klass som ingen matchar mot."""
-    m = KLASS.match(str(v).strip())
+    m = KLASS.match(kod(v))
     if not m:
         return None
     return f"{int(m.group(1))}-{int(m.group(2))}"
@@ -79,18 +103,19 @@ def las_arbetskraft_per_alder(csv_path):
 
     reg = _kolumn(df, "region", "kommun")
     ald = _kolumn(df, "alder", "ålder")
-    tid = _kolumn(df, "tid", "år")
-    if reg is None or ald is None or tid is None:
-        raise ValueError(f"Saknar region-, ålders- eller tidskolumn i {csv_path}: "
+    tid = _kolumn(df, "tid")
+    if reg is None or ald is None:
+        raise ValueError(f"Saknar region- eller ålderskolumn i {csv_path}: "
                          f"{list(df.columns)}")
 
     # TVÅ VÄRDEKOLUMNER, och ordningen är inte given. Arbetskraften och
     # befolkningen skiljs åt på innehållskoden i rubriken, inte på position:
     # en fil där de bytt plats hade annars gjort deltagandet till sin egen
     # invers utan att något klagar.
-    dimensioner = {str(reg).lower(), str(ald).lower(), str(tid).lower(),
-                   "kon", "kön", "fodelseregion", "födelseregion"}
-    varden = [c for c in df.columns if str(c).strip().lower() not in dimensioner]
+    dimensioner = {str(c).lower() for c in (reg, ald, tid) if c is not None}
+    varden = [c for c in df.columns
+              if str(c).strip().lower() not in dimensioner
+              and kod(str(c)).lower() not in ("kon", "fodelseregion", "civilstand")]
     arbetskraft = next((c for c in varden if "arbetskraft" in str(c).lower()), None)
     totalt = next((c for c in varden
                    if "total" in str(c).lower() and c != arbetskraft), None)
@@ -101,10 +126,22 @@ def las_arbetskraft_per_alder(csv_path):
             "totalt, och rubrikerna ska säga vilken som är vilken "
             "(outputFormatParams=UseCodesAndTexts).")
 
+    if tid is not None:
+        ar = pd.to_numeric(df[tid].map(kod), errors="coerce")
+    else:
+        # ÅRET UR VÄRDEKOLUMNENS RUBRIK. Tid ligger i rubriken tillsammans med
+        # innehållskoden även när uttaget ber om den i stub.
+        m = AR_I_RUBRIK.search(str(arbetskraft))
+        if m is None:
+            raise ValueError(
+                f"Hittar varken en tidskolumn eller ett årtal i rubriken "
+                f"\"{arbetskraft}\" i {csv_path}")
+        ar = int(m.group(1))
+
     klass = df[ald].map(normalisera_klass)
     ut = pd.DataFrame({
         "municipal_code": kommunkod(df[reg].astype(str).str.extract(r"(\d{4})")[0]),
-        "year": pd.to_numeric(df[tid], errors="coerce"),
+        "year": ar,
         "age_group": klass,
         "in_labour_force": pd.to_numeric(
             df[arbetskraft].astype(str).str.replace(r"\s", "", regex=True),
