@@ -132,6 +132,28 @@ def create_schema(db_path="data/worm.sqlite3"):
         )
     """)
 
+    # SCB:s arbetsmarknadsstatus per åldersklass och kommun (BAS, slutlig
+    # årsstatistik). Underlaget för hur arbetskraften fördelar sig över
+    # åldrarna. RÅDATA: klasserna lagras som SCB redovisar dem, både
+    # femårsgrupperna och de överlappande aggregaten 16-64, 16-65 och 16-66.
+    # Aggregaten är inte redundanta här -- differenserna mellan dem är det
+    # enda sättet att få arbetskraften vid 65 respektive 66 år, och just de
+    # åldrarna avgör hur många som lämnar vid riktåldern.
+    #
+    # in_labour_force är sysselsatta plus arbetslösa, total är befolkningen i
+    # samma klass, båda ur samma tabell: deltagandet ska räknas mot SCB:s egen
+    # avgränsning och inte mot population_by_age, som avgränsar annorlunda.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS labour_force_by_age (
+            municipal_code TEXT,
+            year INTEGER,
+            age_group TEXT,
+            in_labour_force INTEGER,
+            total INTEGER,
+            PRIMARY KEY (municipal_code, year, age_group)
+        )
+    """)
+
     # SCB:s pendlingsflöden mellan kommuner. Referensen
     # share_hires_cross_municipality ställs mot, och den enda kalibreringen av
     # commute_cost_per_km. Diagonalen ingår: andelen som pendlar över gräns

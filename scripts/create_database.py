@@ -144,6 +144,19 @@ else:
         "finns. Hämta den med: python scripts/fetch_data.py --only Folkmangd "
         "-- utan den kan individernas ålder inte dras.")
 
+# Ladda SCB:s arbetskraft per åldersklass och kommun (BAS). Underlaget för
+# vilka årskullar arbetskraften bor i.
+ak_csv = "data/Arbetskraft kommun alder.csv"
+if file_exists(ak_csv):
+    try:
+        from core.database.load_participation import load_labour_force_by_age
+        load_labour_force_by_age(ak_csv, db_path=DB_PATH)
+    except Exception as e:
+        log(f"Fel vid laddning av arbetskraft per ålder ur {ak_csv}: {e}")
+else:
+    log("OBS: Laddar inte labour_force_by_age, filen saknas. Hämta den med: "
+        "python scripts/fetch_data.py --only Arbetskraft")
+
 # Ladda yrkesregistret och skatta yrkesvikter per kommun med IPF.
 riks_csv, lan_csv = "data/TAB4347_sv.csv", "data/TAB4441_sv.csv"
 if file_exists(riks_csv) and file_exists(lan_csv):

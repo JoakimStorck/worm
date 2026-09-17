@@ -17,6 +17,7 @@ Geodata via WFS kan dessutom kräva att GeoServer-instansen stödjer GPKG-output
 annars ladda GeoJSON och konvertera, eller använd den statiska GPKG-länken.
 """
 import os
+import re
 import io
 import json
 import zipfile
@@ -78,6 +79,20 @@ MANIFEST = [
         "table_id": "TAB638",
         "table_query": "Folkmängden efter region, civilstånd, ålder och kön",
         "query_fn": "befolkning_per_alder",
+        "query_args": {"ar": "2024"},
+    },
+    # Arbetskraft och befolkning per åldersklass och kommun (BAS, slutlig
+    # årsstatistik). Underlaget för vilka årskullar arbetskraften bor i.
+    # TAB2921 är verifierad i en körning: rätt dimensioner, år 2020-2024.
+    # Den preliminära årstabellen (TAB5655) täcker även 2025 men har samma
+    # åldersindelning, så den ger inget mer för det här ändamålet.
+    {
+        "type": "scb_px",
+        "dest": os.path.join(DATA_DIR, "Arbetskraft kommun alder.csv"),
+        "table_id": "TAB2921",
+        "table_query": "Arbetsmarknadsstatus efter region, kön, ålder och "
+                       "födelseregion. Slutlig statistik",
+        "query_fn": "arbetskraft_per_alder",
         "query_args": {"ar": "2024"},
     },
     # Stubbar – fyll i "table_query" och en "query_fn" i QUERY_BUILDERS:
@@ -256,7 +271,72 @@ def bygg_befolkningsuttag(meta, ar=None):
                                         "heading": ["ContentsCode"]}}}
 
 
-QUERY_BUILDERS = {"befolkning_per_alder": bygg_befolkningsuttag}
+def bygg_arbetskraftsuttag(meta, ar=None):
+    """Arbetskraft och befolkning per åldersklass och kommun (BAS).
+
+    KLASSERNA OCH AGGREGATEN. Femårsgrupperna räcker inte: ingen BAS-tabell
+    bryter ut 65 och 66 som egna klasser, och de åldrarna avgör hur många som
+    lämnar vid riktåldern. Aggregaten 16-64, 16-65 och 16-66 hämtas därför
+    med, eftersom differenserna mellan dem ger just de två årskullarna. Att de
+    överlappar femårsgrupperna är avsikten, inte ett misstag.
+
+    TOTALERNA VÄLJS. Kön har värdet "1+2" och födelseregion "tot". Att hämta
+    delarna och summera dem hade gett samma tal med sex gånger så många
+    celler, och med röjandeskyddets avvikelse mellan total och delsumma
+    ovanpå.
+
+    TVÅ INNEHÅLL. Arbetskraften är täljaren och antal totalt är nämnaren, och
+    båda ska komma ur samma tabell: deltagandet räknas mot SCB:s egen
+    avgränsning, inte mot befolkningspyramiden, som avgränsar annorlunda.
+    Rubrikerna måste därför säga vilken kolumn som är vilken, vilket
+    UseCodesAndTexts ger. Med enbart UseCodes blir de två kolumnerna namngivna
+    med koder som "000001OZ", och en förväxling skulle göra deltagandet till
+    sin egen invers utan att något klagar.
+    """
+    dim = meta.get("dimension", {})
+
+    def kategorier(namn):
+        return list(dim.get(namn, {}).get("category", {}).get("index", {}).keys())
+
+    def etikett(namn, kod):
+        return dim.get(namn, {}).get("category", {}).get("label", {}).get(kod, "")
+
+    kommuner = [k for k in kategorier("Region") if len(k) == 4 and k.isdigit()]
+    klasser = [a for a in kategorier("Alder")
+               if re.match(r"^0?\d{2}-\d{2}$", a) and a not in ("15-19", "15-74")]
+    behovs = {"16-64", "16-65", "16-66"}
+    if not kommuner or not behovs <= set(klasser):
+        raise ValueError(f"metadatan saknar kommuner eller aggregaten {sorted(behovs)}")
+    tider = kategorier("Tid")
+    tid = str(ar) if ar is not None else (tider[-1] if tider else None)
+    if tider and tid not in tider:
+        raise ValueError(f"året {tid} finns inte i tabellen ({tider[0]}-{tider[-1]})")
+
+    innehall = []
+    for kod in kategorier("ContentsCode"):
+        namn = etikett("ContentsCode", kod).lower()
+        if "arbetskraften" in namn or namn == "antal totalt":
+            innehall.append(kod)
+    if len(innehall) != 2:
+        raise ValueError("hittar inte både arbetskraften och antal totalt bland "
+                         f"innehållen: {[etikett('ContentsCode', k) for k in kategorier('ContentsCode')]}")
+
+    val = [{"variableCode": "Region", "valueCodes": kommuner},
+           {"variableCode": "Alder", "valueCodes": klasser},
+           {"variableCode": "ContentsCode", "valueCodes": innehall},
+           {"variableCode": "Tid", "valueCodes": [tid]}]
+    for namn, total in (("Kon", "1+2"), ("Fodelseregion", "tot")):
+        if total in kategorier(namn):
+            val.append({"variableCode": namn, "valueCodes": [total]})
+    return {"params": {"lang": "sv", "outputFormat": "csv",
+                       "outputFormatParams": "UseCodesAndTexts"},
+            "selection": {"selection": val,
+                          "placement": {"stub": ["Region", "Alder", "Tid"],
+                                        "heading": ["ContentsCode"]}}}
+
+
+QUERY_BUILDERS = {"befolkning_per_alder": bygg_befolkningsuttag,
+                  "arbetskraft_per_alder": bygg_arbetskraftsuttag}
 
 
 def fetch_scb_px(item):
