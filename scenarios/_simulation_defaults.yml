@@ -149,10 +149,16 @@ simulation:
     # Profilens övre gräns. Över 74 finns inget underlag i BAS.
     max_alder: 74
     work_age_min: 16
+    # Nycklarna är SCB:s sjugradiga utbildningsskala: 1-2 förgymnasial,
+    # 3-4 gymnasial, 5-6 eftergymnasial, 7 forskarnivå.
     entry_age:
-      low: 19
-      medium: 20
-      high: 24
+      1: 17
+      2: 17
+      3: 19
+      4: 20
+      5: 22
+      6: 25
+      7: 30
 
   # --- Kompetenscirklar (docs/individmodell.md, avsnitt 2) ---
   # Individen är en samling cirklar, en per erfarenhet. Exponering bygger

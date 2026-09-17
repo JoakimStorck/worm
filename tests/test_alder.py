@@ -160,6 +160,7 @@ class _Byggare:
     alderspyramid = ScenarioBuilder.alderspyramid
     deltagandeprofil = ScenarioBuilder.deltagandeprofil
     _skala_pyramid = staticmethod(ScenarioBuilder._skala_pyramid)
+    get_education_props = ScenarioBuilder.get_education_props
     dra_aldrar = ScenarioBuilder.dra_aldrar
     dra_tenure = ScenarioBuilder.dra_tenure
 
@@ -302,10 +303,10 @@ def test_tenure_overstiger_aldrig_arbetslivet():
     b = _Byggare(_db(_pyramid()),
                  simulation={"competence": {"initial_tenure_mean_years": 8.0}})
     alder = np.repeat(np.arange(16, 67, dtype=float), 40)
-    niva = ["high"] * len(alder)
+    niva = [6] * len(alder)
     entry, arbetsliv, tenure = b.dra_tenure(alder, niva, np.random.default_rng(6))
-    assert (entry == 24.0).all()
-    assert (arbetsliv == np.maximum(0.0, alder - 24.0)).all()
+    assert (entry == 25.0).all()
+    assert (arbetsliv == np.maximum(0.0, alder - 25.0)).all()
     assert (tenure <= arbetsliv + 1e-9).all()
     # Trunkeringen ska bita: med medel åtta år och tak noll till fyrtiotvå
     # hamnar en betydande andel exakt på taket.
@@ -313,12 +314,15 @@ def test_tenure_overstiger_aldrig_arbetslivet():
 
 
 def test_intradesaldern_foljer_utbildningsnivan():
+    """Nivåerna är SCB:s sjugradiga skala. De tre klasserna low/medium/high
+    slog ihop 1+2, 3+4 och 5+6+7, och skillnaden inom klumparna är stor:
+    inträdet sker vid 17 för nivå 2 och vid 30 för nivå 7."""
     b = _Byggare(_db(_pyramid()))
-    alder = np.array([30.0, 30.0, 30.0, 30.0])
+    alder = np.array([30.0] * 5)
     entry, arbetsliv, _ = b.dra_tenure(
-        alder, ["low", "medium", "high", None], np.random.default_rng(7))
-    assert list(entry) == [19.0, 20.0, 24.0, 20.0]
-    assert list(arbetsliv) == [11.0, 10.0, 6.0, 10.0]
+        alder, [2, 4, 6, 7, None], np.random.default_rng(7))
+    assert list(entry) == [17.0, 20.0, 25.0, 30.0, 19.0]
+    assert list(arbetsliv) == [13.0, 10.0, 5.0, 0.0, 11.0]
 
 
 # ----------------------------------------------------------------------
@@ -514,3 +518,79 @@ def test_hasarden_kommer_fran_samma_kurva_som_fordelningen():
     w = _varld_med_individer([60.0], ["employed"], profil=q)
     h = _hasardtabell(w)["2062"]
     assert h.equals(utträdeshasard(q))
+
+
+# ----------------------------------------------------------------------
+# Utbildningsnivån hela vägen till cirkeln
+# ----------------------------------------------------------------------
+
+def test_nivan_overlever_till_kompetenscirkeln():
+    """Buggen som 0155 hittade och den här patchen rättar.
+
+    generate_individuals skrev strängarna "low", "medium" och "high", medan
+    init_competence gör int(float(e)) och fångar ValueError med nivå noll.
+    Ingen individ i startpopulationen fick därför sin utbildningscirkel --
+    alla hade bara grundskolan vid origo, oavsett vad databasen sa.
+    """
+    from core.occupations.competence import (Circles, CompetenceParams,
+                                             seed_circles)
+
+    def cirklar(edu_level):
+        """Samma väg som world.init_competence tar från kolumn till cirkel."""
+        try:
+            e = int(float(edu_level))
+        except (TypeError, ValueError):
+            e = 0
+        c = Circles(1, 8)
+        seed_circles(c, 0, "11-1011.00", 0.3, 0.2, 0.27, 5.0, e,
+                     CompetenceParams())
+        return [c.key_names[k] for k in c.key[0] if k >= 0]
+
+    # Strängen, som var det gamla beteendet: bara grundskolan vid origo.
+    assert [k for k in cirklar("high") if k.startswith("EDU")] == ["EDU:0"]
+    # Nivån som tal ger nivåns egen cirkel.
+    assert "EDU:6" in cirklar(6)
+    assert "EDU:2" in cirklar(2)
+
+
+def test_nivaerna_halls_isar():
+    """get_education_props returnerade tidigare tre klasser som slog ihop
+    1+2, 3+4 och 5+6+7. Cirklarna skiljer sig kraftigt inom varje klump:
+    radien går från 0.8 vid nivå 2 till 0.25 vid nivå 6 och massan från 0.6
+    till 3.5, så "high" som en enda nivå valde godtyckligt bland tre mycket
+    olika cirklar."""
+    conn = sqlite3.connect(":memory:")
+    pd.DataFrame([
+        {"municipal_code": "2062", "year": 2024, "education_level_code": k,
+         "n_total": n}
+        for k, n in (("1", 50), ("2", 150), ("3", 200), ("4", 300),
+                     ("5", 120), ("6", 160), ("7", 20), ("US", 40))
+    ]).to_sql("education_level_municipality", conn, index=False)
+    b = _Byggare(conn)
+    props = b.get_education_props("2062", 2024)
+    assert set(props) == {1, 2, 3, 4, 5, 6, 7}
+    assert all(isinstance(k, int) for k in props)
+    # 'US' är bortfall, ingen nivå, och ska inte fördelas tyst.
+    assert sum(props.values()) == pytest.approx(1.0)
+    assert props[4] == pytest.approx(300 / 1000)
+
+
+def test_saknade_nivaer_kastar():
+    conn = sqlite3.connect(":memory:")
+    pd.DataFrame([{"municipal_code": "2062", "year": 2024,
+                   "education_level_code": "US", "n_total": 40}]
+                 ).to_sql("education_level_municipality", conn, index=False)
+    with pytest.raises(ValueError, match="nivåer 1-7"):
+        _Byggare(conn).get_education_props("2062", 2024)
+
+
+def test_proportionerna_bevaras_per_niva(monkeypatch):
+    """Antalet per nivå ska summera till arbetskraften och följa databasens
+    fördelning, inte rundas bort."""
+    b = _Byggare(_db(_pyramid()))
+    props = {1: 0.05, 2: 0.15, 3: 0.20, 4: 0.30, 5: 0.12, 6: 0.16, 7: 0.02}
+    antal = ScenarioBuilder._skala_pyramid(
+        np.array([props[k] for k in sorted(props)], dtype=float), 1000)
+    assert antal.sum() == 1000
+    assert antal[sorted(props).index(7)] >= 1     # minsta nivån försvinner inte
+    assert antal[sorted(props).index(4)] > antal[sorted(props).index(1)]

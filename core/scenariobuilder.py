@@ -538,26 +538,37 @@ class ScenarioBuilder:
         return df, employers_df
 
     def get_education_props(self, municipal_code, year):
+        """Andelen av befolkningen per SUN-nivå 1-7.
 
+        NIVÅERNA HÅLLS ISÄR. Tabellen bär SCB:s sjugradiga skala, och de tre
+        klasserna low/medium/high som funktionen tidigare returnerade slog
+        ihop 1+2, 3+4 och 5+6+7. Strängarna skrevs sedan i individtabellen,
+        och init_competence gjorde int(float("high")) -- ett ValueError som
+        fångas och sätter nivån till noll. INGEN individ i startpopulationen
+        fick därför sin utbildningscirkel: alla hade bara grundskolan vid
+        origo, oavsett vad databasen sa.
+
+        Klassernas cirklar skiljer sig dessutom kraftigt inom varje klump.
+        EDU_RADIUS2 går från 0.8 vid nivå 2 till 0.25 vid nivå 6 och massan
+        från 0.6 till 3.5, så "high" som en enda nivå hade valt godtyckligt
+        bland tre mycket olika cirklar.
+
+        Koden 'US', uppgift saknas, utesluts: den är ingen nivå utan ett
+        bortfall, och att fördela den kräver ett antagande som inte hör
+        hemma i en läsfunktion.
+        """
         df = pd.read_sql("""
-            SELECT education_level_code, n_total 
-            FROM education_level_municipality 
+            SELECT education_level_code, n_total
+            FROM education_level_municipality
             WHERE municipal_code = ? AND year = ?
         """, self.conn, params=(str(municipal_code), year))
-
-        low_codes = ['1', '2']
-        medium_codes = ['3', '4']
-        high_codes = ['5', '6', '7']
-        low = df[df.education_level_code.isin(low_codes)]["n_total"].sum()
-        medium = df[df.education_level_code.isin(medium_codes)]["n_total"].sum()
-        high = df[df.education_level_code.isin(high_codes)]["n_total"].sum()
-        total = low + medium + high
-        props = {
-            "low": low/total,
-            "medium": medium/total,
-            "high": high/total
-        }
-        return props
+        df = df[df["education_level_code"].astype(str).str.fullmatch(r"[1-7]")]
+        if df.empty:
+            raise ValueError(
+                f"education_level_municipality saknar nivåer 1-7 för kommun "
+                f"{municipal_code} år {year}")
+        n = df.groupby("education_level_code")["n_total"].sum()
+        return (n / n.sum()).rename(index=int).sort_index().to_dict()
 
 
     # 1. Ladda occupation space EN gång, spara som self.onet_space_df
@@ -603,8 +614,12 @@ class ScenarioBuilder:
     def age_config(self):
         """Åldersparametrarna ur simulation.age, med defaults."""
         cfg = self.cfg_reader.config.get("simulation", {}).get("age", {}) or {}
-        entry = {"low": 19.0, "medium": 20.0, "high": 24.0}
-        entry.update({k: float(v) for k, v in (cfg.get("entry_age") or {}).items()})
+        # Inträdesålder per SUN-nivå. Pensionsmyndigheten redovisar 21,9 år
+        # som genomsnittlig inträdesålder i arbetskraften 2025, vilket dessa
+        # tal väger ihop till för en rimlig nivåfördelning.
+        entry = {1: 17.0, 2: 17.0, 3: 19.0, 4: 20.0, 5: 22.0, 6: 25.0, 7: 30.0}
+        entry.update({int(k): float(v)
+                      for k, v in (cfg.get("entry_age") or {}).items()})
         return {"retirement_age": float(cfg.get("retirement_age", 67)),
                 "retirement_spread": float(cfg.get("retirement_spread", 0.8)),
                 "max_alder": int(cfg.get("max_alder", 74)),
@@ -764,8 +779,9 @@ class ScenarioBuilder:
     def dra_tenure(self, alder, utbildningsniva, rng):
         """Inträdesålder, arbetslivets längd och tenure i nuvarande yrke."""
         entry = self.age_config()["entry_age"]
-        entry_default = entry.get("medium", 20.0)
-        entry_ar = np.array([entry.get(e, entry_default) if isinstance(e, str)
+        entry_default = float(entry.get(3, 19.0))
+        entry_ar = np.array([float(entry.get(int(e), entry_default))
+                             if e is not None and str(e).isdigit()
                              else entry_default for e in utbildningsniva],
                             dtype=float)
         arbetsliv = np.maximum(0.0, np.asarray(alder, dtype=float) - entry_ar)
@@ -784,14 +800,12 @@ class ScenarioBuilder:
         n_workforce = int(round(population * workforce_ratio))
         n_not_in_labor_force = population - n_workforce
 
-        # 1. Hämta utbildningsproportioner från databas
+        # 1. Utbildningsnivå per individ, på SCB:s sjugradiga skala.
         edu_props = self.get_education_props(municipal_code, year)
-        n_low = int(round(n_workforce * edu_props["low"]))
-        n_medium = int(round(n_workforce * edu_props["medium"]))
-        n_high = n_workforce - n_low - n_medium  # Resterande
-
-        # 2. Skapa utbildningsnivå-lista för arbetskraft
-        education_levels = (["low"] * n_low) + (["medium"] * n_medium) + (["high"] * n_high)
+        nivaer = sorted(edu_props)
+        antal = self._skala_pyramid(
+            np.array([edu_props[k] for k in nivaer], dtype=float), n_workforce)
+        education_levels = [n for k, a in zip(nivaer, antal) for n in [k] * int(a)]
         rng.shuffle(education_levels)
 
         # 3. Slumpa status för hela befolkningen
