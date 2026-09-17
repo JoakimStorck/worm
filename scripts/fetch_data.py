@@ -161,6 +161,36 @@ def fetch_onet_zip(item):
         print(f"  -> {out}")
 
 
+def _som_utf8(r):
+    """Svarets kropp som UTF-8.
+
+    Statistikdatabasens CSV kommer i latin-1 när svaret bär klartext.
+    Befolkningsuttaget märktes inte av det: med enbart koder innehåller filen
+    inga å, ä eller ö och är därmed giltig UTF-8 av en slump.
+
+    Provningsordningen kan inte vändas. En UTF-8-fil avkodad som latin-1 ger
+    INGET fel utan tyst fel text, medan en latin-1-fil avkodad som UTF-8
+    alltid ger UnicodeDecodeError. Att pröva UTF-8 först kan alltså aldrig
+    förstöra en fil som redan är UTF-8; motsatt ordning kan.
+    """
+    try:
+        r.content.decode("utf-8")
+        return r.content
+    except UnicodeDecodeError:
+        pass
+    for kodning in (r.encoding, "cp1252", "iso-8859-1"):
+        if not kodning or kodning.lower().replace("_", "-") == "utf-8":
+            continue
+        try:
+            text = r.content.decode(kodning)
+        except (UnicodeDecodeError, LookupError):
+            continue
+        print(f"  (svaret var {kodning}, skrivs som utf-8)")
+        return text.encode("utf-8")
+    raise ValueError("Kan inte avkoda svaret: varken utf-8, "
+                     f"{r.encoding} eller latin-1")
+
+
 def _kontrollera(r, vad):
     """Höjer fel med API:ets egen förklaring, inte bara statuskoden.
 
@@ -372,7 +402,7 @@ def fetch_scb_px(item):
                       timeout=300)
     _kontrollera(r, "data")
     with open(item["dest"], "wb") as f:
-        f.write(r.content)
+        f.write(_som_utf8(r))
     print(f"  -> {item['dest']} ({len(r.content)} bytes)")
 
 

@@ -62,3 +62,24 @@ def fetch_with_fallback(conn, table, filters, year_col='year', desired_year=None
         log(f"Varning: Fallback till år {fallback_year} i {table} för filter {filters} (önskat år var {desired_year})")
     return df, fallback_year
 
+
+
+# SCB:s uttag kommer i mer än en teckenkodning. Statistikdatabasens CSV är
+# latin-1 när svaret bär klartext, medan ett rent kodat uttag råkar vara
+# giltig UTF-8 eftersom det inte innehåller några å, ä eller ö alls. Ordningen
+# är inte godtycklig: utf-8 prövas först, eftersom en UTF-8-fil avkodad som
+# cp1252 INTE ger fel utan tyst fel text ("fÃ¶delseregion"), medan en
+# latin-1-fil avkodad som UTF-8 alltid ger UnicodeDecodeError. Fel ordning
+# gömmer alltså felet i stället för att visa det.
+KODNINGAR = ("utf-8-sig", "cp1252", "iso-8859-1")
+
+
+def las_rader(path, kodningar=KODNINGAR):
+    """Filens rader som text, med den kodning som faktiskt fungerar."""
+    for kodning in kodningar:
+        try:
+            with open(path, encoding=kodning) as f:
+                return f.read().splitlines(), kodning
+        except UnicodeDecodeError:
+            continue
+    raise ValueError(f"Kan inte avkoda {path} med någon av {kodningar}")

@@ -158,6 +158,18 @@ def test_kolumnerna_skiljs_pa_rubrik_inte_position(tmp_path):
     assert int(rad["total"].iloc[0]) == 12000
 
 
+def test_latin1_gar_att_lasa(tmp_path):
+    """Statistikdatabasen gav filen i latin-1, och läsningen föll på 0xf6 --
+    ö i "arbetslösa". Befolkningsuttaget märktes inte av det: med enbart
+    koder innehåller den filen inga å, ä eller ö alls."""
+    p = tmp_path / "latin.csv"
+    p.write_bytes(textwrap.dedent(CSV).encode("iso-8859-1"))
+    df = las_arbetskraft_per_alder(str(p))
+    rad = df[(df.municipal_code == "2062") & (df.age_group == "16-64")]
+    assert int(rad["in_labour_force"].iloc[0]) == 9200
+    assert int(rad["total"].iloc[0]) == 12000
+
+
 def test_en_rad_per_kommun_ar_och_klass(tmp_path):
     """Kommer kön eller födelseregion med som delar vid sidan av sina totaler
     är talen dubbelräknade."""

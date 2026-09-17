@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 import sqlite3
 
-from core.database.utils import kommunkod
+from core.database.utils import kommunkod, las_rader
 
 # "34 år", "34", "100+ år", "100+"
 ALDER = re.compile(r"^\s*(\d{1,3})\s*\+?\s*(år)?\s*$", re.IGNORECASE)
@@ -71,10 +71,9 @@ def _kolumn(df, *nyckelord):
     return None
 
 
-def las_befolkning_per_alder(csv_path, kodning="utf-8-sig"):
+def las_befolkning_per_alder(csv_path):
     """DataFrame med municipal_code, year, age, n_total."""
-    with open(csv_path, encoding=kodning, errors="replace") as f:
-        rader = f.read().splitlines()
+    rader, kodning = las_rader(csv_path)
     sep = _sep(rader)
     start = _rubrikrad(rader, sep)
     df = pd.read_csv(csv_path, sep=sep, skiprows=start, dtype=str,

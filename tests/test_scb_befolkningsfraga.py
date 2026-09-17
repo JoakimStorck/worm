@@ -182,3 +182,37 @@ def test_tiden_ligger_i_stub_inte_i_rubriken():
     plac = bygg_befolkningsuttag(META)["selection"]["placement"]
     assert plac["stub"] == ["Region", "Alder", "Tid"]
     assert plac["heading"] == ["ContentsCode"]
+
+
+# ----------------------------------------------------------------------
+# Teckenkodningen
+# ----------------------------------------------------------------------
+
+class _Kropp:
+    def __init__(self, content, encoding=None):
+        self.content = content
+        self.encoding = encoding
+
+
+def test_utf8_skrivs_oforandrat():
+    from scripts.fetch_data import _som_utf8
+    rått = "region,ålder\n2062,20\n".encode("utf-8")
+    assert _som_utf8(_Kropp(rått, "ISO-8859-1")) == rått
+
+
+def test_latin1_skrivs_om_till_utf8():
+    """Uttaget med klartext i rubrikerna kom i latin-1, och läsningen föll på
+    0xf6 -- ö i födelseregion."""
+    from scripts.fetch_data import _som_utf8
+    text = "region,ålder,födelseregion\n2062,20,tot\n"
+    ut = _som_utf8(_Kropp(text.encode("iso-8859-1"), "ISO-8859-1"))
+    assert ut.decode("utf-8") == text
+
+
+def test_utf8_provas_forst():
+    """En UTF-8-fil avkodad som latin-1 ger inget fel utan tyst fel text
+    ("fÃ¶delseregion"). Ordningen är därför inte utbytbar."""
+    from scripts.fetch_data import _som_utf8
+    text = "födelseregion\n"
+    ut = _som_utf8(_Kropp(text.encode("utf-8"), "ISO-8859-1"))
+    assert ut.decode("utf-8") == text

@@ -38,23 +38,19 @@ import sys
 
 import pandas as pd
 
+from core.database.utils import las_rader
+
 KOD = re.compile(r"(\d{4})")
 # SCB:s statistikdatabas skriver ISO-8859-1 som förval. Läses den som UTF-8
 # faller den antingen med UnicodeDecodeError eller -- värre -- tyst, med
 # kommunnamn som inte matchar något. utf-8-sig står först, så att en fil som
 # VERKLIGEN är UTF-8 inte tolkas som latin-1.
-KODNINGAR = ("utf-8-sig", "cp1252", "iso-8859-1")
+# KODNINGAR och _las_rader bor i core/database/utils.py: samma behov finns i
+# varje SCB-läsare, och en kopia per modul hade drivit isär ordningen mellan
+# dem.
 
 
-def _las_rader(path):
-    """Filens rader som text, med den kodning som faktiskt fungerar."""
-    for kodning in KODNINGAR:
-        try:
-            with open(path, encoding=kodning) as f:
-                return f.read().splitlines(), kodning
-        except UnicodeDecodeError:
-            continue
-    raise ValueError(f"Kan inte avkoda {path} med någon av {KODNINGAR}")
+_las_rader = las_rader
 
 
 def _sep(rader):

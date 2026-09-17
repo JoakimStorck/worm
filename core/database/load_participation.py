@@ -31,7 +31,7 @@ import re
 import pandas as pd
 import sqlite3
 
-from core.database.utils import kommunkod
+from core.database.utils import kommunkod, las_rader
 
 # "16-19", "060-64" (SCB:s egen nollutfyllnad), "70-74", "16-66"
 KLASS = re.compile(r"^0?(\d{2})-(\d{2})$")
@@ -60,10 +60,13 @@ def normalisera_klass(v):
     return f"{int(m.group(1))}-{int(m.group(2))}"
 
 
-def las_arbetskraft_per_alder(csv_path, kodning="utf-8-sig"):
+def las_arbetskraft_per_alder(csv_path):
     """DataFrame med municipal_code, year, age_group, in_labour_force, total."""
-    with open(csv_path, encoding=kodning, errors="replace") as f:
-        rader = f.read().splitlines()
+    # TECKENKODNINGEN ÄR INTE GIVEN. Statistikdatabasens CSV är latin-1 när
+    # svaret bär klartext. Befolkningsuttaget klarade sig som UTF-8 bara
+    # därför att det inte innehåller några å, ä eller ö alls -- det här gör
+    # det, eftersom rubrikerna bär både kod och text.
+    rader, kodning = las_rader(csv_path)
     sep = _sep(rader)
     start = next((i for i, r in enumerate(rader[:25])
                   if "region" in r.lower() and "alder" in r.lower().replace("ålder", "alder")),
