@@ -180,3 +180,79 @@ def test_figuren_ritas(tmp_path):
     p = tmp_path / "f.pdf"
     figur(d, r, str(p))
     assert p.exists() and p.stat().st_size > 1000
+
+
+# ----------------------------------------------------------------------
+# Sektorer och rutnät
+# ----------------------------------------------------------------------
+
+def test_yrket_raknas_en_gang():
+    """Rader är inte observationer när samma yrke förekommer två gånger. Ett
+    yrke med båda könen ska inte se ut som två belägg för samma position."""
+    from scripts.analys_pensionsalder import per_yrke
+    d = _med_konsrader(_syntetisk(n=30, seed=11))
+    d["x"] = np.cos(np.radians(d["xi"]))
+    d["y"] = np.sin(np.radians(d["xi"]))
+    y = per_yrke(d)
+    assert len(y) == 30
+    # Åldern vägs ihop med antalet, inte med ett rakt medelvärde.
+    rad = d[d["yrke"] == "y0"]
+    vantat = np.average(rad["alder"], weights=rad["antal"])
+    assert y[y.yrke == "y0"]["alder"].iloc[0] == pytest.approx(vantat)
+
+
+def test_rutnatet_hittar_gradienten():
+    """Rutnätet antar ingen cirkulär form, till skillnad från den harmoniska
+    anpassningen."""
+    from scripts.analys_pensionsalder import rutnat
+    rng = np.random.default_rng(12)
+    n = 400
+    x, yy = rng.uniform(-0.6, 0.6, n), rng.uniform(-0.6, 0.6, n)
+    y = pd.DataFrame({"x": x, "y": yy, "xi": np.degrees(np.arctan2(yy, x)) % 360,
+                      "chi": np.hypot(x, yy), "antal": 100.0,
+                      "alder": 65 + 0.7 * x + 0.35 * yy})
+    _, _, _, grad = rutnat(y, n=5)
+    assert grad["riktning"] == pytest.approx(26.6, abs=3.0)
+    assert grad["kvot"] == pytest.approx(0.5, abs=0.1)
+
+
+def test_punkttatheten_paverkar_inte_gradienten():
+    """Det rutnätet FAKTISKT gör: ger varje bebodd region samma vikt.
+
+    Samma data, men en region har tio gånger fler yrken. Gradienten ska vara
+    oförändrad. Punkttätheten i det verkliga materialet är lika ojämn -- den
+    östra halvan har tre gånger fler yrken än den nordvästra -- och en
+    anpassning på yrken låter därför de täta områdena bestämma riktningen.
+
+    Vad rutnätet INTE skyddar mot: en region som avviker i nivå drar lika
+    mycket som vilken annan region som helst, eftersom den nu väger lika. Med
+    tolv bebodda rutor är varje ruta en åttondel av vikten.
+    """
+    from scripts.analys_pensionsalder import rutnat
+    rng = np.random.default_rng(13)
+
+    def ram(x, y):
+        d = pd.DataFrame({"x": x, "y": y})
+        d["alder"] = 65 + 0.7 * d["x"] + 0.35 * d["y"]
+        d["antal"] = 100.0
+        d["xi"] = np.degrees(np.arctan2(d["y"], d["x"])) % 360
+        d["chi"] = np.hypot(d["x"], d["y"])
+        return d
+
+    glest = ram(rng.uniform(-0.6, 0.6, 120), rng.uniform(-0.6, 0.6, 120))
+    tat = pd.concat([glest,
+                     ram(rng.normal(0.45, 0.05, 600),
+                         rng.normal(-0.45, 0.05, 600))], ignore_index=True)
+    g1 = rutnat(glest, n=5)[3]
+    g2 = rutnat(tat, n=5)[3]
+    assert g2["kvot"] == pytest.approx(g1["kvot"], abs=0.08)
+    assert g2["riktning"] == pytest.approx(g1["riktning"], abs=5.0)
+
+
+def test_sektorerna_tacker_varvet():
+    from scripts.analys_pensionsalder import sektorer
+    y = pd.DataFrame({"xi": np.linspace(0, 359, 64), "antal": 1.0,
+                      "alder": 65.0})
+    s = sektorer(y, n=8)
+    assert len(s) == 8
+    assert int(s["yrken"].sum()) == 64

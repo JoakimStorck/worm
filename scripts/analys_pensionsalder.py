@@ -219,6 +219,84 @@ def harmonisk(d, vikt=None, kontroller=(), kluster="ssyk3", harmonik=1):
             "koefficienter": dict(zip(namn, [float(v) for v in beta]))}
 
 
+def per_yrke(d):
+    """Ett yrke per rad: könen vägs ihop med antalet nya pensionärer.
+
+    Rader är inte observationer när samma yrke förekommer två gånger. För
+    sektorer och rutor ska yrket räknas en gång, annars ser ett yrke med
+    båda könen ut som två oberoende belägg för samma position.
+    """
+    return d.groupby(["yrke", "ssyk3"]).apply(
+        lambda t: pd.Series({
+            "x": float(t["x"].iloc[0]), "y": float(t["y"].iloc[0]),
+            "xi": float(t["xi"].iloc[0]), "chi": float(t["chi"].iloc[0]),
+            "antal": float(t["antal"].sum()),
+            "alder": float(np.average(t["alder"], weights=t["antal"]))}),
+        include_groups=False).reset_index()
+
+
+def sektorer(y, n=8):
+    """Medelålder per riktningssektor, utan att anta någon form på kurvan."""
+    bredd = 360.0 / n
+    s = ((y["xi"] + bredd / 2) % 360 // bredd).astype(int)
+    ut = []
+    for i in range(n):
+        t = y[s == i]
+        mitt = (i * bredd) % 360
+        ut.append({"sektor": f"{mitt:.0f}°", "yrken": int(len(t)),
+                   "personer": int(t["antal"].sum()) if len(t) else 0,
+                   "alder": float(np.average(t["alder"], weights=t["antal"]))
+                   if len(t) else np.nan})
+    return pd.DataFrame(ut)
+
+
+def rutnat(y, n=5, minst=2):
+    """Medelålder per ruta i planet, och gradienten genom rutorna.
+
+    RUTAN ÄR OBSERVATIONEN, inte yrket. Punkttätheten är starkt ojämn -- den
+    östra halvan har tre gånger fler yrken än den nordvästra -- och en
+    anpassning på yrken låter därför de täta områdena bestämma riktningen.
+    Rutnätet ger varje bebodd del av planet samma vikt, vilket är den
+    oberoende prövningen av om lutningen finns i hela planet eller bara där
+    punkterna råkar ligga.
+
+    Gradienten anpassas som alder = a + b x + c y på rutmedelvärdena. Den
+    antar ingen cirkulär form, till skillnad från den harmoniska
+    anpassningen, och bär därmed inte dess antagande.
+
+    VAD RUTNÄTET INTE SKYDDAR MOT: en region som avviker i nivå drar nu lika
+    mycket som vilken annan region som helst, eftersom den väger lika. Med
+    ett tiotal bebodda rutor är varje ruta en dryg tiondel av vikten.
+    Riktningen ur rutnätet ska därför läsas tillsammans med hur den ändras
+    med upplösningen, inte som ett tal.
+    """
+    r = float(max(y["x"].abs().max(), y["y"].abs().max()))
+    kant = np.linspace(-r, r, n + 1)
+    ix = np.clip(np.digitize(y["x"], kant) - 1, 0, n - 1)
+    iy = np.clip(np.digitize(y["y"], kant) - 1, 0, n - 1)
+    rutor, karta = [], np.full((n, n), np.nan)
+    antal = np.zeros((n, n), dtype=int)
+    for i in range(n):
+        for j in range(n):
+            t = y[(ix == i) & (iy == j)]
+            antal[j, i] = len(t)
+            if len(t):
+                karta[j, i] = float(np.average(t["alder"], weights=t["antal"]))
+            if len(t) >= minst:
+                rutor.append({"x": float(t["x"].mean()), "y": float(t["y"].mean()),
+                              "alder": karta[j, i]})
+    R = pd.DataFrame(rutor)
+    grad = None
+    if len(R) >= 6:
+        X = np.column_stack([np.ones(len(R)), R["x"], R["y"]])
+        b, *_ = np.linalg.lstsq(X, R["alder"].to_numpy(dtype=float), rcond=None)
+        grad = {"dx": float(b[1]), "dy": float(b[2]),
+                "riktning": float(np.degrees(np.arctan2(b[2], b[1])) % 360),
+                "kvot": float(b[2] / b[1]) if b[1] else np.nan,
+                "lutning": float(np.hypot(b[1], b[2])), "rutor": int(len(R))}
+    return karta, antal, kant, grad
+
+
 def figur(d, r, path):
     """Två paneler: åldern mot riktningen med den anpassade kurvan, och
     yrkesgrupperna i planet färgade efter ålder."""
@@ -279,6 +357,8 @@ def main():
                     help="yrkesregisterfil med SSYK3-benämningar")
     ap.add_argument("--db", default=DB)
     ap.add_argument("--figur", default="analysis/figures/pensionsalder_xi.pdf")
+    ap.add_argument("--rutor", type=int, default=5,
+                    help="rutnätets upplösning (riktningen vandrar med den)")
     a = ap.parse_args()
 
     pens = las_pensionsalder(a.pensionsfil)
@@ -342,6 +422,45 @@ def main():
         figur(d, harmonisk(d, vikt="antal", kontroller=("intjanandear",)),
               a.figur)
         d.to_csv(os.path.splitext(a.figur)[0] + ".csv", index=False)
+
+    # UTAN ANTAGANDE OM FORM. Sektorerna och rutorna visar strukturen som den
+    # ligger; den harmoniska anpassningen förutsätter en cosinuskurva.
+    y = per_yrke(d)
+    print("\n--- medelålder per riktningssektor (ett yrke per rad)")
+    sek = sektorer(y)
+    print(sek.to_string(index=False, float_format=lambda v: f"{v:.2f}"))
+
+    print("\n--- rutnät över planet (viktad medelålder / antal yrken)")
+    karta, antal, kant, grad = rutnat(y, n=a.rutor)
+    n = a.rutor
+    print("        " + "".join(f"  x {kant[i]:+.2f}..{kant[i+1]:+.2f}"
+                               for i in range(n)))
+    for j in range(n - 1, -1, -1):
+        rad = f"  y {kant[j]:+.2f}  "
+        for i in range(n):
+            rad += ("        .      " if np.isnan(karta[j, i])
+                    else f"  {karta[j, i]:6.2f}/{antal[j, i]:<3d}  ")
+        print(rad)
+    if grad:
+        print(f"\n   gradient genom {grad['rutor']} rutor: dx {grad['dx']:+.3f}  "
+              f"dy {grad['dy']:+.3f}   riktning {grad['riktning']:.1f}°   "
+              f"dy/dx {grad['kvot']:+.2f}   lutning {grad['lutning']:.2f} år")
+        print("   (rutan är observationen: punkttätheten är ojämn, och en "
+              "anpassning på\n    yrken låter de täta områdena bestämma "
+              "riktningen)")
+
+    # KOMPONENTERNA VAR FÖR SIG. Att pressa riktningen till ett gradtal är att
+    # övertolka -- den vandrar mellan 25 och 55 grader med rutstorlek och
+    # viktning. Det som står emot varje prövning är att BÅDA komponenterna är
+    # skilda från noll: cos skulle vara noll om åldern följde samma axel som
+    # lönepremien, sin om den följde den rena öst-västaxeln.
+    rr = harmonisk(d, vikt="antal", kontroller=("intjanandear",))
+    kov, k = rr["kov"], rr["koefficienter"]
+    print("\n--- komponenterna var för sig")
+    for i, namn in ((1, "cos (öst-väst, PC1)"), (2, "sin (nord-syd, PC2)")):
+        se = float(np.sqrt(kov[i, i]))
+        print(f"   {namn:24} {list(k.values())[i]:+.3f} ± {se:.3f}   "
+              f"t = {list(k.values())[i] / se:+.1f}")
 
     print("\nYtterligheter i materialet:")
     v = d.sort_values("alder")
