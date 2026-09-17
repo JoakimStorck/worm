@@ -9,6 +9,11 @@ först.
 En förenklad mekanism, som bygger enbart på befintliga delar, beskrivs sist och
 är införd.
 
+**Läs avsnittet "Utbildningen som cirkel" innan något byggs.** Det ersätter
+tre saker som stod i detta dokument och som är överspelade: att utbildningar
+måste positioneras genom en egen textprojektion, att omskolningscirkelns radie
+är bred som antagande, och att massan är studietiden rakt av.
+
 ---
 
 ## Vad utbildning gör
@@ -31,6 +36,93 @@ Utbildning ger **ingen egen löneeffekt**. Nivån öppnar jobb; att de betalar
 mer är prisfältets sak. Omskolning flyttar mot bättre betalda jobb; att de
 betalar mer är också fältets sak. Detta tar bort en parameter och gör
 grindvaktsfrågan nedan skarpare.
+
+---
+
+## Utbildningen som cirkel
+
+Cirkelns tre storheter har operativa betydelser i konkurrenskraftsformeln
+(`individmodell.md`, avsnitt 2), och det är därifrån de ska definieras:
+
+    q = Σ_k (1 − e^{−m_k/m_ref}) · [2r_o²/(ρ_k² + r_o²)] · exp(−d_kj²/2γ²(ρ_k² + r_o²))
+
+**Positionen** är var toppen ligger; avståndet d mäts därifrån. **Radien** ρ är
+en avvägning och inte ett kvalitetsmått: skärpan är ett när cirkeln är lika bred
+som jobbets egen uppgiftsradie r_o och faller när den är bredare, medan
+avståndsfaktorn räcker längre ju bredare cirkeln är. Smal cirkel ger hög topp
+och kort räckvidd, bred ger låg topp och lång. **Massan** avgör hur mycket
+cirkeln räknas alls, mättande vid m_ref ≈ 2 år.
+
+### Ramen är SUN 2020
+
+SCB:s utbildningsnomenklatur bär de tre storheterna i sin egen struktur, vilket
+gör modellen kompatibel med svensk statistik utan översättningsled.
+
+NIVÅKODEN har tre positioner: grov nivå (0–6), teoretisk längd i år, och typ.
+Den tredje positionen skiljer **yrkesinriktad** (7, 5) från **generell** (6) —
+samma distinktion som detta dokument gör mellan exponering och kvalifikation,
+men som SCB-kod i stället för som vår tolkning.
+
+INRIKTNINGSKODEN har 9 huvudinriktningar, 25 på tvåsiffernivå och 117
+ämnesinriktningar. Det är riktningen i uppgiftsrummet.
+
+| Cirkelns storhet | SUN-källa |
+|---|---|
+| Position (x, y) | inriktning, 3 siffror |
+| Radie ρ² | inriktningens spridning över yrken |
+| Massa m | nivåkodens längd × intensitet efter typ |
+| Kvalifikationsnivå ℓ | nivåkodens första position |
+
+### Position och radie ur observerat yrkesutfall
+
+**TAB4359** (anställda i riket efter yrke, 3-siffrig SSYK 2012,
+utbildningsinriktning enligt SUN 2020, ålder och kön, 2020–2024) ger för varje
+inriktning vilka yrken de utbildade faktiskt arbetar i. Positionen är den
+viktade centroiden av yrkenas positioner; radien är spridningen kring den,
+alltså viktad varians av yrkescentroidernas avstånd plus yrkenas egna r_o².
+
+Det besvarar dokumentets egen öppna fråga — om utbildning kan SKÄRPA och inte
+bara flytta — ur data i stället för ur en parameter. En inriktning som leder
+till ett yrke ger ρ ≈ r_o och skärpa nära ett; en som leder till många ger ρ
+större än r_o, alltså lägre topp men längre räckvidd. Sjuksköterskeutbildade
+blir sjuksköterskor; ekonomer hamnar överallt.
+
+Ta position och radie ur **25–29-åringarna**: de är nära examen och har inte
+hunnit driva bort från sin utbildning, vilket är precis vad en inträdares
+cirkel ska spegla.
+
+Detta ERSÄTTER den textprojektion av kursbeskrivningar som föreslås under
+Data nedan. Den behövs inte: yrkesutfallet ger både position och radie, och
+radien går inte att få ur en projektion alls.
+
+### Massan är inte studietiden
+
+Studietid rakt av ger fel svar. Fem års civilingenjörsutbildning med m = 5 ger
+massfaktorn 0,92 — en nyexaminerad vore nästan lika konkurrenskraftig som
+någon med fem års yrkeserfarenhet. Massan mäter exponering för uppgifterna,
+och studier ger mindre av det per år än arbete.
+
+Alltså m = studietid × intensitet, där intensiteten är under ett och skiljer
+sig mellan yrkesinriktad och generell utbildning enligt nivåkodens tredje
+position. Som storleksordning ger intensitet 0,5 för yrkesinriktad ett treårigt
+vård- och omsorgsprogram 0,53 och en femårig civilingenjör 0,71; intensitet 0,3
+för generell ger ett treårigt naturvetenskapligt program 0,36.
+
+**Talen 0,5 och 0,3 är inte avgjorda.** De ska kalibreras, inte gissas.
+
+### Öppna beslut
+
+1. **Vad intensiteten kalibreras mot.** Förslag: kvoten ingångslön mot
+   medianlön per yrke ur SCB:s lönestatistik. Den mäter vad marknaden faktiskt
+   betalar en nyexaminerad jämfört med en mogen arbetare, vilket är samma
+   storhet som massfaktorn uttrycker.
+
+2. **Kvalifikationsnivåns omfattning.** Antingen en binär grind per yrke,
+   skattad ur andelen anställda med nivån, eller enbart legitimationsyrkena
+   (SUN 721, 723, 724, 726, 727, 380, 861a). Papper 1 förklarar redan 61
+   procent av variationen i utbildningskrav med geometrin, så en generell
+   kravskala ovanpå den dubbelräknar. Grinden bör därför definieras snävt: ett
+   formellt krav som INTE följer av uppgiftsinnehållet.
 
 ---
 
@@ -153,17 +245,27 @@ UHR och Skolverket har programutbud per lärosäte och ort. Myndigheten för
 yrkeshögskolan har YH-utbildningar per kommun. Båda är öppna.
 
 Det som behövs är en tabell `education_supply(municipal_code, level, field,
-seats)` där `field` är kopplad till en position i uppgiftsrummet — samma
-projektionsproblem som papper 4:s huvudspår löser för yrken. Utbildningar kan
-positioneras med samma metod, ur kursbeskrivningar, i samma frysta bas. En
-sådan projektion vore ett resultat i sig: den placerar utbildningsutbudet och
-arbetsmarknaden i samma rum och gör avståndet mellan dem mätbart.
+seats)` där `field` är en SUN-inriktning. Positionen hämtas ur TAB4359 enligt
+avsnittet "Utbildningen som cirkel" och behöver ingen egen projektion: det
+observerade yrkesutfallet ger både position och radie, och radien går inte att
+få ur en textprojektion alls.
+
+Det som återstår för utbudet är alltså bara antalet platser per kommun och
+inriktning. Kopplingen mellan utbildningsutbudet och arbetsmarknaden i samma
+rum följer då direkt.
 
 ### Individens nivå
 
-Finns redan: `education_level` ur SCB:s utbildningsnivåer, koderna 1–7.
-Fältet **används ingenstans** i dag. Det kopplas in i steg 4 i
-individmodellens byggordning. Nyckeln SUN ↔ Job Zone är öppen.
+Finns: `education_level` ur SCB:s utbildningsnivåer, koderna 1–7.
+
+Fältet nådde länge ingenstans. `get_education_props` slog ihop skalan till tre
+klasser och skrev strängarna "low", "medium" och "high" i individtabellen,
+medan `init_competence` gör `int(float(e))` och fångar felet med nivå noll.
+INGEN individ i startpopulationen fick därför sin utbildningscirkel — alla bar
+bara grundskolan vid origo. Rättat: nivåerna 1–7 dras direkt och skrivs som
+heltal.
+
+Nyckeln SUN ↔ Job Zone är öppen.
 
 ---
 
@@ -248,7 +350,18 @@ per kommun, kostnader, avhopp.
 
 **Vad som ändras när individmodellen är byggd.** Den förenklade mekanismen
 flyttade en fri punkt. Med kompetenscirklarna (steg 1) blir omskolningen en
-cirkel: kursens position, en bred radie, och massa lika med studietiden.
+cirkel med kursens position, radie och massa.
+
+Radien var här beskriven som bred, vilket var ett antagande. Den ska komma ur
+inriktningens yrkesutfall (se "Utbildningen som cirkel"), och det avgör om
+omskolning är en väg tillbaka eller bara en förflyttning: `retraining_radius2`
+är i dag 0,25, alltså r = 0,5, vilket är lika trubbigt som en cirkel som
+diffunderat bort sin spets. En sådan cirkel ger massa på ny position men ingen
+topp.
+
+Massan var här beskriven som studietiden, vilket ger en nyexaminerad nästan
+full konkurrenskraft. Den ska vara studietid × intensitet.
+
 Riktningen mot vakansernas tyngdpunkt behålls; effekten blir principiell i
 stället för en godtycklig andel av vägen. Formell utbildning tillkommer i
 steg 4.
