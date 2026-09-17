@@ -15,6 +15,7 @@ import pytest
 from conftest import FakeConfig, make_world
 
 from core.database.load_population_age import las_befolkning_per_alder
+from core.participation import GRUPPER
 from core.scenariobuilder import ScenarioBuilder
 
 
@@ -157,14 +158,42 @@ class _Byggare:
 
     age_config = ScenarioBuilder.age_config
     alderspyramid = ScenarioBuilder.alderspyramid
+    deltagandeprofil = ScenarioBuilder.deltagandeprofil
     _skala_pyramid = staticmethod(ScenarioBuilder._skala_pyramid)
     dra_aldrar = ScenarioBuilder.dra_aldrar
     dra_tenure = ScenarioBuilder.dra_tenure
 
 
-def _db(rader):
+# En rimlig svensk deltagandeprofil per BAS-grupp: lågt bland de yngsta,
+# högt i mitten, fallande mot slutet.
+Q_GRUPP = {"16-19": 0.30, "20-24": 0.73, "25-29": 0.85, "30-34": 0.88,
+           "35-39": 0.90, "40-44": 0.90, "45-49": 0.90, "50-54": 0.89,
+           "55-59": 0.86, "60-64": 0.70}
+
+
+def _arbetskraftsrader(kod="2062", year=2024, n_per_alder=100, q65=0.60):
+    """Raderna i labour_force_by_age, konsistenta med pyramiden."""
+    rader = []
+    for namn, lo, hi in GRUPPER:
+        n = n_per_alder * (hi - lo + 1)
+        rader.append({"municipal_code": kod, "year": year, "age_group": namn,
+                      "in_labour_force": Q_GRUPP[namn] * n, "total": n})
+    # Aggregaten, som ger 65 år ur differensen.
+    bas_a, bas_n = 30000.0, 40000.0
+    rader.append({"municipal_code": kod, "year": year, "age_group": "16-64",
+                  "in_labour_force": bas_a, "total": bas_n})
+    rader.append({"municipal_code": kod, "year": year, "age_group": "16-65",
+                  "in_labour_force": bas_a + q65 * n_per_alder,
+                  "total": bas_n + n_per_alder})
+    return rader
+
+
+def _db(rader, arbetskraft=True, kod="2062", year=2024, n_per_alder=100):
     conn = sqlite3.connect(":memory:")
     pd.DataFrame(rader).to_sql("population_by_age", conn, index=False)
+    if arbetskraft:
+        pd.DataFrame(_arbetskraftsrader(kod, year, n_per_alder)).to_sql(
+            "labour_force_by_age", conn, index=False)
     return conn
 
 
@@ -181,17 +210,45 @@ def test_skalningen_traffar_populationen_exakt():
         assert (ut >= 0).all()
 
 
-def test_arbetskraften_ligger_i_arbetsfor_alder():
-    b = _Byggare(_db(_pyramid()))
-    wf, ovriga = b.dra_aldrar("2062", 2024, 2000, 900, np.random.default_rng(1))
-    assert len(wf) == 900 and len(wf) + len(ovriga) == 2000
-    assert wf.min() >= 16 and wf.max() < 67
+def test_arbetskraften_foljer_deltagandeprofilen():
+    """Dragningen viktas med q(a). Platt vikt gav sextonåringar samma
+    deltagande som fyrtioåringar.
+
+    Arbetskraften sätts till ungefär vad profilen implicerar. Ligger den nära
+    antalet MÖJLIGA blir urvalet nästan uttömmande, och då kan vikterna inte
+    slå igenom hur skarp profilen än är."""
+    b = _Byggare(_db(_pyramid(n_per_alder=100), n_per_alder=100))
+    wf, ovriga = b.dra_aldrar("2062", 2024, 10100, 3600,
+                              np.random.default_rng(1))
+    assert len(wf) == 3600 and len(wf) + len(ovriga) == 10100
+    assert wf.min() >= 16
+    # De yngsta deltar mindre än de i mitten, trots lika stora årskullar.
+    unga = (wf < 20).sum() / 4.0
+    mitt = ((wf >= 40) & (wf < 44)).sum() / 4.0
+    assert unga < 0.6 * mitt
+    # Ingen under 16 och ingen över profilens tak.
+    assert wf.max() <= 74
+
+
+def test_barn_hamnar_aldrig_i_arbetskraften():
+    b = _Byggare(_db(_pyramid(n_per_alder=100), n_per_alder=100))
+    wf, _ = b.dra_aldrar("2062", 2024, 10100, 3600, np.random.default_rng(9))
+    assert (wf >= 16).all()
+
+
+def test_skev_arbetskraft_sags_ifran(capsys):
+    """Scenariots arbetskraft kommer ur labour_market_status (20-65), profilen
+    ur BAS. Stämmer de inte blir fördelningen skev åt ett håll profilen inte
+    beskriver."""
+    b = _Byggare(_db(_pyramid(n_per_alder=100), n_per_alder=100))
+    b.dra_aldrar("2062", 2024, 10100, 5600, np.random.default_rng(10))
+    assert "skev" in capsys.readouterr().out
 
 
 def test_de_tva_grupperna_ar_pyramiden():
     """Arbetskraften tar platser INOM pyramiden, den dras inte vid sidan av
     den: summan av de två grupperna per ålder ska vara pyramiden själv."""
-    b = _Byggare(_db(_pyramid(n_per_alder=10)))
+    b = _Byggare(_db(_pyramid(n_per_alder=10), n_per_alder=10))
     wf, ovriga = b.dra_aldrar("2062", 2024, 1010, 400, np.random.default_rng(2))
     alla = np.concatenate([wf, ovriga])
     for a in range(0, 101):
@@ -199,9 +256,17 @@ def test_de_tva_grupperna_ar_pyramiden():
 
 
 def test_for_stor_arbetskraft_kastar():
-    b = _Byggare(_db(_pyramid(n_per_alder=10)))
-    with pytest.raises(ValueError, match="arbetsför ålder"):
-        b.dra_aldrar("2062", 2024, 1010, 900, np.random.default_rng(3))
+    b = _Byggare(_db(_pyramid(n_per_alder=10), n_per_alder=10))
+    with pytest.raises(ValueError, match="deltagandet är positivt"):
+        b.dra_aldrar("2062", 2024, 1010, 1000, np.random.default_rng(3))
+
+
+def test_saknad_arbetskraftstabell_kastar():
+    """En platt fördelning är inte ett sämre alternativ utan ett annat, och
+    ska inte smyga sig in tyst när tabellen saknas."""
+    b = _Byggare(_db(_pyramid(), arbetskraft=False))
+    with pytest.raises(ValueError, match="labour_force_by_age"):
+        b.dra_aldrar("2062", 2024, 2000, 900, np.random.default_rng(4))
 
 
 def test_saknad_kommun_kastar():
@@ -216,11 +281,16 @@ def test_fallback_till_tidigare_ar():
     assert antal.sum() == 101 * 100
 
 
-def test_riktaldern_gar_att_stalla_om():
-    b = _Byggare(_db(_pyramid()), simulation={"age": {"retirement_age": 65,
-                                                      "work_age_min": 20}})
-    wf, _ = b.dra_aldrar("2062", 2024, 2000, 500, np.random.default_rng(5))
-    assert wf.min() >= 20 and wf.max() < 65
+def test_riktaldern_flyttar_de_aldsta():
+    """Riktåldern styr profilen ovanför 65 och därmed hur många gamla som
+    ligger i arbetskraften vid uppstart."""
+    def andel_over_66(R):
+        b = _Byggare(_db(_pyramid(n_per_alder=100), n_per_alder=100),
+                     simulation={"age": {"retirement_age": R}})
+        wf, _ = b.dra_aldrar("2062", 2024, 10100, 3600,
+                             np.random.default_rng(5))
+        return (wf > 66).sum()
+    assert andel_over_66(70) > andel_over_66(65)
 
 
 # ----------------------------------------------------------------------

@@ -10,6 +10,7 @@ import sqlite3
 from core.database.utils import kommunkod
 from core.geography.geoutils import assign_deso_code, random_points_in_polygon
 from core.log import log
+from core.participation import profil
 from core.occupations.utils import sample_from_centers_jitter, sample_centers_xy_jitter
 
 def _lagervikter(layer_gdfs, municipal_code=None):
@@ -605,6 +606,8 @@ class ScenarioBuilder:
         entry = {"low": 19.0, "medium": 20.0, "high": 24.0}
         entry.update({k: float(v) for k, v in (cfg.get("entry_age") or {}).items()})
         return {"retirement_age": float(cfg.get("retirement_age", 67)),
+                "retirement_spread": float(cfg.get("retirement_spread", 0.8)),
+                "max_alder": int(cfg.get("max_alder", 74)),
                 "work_age_min": float(cfg.get("work_age_min", 16)),
                 "entry_age": entry}
 
@@ -652,34 +655,97 @@ class ScenarioBuilder:
             bas[ordning[:-rest]] -= 1
         return np.maximum(bas, 0)
 
+    def deltagandeprofil(self, municipal_code, year):
+        """Deltagandet per ettårsklass, eller None om underlaget saknas.
+
+        Underlaget är SCB:s BAS-statistik per åldersklass, som laddas till
+        labour_force_by_age. Saknas den kastar dragningen: en platt fördelning
+        är inte ett sämre alternativ utan ett annat, och den ska inte smyga
+        sig in tyst när tabellen inte finns.
+        """
+        kod = kommunkod(pd.Series([municipal_code])).iloc[0]
+        try:
+            rader = pd.read_sql(
+                "SELECT age_group, in_labour_force, total FROM labour_force_by_age "
+                "WHERE municipal_code = ? AND year = ?", self.conn,
+                params=(kod, year))
+        except Exception as e:
+            raise ValueError(
+                "tabellen labour_force_by_age saknas i databasen. Hämta SCB:s "
+                "arbetsmarknadsstatus per åldersklass med "
+                "scripts/fetch_data.py --only Arbetskraft och kör "
+                "scripts/create_database.py.") from e
+        if rader.empty:
+            ar = pd.read_sql("SELECT DISTINCT year FROM labour_force_by_age "
+                             "WHERE municipal_code = ?", self.conn, params=(kod,))
+            if ar.empty:
+                raise ValueError(f"labour_force_by_age saknar kommun {kod}")
+            valt = max([int(v) for v in ar["year"] if int(v) <= year],
+                       default=int(ar["year"].min()))
+            print(f"[ålder] kommun {kod}: arbetskraft per ålder finns inte för "
+                  f"{year}, använder {valt}")
+            rader = pd.read_sql(
+                "SELECT age_group, in_labour_force, total FROM labour_force_by_age "
+                "WHERE municipal_code = ? AND year = ?", self.conn,
+                params=(kod, valt))
+
+        aldrar, antal = self.alderspyramid(municipal_code, year)
+        bef = pd.Series(antal, index=aldrar.astype(int))
+        ac = self.age_config()
+        return profil(rader, bef, retirement_age=ac["retirement_age"],
+                      retirement_spread=ac["retirement_spread"],
+                      max_alder=ac["max_alder"])
+
     def dra_aldrar(self, municipal_code, year, population, n_workforce, rng):
         """Åldrar för hela befolkningen, uppdelade på arbetskraft och övriga.
 
         Hela befolkningen får SCB:s pyramid. Arbetskraften placeras INOM den,
-        utan återläggning, i intervallet [work_age_min, retirement_age): den
-        tar platser i pyramiden i stället för att dras vid sidan av den, så
-        att summan av de två grupperna är pyramiden själv. Resten -- barn,
-        pensionärer och de i arbetsför ålder som arbetskraften inte fyller --
-        blir utanför arbetskraften.
+        utan återläggning: den tar platser i pyramiden i stället för att dras
+        vid sidan av den, så att summan av de två grupperna är pyramiden
+        själv. Resten -- barn, pensionärer och de i arbetsför ålder som
+        arbetskraften inte fyller -- blir utanför arbetskraften.
 
-        Deltagandet är därmed platt över arbetsför ålder. Det är fel i känd
-        riktning: deltagandet är lägre vid 16-19 och 60-66 än däremellan.
-        Att rätta det kräver AKU:s deltagande per ålder, som inte finns i
-        databasen.
+        VILKA PLATSER DEN TAR styrs av deltagandeprofilen. Dragningen viktas
+        med q(a), sannolikheten att en person i den åldern är i arbetskraften.
+        Tidigare var vikten platt över [16, 67), vilket gav sextonåringar samma
+        deltagande som fyrtioåringar och la omkring 800 personer i Ovansiljan i
+        årskullar som knappt deltar. Eftersom antalet är fixt trängde de undan
+        lika många från de åldrar som faktiskt bär arbetskraften, och
+        kohorterna närmast riktåldern kom att ligga fulltaligt i arbetskraften
+        -- vilket är en del av förklaringen till att körningen efter 0160 gav
+        2,3 procent avgångar per år mot rimliga 1,5.
         """
         aldrar, antal = self.alderspyramid(municipal_code, year)
-        ac = self.age_config()
         counts = self._skala_pyramid(antal, population)
         urna = np.repeat(aldrar, counts)
-        arbetsfor = np.flatnonzero((urna >= ac["work_age_min"]) &
-                                   (urna < ac["retirement_age"]))
-        if n_workforce > len(arbetsfor):
+        q = self.deltagandeprofil(municipal_code, year)
+
+        vikt = pd.Series(q).reindex(urna.astype(int)).fillna(0.0).to_numpy(float)
+        mojliga = np.flatnonzero(vikt > 0)
+
+        # PROFILEN IMPLICERAR EN ARBETSKRAFT, och scenariots kommer från en
+        # annan källa: labour_market_status, avgränsad 20-65. Stämmer de inte
+        # blir dragningen skev åt ett håll profilen inte beskriver. Ligger
+        # scenariots tal nära antalet MÖJLIGA blir urvalet dessutom nästan
+        # uttömmande, och då kan vikterna inte slå igenom -- fördelningen blir
+        # plattare än profilen oavsett vad profilen säger.
+        implicerad = float(vikt.sum())
+        if implicerad > 0 and not 0.75 <= n_workforce / implicerad <= 1.33:
+            print(f"[ålder] kommun {municipal_code}: scenariots arbetskraft "
+                  f"{n_workforce} mot profilens {implicerad:.0f} "
+                  f"({n_workforce / implicerad:.2f}x) -- åldersfördelningen "
+                  f"blir skev")
+        if n_workforce > len(mojliga):
             raise ValueError(
                 f"kommun {municipal_code}: arbetskraften {n_workforce} är "
-                f"större än befolkningen {len(arbetsfor)} i arbetsför ålder "
-                f"[{ac['work_age_min']:.0f}, {ac['retirement_age']:.0f}). "
-                "Antingen är arbetskraften felräknad eller pyramiden fel år.")
-        valda = rng.choice(arbetsfor, size=int(n_workforce), replace=False)
+                f"större än befolkningen {len(mojliga)} i de åldrar där "
+                f"deltagandet är positivt ({q.index.min()}-{q.index.max()} år).")
+        # Utan återläggning med vikter: Efraimidis-Spirakis nyckel
+        # u^(1/w) rangordnar med sannolikhet proportionell mot w, vilket
+        # rng.choice med replace=False inte gör korrekt för vikter.
+        u = rng.random(len(mojliga))
+        nyckel = np.log(np.clip(u, 1e-300, None)) / vikt[mojliga]
+        valda = mojliga[np.argsort(-nyckel)[:int(n_workforce)]]
         i_arbetskraft = np.zeros(len(urna), dtype=bool)
         i_arbetskraft[valda] = True
         return urna[i_arbetskraft], urna[~i_arbetskraft]
