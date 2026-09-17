@@ -1,0 +1,245 @@
+#!/usr/bin/env python
+"""Samvarierar medelpensioneringsåldern med riktningen i uppgiftsrummet?
+
+    python scripts/analys_pensionsalder.py data/Yrkesuppdelat.csv \\
+        --yrkesfil data/TAB4441_sv.csv
+
+Pensionsmyndighetens rapport Pensionsåldrar och arbetslivets längd (2026)
+redovisar medelpensioneringsålder per yrkesgrupp. Spridningen är omkring tre
+år, och ytterlighetarna ligger där geometrin förutsäger: fysiker, kemister och
+universitetslärare högst, processoperatörer och montörer lägst. Frågan är om
+mönstret följer den angulära koordinaten ξ eller bara utbildningsnivån.
+
+MÅTTET. Yrkesgrupperna anpassas mot
+
+    A(ξ) = a + b cos ξ + c sin ξ
+
+vilket är samma form som papprets löneekvation och som rekryteringstiden i
+0147-0149. Toppriktningen atan2(c, b) och amplitudens storlek är det som
+prövas mot prediktionen: en topp i den norra halvan.
+
+KONTROLLEN AVGÖR TOLKNINGEN. Medelpensioneringsåldern samvarierar med
+utbildningsnivå, och utbildningsnivån samvarierar med ξ. En obetingad
+anpassning kan därför visa rätt mönster av fel skäl. Intjänandeåren används
+som kontroll: de är antalet år med pensionsrätt och stiger med tidigt inträde
+och sammanhängande arbetsliv, alltså ungefär motsatsen till lång utbildning.
+Står riktningen kvar när de är med är fyndet geometrins; faller den bort
+följer pensionsåldern utbildning och inte domän, vilket också är ett svar.
+
+KEDJAN från yrkesnamn till riktning: namnet matchas mot SSYK 2012 på
+tresiffernivå ur yrkesregistrets egen benämningslista, SSYK3 översätts till
+O*NET-koder med ssyk3_onet_crosswalk, och varje O*NET-kod har en position i
+onet_occupation_space. Riktningen per yrkesgrupp är den viktade
+VEKTORSUMMANS riktning och inte medelvärdet av ξ: vinklar är cirkulära, och
+ett medelvärde av 350 och 10 grader blir 180 i stället för 0.
+"""
+import argparse
+import os
+import re
+import sqlite3
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import numpy as np
+import pandas as pd
+
+from core.database.utils import las_rader
+
+DB = os.path.join("data", "worm.sqlite3")
+SSYK3 = re.compile(r"\b(\d{3})\b")
+
+
+def _sep(rader):
+    huvud = "\n".join(rader[:5])
+    return ";" if huvud.count(";") > huvud.count(",") else ","
+
+
+def normalisera(namn):
+    """Yrkesnamn till jämförbar form.
+
+    SCB och Pensionsmyndigheten använder samma SSYK-benämningar men inte
+    alltid samma skrivsätt: "m.fl." hänger med ibland och inte alltid, och
+    bindestreck, komma och dubbla mellanslag varierar.
+    """
+    s = str(namn).lower().strip().strip('"')
+    s = re.sub(r"\bm\.?\s*fl\.?\b", " ", s)
+    s = re.sub(r"\bo\.?\s*dyl\.?\b", " ", s)
+    s = s.replace("–", "-").replace("—", "-")
+    s = re.sub(r"[,;.]", " ", s)
+    s = re.sub(r"\s+", " ", s)
+    return s.strip()
+
+
+def las_pensionsalder(csv_path):
+    """Pensionsmyndighetens yrkesuppdelade underlag."""
+    rader, kodning = las_rader(csv_path)
+    df = pd.read_csv(csv_path, sep=_sep(rader), dtype=str, encoding=kodning,
+                     engine="python")
+    df.columns = [str(c).strip().strip('"') for c in df.columns]
+
+    def kol(*n):
+        for c in df.columns:
+            if any(str(c).lower().startswith(x) for x in n):
+                return c
+        raise ValueError(f"saknar kolumn {n} i {csv_path}: {list(df.columns)}")
+
+    def tal(serie):
+        # Svenskt decimalkomma.
+        return pd.to_numeric(serie.astype(str).str.strip()
+                             .str.replace("\u00a0", "", regex=False)
+                             .str.replace(" ", "", regex=False)
+                             .str.replace(",", ".", regex=False), errors="coerce")
+
+    ut = pd.DataFrame({
+        "yrke": df[kol("yrke")].astype(str).str.strip().str.strip('"'),
+        "kon": df[kol("kön", "kon")].astype(str).str.strip().str.strip('"'),
+        "antal": tal(df[kol("antalnya", "antal")]),
+        "intjanandear": tal(df[kol("intjänande", "intjanande")]),
+        "alder": tal(df[kol("medelpension")]),
+    }).dropna(subset=["alder", "antal"])
+    ut["nyckel"] = ut["yrke"].map(normalisera)
+    return ut
+
+
+def las_ssyk_namn(csv_path):
+    """SSYK3-kod och benämning ur yrkesregistrets egen fil.
+
+    Yrkeskolumnen ser ut som "213 Biologer, farmakologer och specialister
+    inom lant- och skogsbruk": koden först, benämningen efter. Läsaren för
+    yrkesregistret plockar bara koden, så benämningarna hämtas här.
+    """
+    rader, kodning = las_rader(csv_path)
+    sep = _sep(rader)
+    start = next((i for i, r in enumerate(rader[:25])
+                  if "yrke" in r.lower() and r.count(sep) >= 1), 0)
+    df = pd.read_csv(csv_path, sep=sep, skiprows=start, dtype=str,
+                     encoding=kodning, engine="python")
+    df.columns = [str(c).strip().strip('"') for c in df.columns]
+    kol = next((c for c in df.columns if "yrke" in str(c).lower()), None)
+    if kol is None:
+        raise ValueError(f"hittar ingen yrkeskolumn i {csv_path}")
+    v = df[kol].astype(str).str.strip().str.strip('"').drop_duplicates()
+    ut = []
+    for s in v:
+        m = SSYK3.search(s)
+        if not m:
+            continue
+        namn = s[m.end():].strip(" -–:")
+        if namn:
+            ut.append({"ssyk3": m.group(1), "namn": namn,
+                       "nyckel": normalisera(namn)})
+    return pd.DataFrame(ut).drop_duplicates("nyckel")
+
+
+def riktning_per_ssyk(conn):
+    """Vektorsumma per SSYK3 ur crosswalken och uppgiftsrummet."""
+    d = pd.read_sql(
+        "SELECT c.occupation_code AS ssyk3, c.share, g.x_occ, g.y_occ, g.chi "
+        "  FROM ssyk3_onet_crosswalk c "
+        "  JOIN onet_occupation_space g ON g.onet_code = c.onet_code", conn)
+    if d.empty:
+        raise SystemExit("ssyk3_onet_crosswalk eller onet_occupation_space är tom")
+    d["share"] = pd.to_numeric(d["share"], errors="coerce").fillna(0.0)
+    g = d.groupby("ssyk3").apply(
+        lambda t: pd.Series({
+            "x": float((t["share"] * t["x_occ"]).sum()),
+            "y": float((t["share"] * t["y_occ"]).sum()),
+            "chi": float((t["share"] * t["chi"]).sum() / max(t["share"].sum(), 1e-12)),
+            "vikt": float(t["share"].sum())}),
+        include_groups=False)
+    g["xi"] = np.degrees(np.arctan2(g["y"], g["x"])) % 360.0
+    return g.reset_index()
+
+
+def harmonisk(d, vikt=None, kontroller=()):
+    """A = a + b cos ξ + c sin ξ, med toppriktning och delta-metods-CI."""
+    xi = np.radians(d["xi"].to_numpy(dtype=float))
+    kolumner = [np.ones(len(d)), np.cos(xi), np.sin(xi)]
+    namn = ["konstant", "cos", "sin"]
+    for k in kontroller:
+        v = pd.to_numeric(d[k], errors="coerce").to_numpy(dtype=float)
+        kolumner.append(v - np.nanmean(v))
+        namn.append(k)
+    X = np.column_stack(kolumner)
+    y = d["alder"].to_numpy(dtype=float)
+    w = (np.ones(len(d)) if vikt is None
+         else np.clip(pd.to_numeric(d[vikt], errors="coerce").to_numpy(float), 0, None))
+    sw = np.sqrt(w)
+    Xw, yw = X * sw[:, None], y * sw
+    beta, *_ = np.linalg.lstsq(Xw, yw, rcond=None)
+    resid = yw - Xw @ beta
+    dof = max(len(d) - X.shape[1], 1)
+    s2 = float(resid @ resid) / dof
+    XtX_inv = np.linalg.pinv(Xw.T @ Xw)
+    kov = s2 * XtX_inv
+    b, c = beta[1], beta[2]
+    amp = float(np.hypot(b, c))
+    topp = float(np.degrees(np.arctan2(c, b)) % 360.0)
+    # Delta-metoden för riktningen: gradienten av atan2(c, b).
+    n2 = b * b + c * c
+    grad = np.array([-c / n2, b / n2]) if n2 > 0 else np.zeros(2)
+    var_topp = float(grad @ kov[1:3, 1:3] @ grad)
+    se_topp = float(np.degrees(np.sqrt(max(var_topp, 0.0))))
+    grad_amp = np.array([b / amp, c / amp]) if amp > 0 else np.zeros(2)
+    se_amp = float(np.sqrt(max(grad_amp @ kov[1:3, 1:3] @ grad_amp, 0.0)))
+    pred = X @ beta
+    ss = ((y - y.mean()) ** 2 * w).sum()
+    r2 = 1 - float(((y - pred) ** 2 * w).sum()) / float(ss) if ss > 0 else np.nan
+    return {"n": int(len(d)), "niva": float(beta[0]), "topp": topp,
+            "se_topp": se_topp, "amplitud": amp, "se_amp": se_amp,
+            "R2": float(r2),
+            "koefficienter": dict(zip(namn, [float(v) for v in beta]))}
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("pensionsfil")
+    ap.add_argument("--yrkesfil", default="data/TAB4441_sv.csv",
+                    help="yrkesregisterfil med SSYK3-benämningar")
+    ap.add_argument("--db", default=DB)
+    a = ap.parse_args()
+
+    pens = las_pensionsalder(a.pensionsfil)
+    namn = las_ssyk_namn(a.yrkesfil)
+    conn = sqlite3.connect(a.db)
+    geom = riktning_per_ssyk(conn)
+    conn.close()
+
+    d = pens.merge(namn[["ssyk3", "nyckel"]], on="nyckel", how="left")
+    utan = d[d["ssyk3"].isna()]
+    d = d.dropna(subset=["ssyk3"]).merge(geom, on="ssyk3", how="inner")
+
+    print(f"{len(pens)} rader i underlaget, {len(d)} matchade mot SSYK3 och "
+          f"uppgiftsrummet")
+    if len(utan):
+        print(f"\nOMATCHADE ({utan['yrke'].nunique()} yrken, "
+              f"{int(utan['antal'].sum())} personer):")
+        for y in sorted(utan["yrke"].unique())[:20]:
+            print(f"   {y}")
+    if len(d) < 12:
+        raise SystemExit("för få matchade yrken för en harmonisk anpassning")
+
+    print(f"\nmedelpensioneringsålder: {d['alder'].min():.1f}-{d['alder'].max():.1f}, "
+          f"viktat medel {np.average(d['alder'], weights=d['antal']):.2f}")
+
+    for etikett, kontroller in (("utan kontroll", ()),
+                                ("med intjänandeår", ("intjanandear",)),
+                                ("med intjänandeår och chi", ("intjanandear", "chi"))):
+        r = harmonisk(d, vikt="antal", kontroller=kontroller)
+        print(f"\n--- {etikett} (n={r['n']})")
+        print(f"   topp {r['topp']:.1f}° ± {r['se_topp']:.1f}   "
+              f"amplitud {r['amplitud']:.3f} ± {r['se_amp']:.3f} år   "
+              f"R2 {r['R2']:.3f}")
+        print("   " + "  ".join(f"{k} {v:+.3f}"
+                                for k, v in r["koefficienter"].items()))
+
+    print("\nYtterligheter i materialet:")
+    v = d.sort_values("alder")
+    for _, rad in pd.concat([v.head(5), v.tail(5)]).iterrows():
+        print(f"   {rad['alder']:.2f}  ξ={rad['xi']:6.1f}°  χ={rad['chi']:.2f}  "
+              f"{rad['yrke'][:52]} ({rad['kon']})")
+
+
+if __name__ == "__main__":
+    main()
