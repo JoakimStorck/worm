@@ -95,6 +95,25 @@ MANIFEST = [
         "query_fn": "arbetskraft_per_alder",
         "query_args": {"ar": "2024"},
     },
+    # Anställda i riket efter yrke (SSYK 2012, 3 siffror), utbildningsinriktning
+    # (SUN 2020), ålder och kön. Underlaget för utbildningscirkelns position och
+    # radie: vilka yrken de utbildade faktiskt arbetar i
+    # (docs/utbildningsmodell.md, "Utbildningen som cirkel").
+    #
+    # TRE SIFFROR, INTE FYRA. TAB4446 har samma dimensioner på fyrsiffrig SSYK,
+    # men databasens egen yrkesindelning
+    # (occupation_weights_ssyk_by_municipality) är tresiffrig med samma 149
+    # koder. Det fyrsiffriga uttaget hade behövt aggregeras ned igen.
+    {
+        "type": "scb_px",
+        "dest": os.path.join(DATA_DIR, "Anstallda yrke utbildningsinriktning.csv"),
+        "table_id": "TAB4359",
+        "table_query": "Anställda i riket efter yrke (3-siffrig SSYK 2012), "
+                       "utbildningsinriktning (SUN 2020), ålder och kön",
+        "query_fn": "yrke_per_utbildningsinriktning",
+        "query_args": {"ar": "2024"},
+    },
+
     # Stubbar – fyll i "table_query" och en "query_fn" i QUERY_BUILDERS:
     {"type": "scb_px", "dest": os.path.join(DATA_DIR, "employment_municipality_sni_2020.csv"),
      "table_query": None},
@@ -365,8 +384,70 @@ def bygg_arbetskraftsuttag(meta, ar=None):
                                         "heading": ["ContentsCode"]}}}
 
 
+def bygg_yrkesutfallsuttag(meta, ar=None):
+    """Anställda per yrke, utbildningsinriktning, ålder och kön (TAB4359).
+
+    ETT ÅR I TAGET. Tabellen har 149 yrken × 10 inriktningar × 10 åldersklasser
+    × 2 kön = 29 800 celler per år. Alla fem åren ger 149 000, vilket ligger
+    under uttagsgränsen 150 000 med 1 200 cellers marginal -- alltså inom
+    gränsen men utan utrymme för att SCB lägger till en åldersklass eller ett
+    yrke. Året väljs därför explicit.
+
+    ÅLDRARNA HÄMTAS ALLA, inte bara 25-29 som cirkelns position ska tas ur.
+    Skillnaden mellan åldersklassernas centroider ÄR driften bort från
+    utbildningen, och den går inte att mäta ur den klass man tar positionen ur.
+
+    KÖNEN HÅLLS ISÄR. Yrkesutfallet per inriktning skiljer sig kraftigt mellan
+    män och kvinnor inom samma inriktning, och modellen bär redan kön.
+    Summering till totalen kan läsaren göra; det omvända går inte.
+
+    KODER UTAN TEXT. Tabellen har ett enda innehåll (Antal), så den förväxling
+    mellan två värdekolumner som tvingade arbetskraftsuttaget till
+    UseCodesAndTexts finns inte här. Klartexten skulle dessutom skrivas in i
+    VARJE cell och göra filen flera gånger större utan att läsaren blev av med
+    ett enda uppslag: yrkes- och inriktningsnamnen står i metadatan.
+
+    INGA TOTALRADER ATT FILTRERA. Yrkesdimensionens 149 koder är 148
+    tresiffriga plus "0002" (yrke okänt), och inriktningens tio är 0-8 plus "9"
+    (okänd utbildningsinriktning). Ingendera är en summa över de andra -- de är
+    egna restposter. Läsaren ska alltså SUMMERA, inte filtrera, och måste själv
+    avgöra vad den gör med de två okändklasserna.
+    """
+    dim = meta.get("dimension", {})
+
+    def kategorier(namn):
+        return list(dim.get(namn, {}).get("category", {}).get("index", {}).keys())
+
+    yrken = kategorier("Yrke2012")
+    inriktningar = kategorier("UtbinriktnSUN2020")
+    aldrar = kategorier("Alder")
+    if not (yrken and inriktningar and aldrar):
+        raise ValueError("metadatan saknar yrke, utbildningsinriktning eller ålder")
+    tider = kategorier("Tid")
+    tid = str(ar) if ar is not None else (tider[-1] if tider else None)
+    if tider and tid not in tider:
+        raise ValueError(f"året {tid} finns inte i tabellen "
+                         f"({tider[0]}-{tider[-1]})")
+
+    val = [{"variableCode": "Yrke2012", "valueCodes": yrken},
+           {"variableCode": "UtbinriktnSUN2020", "valueCodes": inriktningar},
+           {"variableCode": "Alder", "valueCodes": aldrar},
+           {"variableCode": "Kon", "valueCodes": kategorier("Kon")},
+           {"variableCode": "Tid", "valueCodes": [tid]}]
+    innehall = kategorier("ContentsCode")
+    if innehall:
+        val.append({"variableCode": "ContentsCode", "valueCodes": [innehall[0]]})
+    return {"params": {"lang": "sv", "outputFormat": "csv",
+                       "outputFormatParams": "UseCodes"},
+            "selection": {"selection": val,
+                          "placement": {"stub": ["Yrke2012", "UtbinriktnSUN2020",
+                                                 "Alder", "Kon", "Tid"],
+                                        "heading": ["ContentsCode"]}}}
+
+
 QUERY_BUILDERS = {"befolkning_per_alder": bygg_befolkningsuttag,
-                  "arbetskraft_per_alder": bygg_arbetskraftsuttag}
+                  "arbetskraft_per_alder": bygg_arbetskraftsuttag,
+                  "yrke_per_utbildningsinriktning": bygg_yrkesutfallsuttag}
 
 
 def fetch_scb_px(item):
