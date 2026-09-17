@@ -656,7 +656,12 @@ class ScenarioBuilder:
         return np.maximum(bas, 0)
 
     def deltagandeprofil(self, municipal_code, year):
-        """Deltagandet per ettårsklass, eller None om underlaget saknas.
+        """Deltagandet per ettårsklass. Cachad per kommun.
+
+        Profilerna sparas i self.profiler och följer med till World, så att
+        utträdet vid årsskiftet kan räknas ur samma kurva som fördelningen vid
+        uppstart utan att läsa databasen mitt i körningen. Två kurvor för
+        samma sak hade kunnat glida isär.
 
         Underlaget är SCB:s BAS-statistik per åldersklass, som laddas till
         labour_force_by_age. Saknas den kastar dragningen: en platt fördelning
@@ -664,6 +669,10 @@ class ScenarioBuilder:
         sig in tyst när tabellen inte finns.
         """
         kod = kommunkod(pd.Series([municipal_code])).iloc[0]
+        if not hasattr(self, "profiler"):
+            self.profiler = {}
+        if kod in self.profiler:
+            return self.profiler[kod]
         try:
             rader = pd.read_sql(
                 "SELECT age_group, in_labour_force, total FROM labour_force_by_age "
@@ -692,9 +701,11 @@ class ScenarioBuilder:
         aldrar, antal = self.alderspyramid(municipal_code, year)
         bef = pd.Series(antal, index=aldrar.astype(int))
         ac = self.age_config()
-        return profil(rader, bef, retirement_age=ac["retirement_age"],
-                      retirement_spread=ac["retirement_spread"],
-                      max_alder=ac["max_alder"])
+        q = profil(rader, bef, retirement_age=ac["retirement_age"],
+                   retirement_spread=ac["retirement_spread"],
+                   max_alder=ac["max_alder"])
+        self.profiler[kod] = q
+        return q
 
     def dra_aldrar(self, municipal_code, year, population, n_workforce, rng):
         """Åldrar för hela befolkningen, uppdelade på arbetskraft och övriga.

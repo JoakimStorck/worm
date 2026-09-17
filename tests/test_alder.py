@@ -325,10 +325,28 @@ def test_intradesaldern_foljer_utbildningsnivan():
 # Åldrande och pensionsavgång
 # ----------------------------------------------------------------------
 
-def _varld_med_individer(aldrar, statusar, simulation=None):
+def _profil(h_per_alder=None):
+    """En deltagandeprofil som ger de hasarder testet behöver.
+
+    Hasarden är 1 - q(a+1)/q(a), så en profil byggs baklänges ur den önskade
+    hasarden: q(a+1) = q(a) * (1 - h(a)).
+    """
+    h = {a: 0.0 for a in range(16, 75)}
+    h.update(h_per_alder or {})
+    q, v = {}, 1.0
+    for a in range(16, 75):
+        q[a] = v
+        v = v * (1.0 - h[a])
+    return pd.Series(q)
+
+
+def _varld_med_individer(aldrar, statusar, simulation=None, profil=None):
     """Minimal värld: en individ per ålder, de sysselsatta sitter på var sin
     position."""
     w = make_world(n_employers=len(aldrar) + 2, size=1, simulation=simulation)
+    # Utträdet räknas ur deltagandeprofilen. Utan hasard lämnar ingen, vilket
+    # är vad testerna för åldrandet i sig vill ha.
+    w.participation = {"2062": profil if profil is not None else _profil()}
     n = len(aldrar)
     w.individuals = pd.DataFrame({
         "individual_id": [f"i{k}" for k in range(n)],
@@ -376,17 +394,42 @@ def test_startarets_arsskifte_aldrar_ingen():
     assert w.individuals.at[0, "status"] == "employed"
 
 
-def test_riktaldern_lamnar_arbetskraften():
-    w = _varld_med_individer([66.0, 65.0], ["employed", "unemployed"])
+def test_hasarden_lamnar_arbetskraften():
+    """Hasarden 1 vid 67 och 0 vid 66: den som fyller 67 lämnar, den som
+    fyller 66 stannar."""
+    w = _varld_med_individer([66.0, 65.0], ["employed", "unemployed"],
+                             profil=_profil({67: 1.0}))
     ut = _arsskifte(w)
     assert ut["retired"] == 1 and ut["retired_from_job"] == 1
     assert w.individuals.at[0, "status"] == "not_in_labor_force"
     assert w.individuals.at[1, "status"] == "unemployed"
 
 
+def test_uttradet_fordelas_over_aldrar():
+    """Klippan lät alla lämna samma år. Med en hasard som stiger över flera
+    åldrar ska avgångarna spridas."""
+    n = 400
+    w = _varld_med_individer([63.0] * n, ["employed"] * n,
+                             profil=_profil({64: 0.25, 65: 0.4, 66: 0.6,
+                                             67: 0.8, 68: 1.0}))
+    np.random.seed(7)
+    ut = _arsskifte(w)
+    # Ungefär en fjärdedel vid 64, inte alla och inte ingen.
+    assert 0.15 * n < ut["retired"] < 0.35 * n
+    assert ut["exit_age_mean"] == pytest.approx(64.0)
+
+
+def test_over_profilens_tak_lamnar_alla():
+    """Reindex ger NaN där kurvan slutar. Utan att den fylls med ett kunde en
+    individ åldras förbi 74 och ligga kvar för att ingen hasard fanns."""
+    w = _varld_med_individer([80.0, 90.0], ["employed", "unemployed"])
+    ut = _arsskifte(w)
+    assert ut["retired"] == 2
+
+
 def test_positionen_blir_vakant_inte_forstord():
     """Ersättningsrekryteringen: arbetsgivaren har kvar positionen."""
-    w = _varld_med_individer([66.0], ["employed"])
+    w = _varld_med_individer([66.0], ["employed"], profil=_profil({67: 1.0}))
     jid = w.individuals.at[0, "job_id"]
     _arsskifte(w, t=365.25)
     pos = w.job_index()[jid]
@@ -399,7 +442,7 @@ def test_positionen_blir_vakant_inte_forstord():
 def test_sokkedjan_bryts():
     """En redan schemalagd sökning ska förfalla: handle_start_job_search
     kastar den när due inte längre är hennes next_search_time."""
-    w = _varld_med_individer([66.0], ["unemployed"])
+    w = _varld_med_individer([66.0], ["unemployed"], profil=_profil({67: 1.0}))
     _arsskifte(w)
     assert pd.isna(w.individuals.at[0, "next_search_time"])
 
@@ -410,7 +453,8 @@ def test_avgangen_loggas_som_egen_handelsetyp():
     årsserien på den händelsetypen, blev tvåhundra tomma rader efter den enda
     riktiga."""
     w = _varld_med_individer([66.0, 66.0, 40.0],
-                             ["employed", "unemployed", "employed"])
+                             ["employed", "unemployed", "employed"],
+                             profil=_profil({67: 1.0}))
     _arsskifte(w)
     typer = [typ for typ, _ in w.event_logger.events]
     assert typer.count("retirement") == 2
@@ -425,7 +469,8 @@ def test_arbetslos_pensionar_raknas_inte_som_arbetslos():
     """Bokföringen: den som går i pension lämnar arbetskraften, hon blir inte
     kvar som arbetslös."""
     w = _varld_med_individer([66.0, 66.0, 40.0],
-                             ["unemployed", "employed", "unemployed"])
+                             ["unemployed", "employed", "unemployed"],
+                             profil=_profil({67: 1.0}))
     ut = _arsskifte(w)
     assert ut["retired"] == 2 and ut["retired_from_job"] == 1
     assert (w.individuals["status"] == "not_in_labor_force").sum() == 2
@@ -447,3 +492,25 @@ def test_manadsskiftet_gar_igenom_efter_arsskifte():
     handle_new_month({"time": 396.0, "agent_id": None, "event_type": "new_month",
                       "params": {"year": 2025, "month": 2}}, w)
     assert list(w.individuals["age"]) == [67.0, 41.0]
+
+
+def test_saknad_deltagandeprofil_kastar():
+    """Utträdet räknas ur profilen. Saknas den ska årsskiftet säga ifrån, inte
+    tyst låta ingen gå i pension."""
+    w = _varld_med_individer([66.0], ["employed"])
+    w.participation = {}
+    w._uttradeshasard = None
+    with pytest.raises(ValueError, match="participation"):
+        _arsskifte(w)
+
+
+def test_hasarden_kommer_fran_samma_kurva_som_fordelningen():
+    """Profilen som åldrarna drogs ur är den som utträdet räknas ur. Två
+    kurvor för samma sak hade kunnat glida isär, och de skulle göra det
+    tyst."""
+    from core.event_handlers import _hasardtabell
+    from core.participation import utträdeshasard
+    q = _profil({67: 1.0, 66: 0.3})
+    w = _varld_med_individer([60.0], ["employed"], profil=q)
+    h = _hasardtabell(w)["2062"]
+    assert h.equals(utträdeshasard(q))

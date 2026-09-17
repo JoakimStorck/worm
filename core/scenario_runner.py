@@ -173,6 +173,7 @@ def run_and_log_scenario(config_path):
             events,
             outdir
         )
+        result.participation = getattr(builder, "profiler", {})
 
         # --- 4. Skapa World ---
         world = World(
@@ -183,7 +184,8 @@ def run_and_log_scenario(config_path):
             jobs=result.jobs,
             employers=result.employers,
             events=result.events,
-            geoworld=geoworld
+            geoworld=geoworld,
+            participation=getattr(result, "participation", {})
         )
 
         # --- 5. Initial statistik/logg ---

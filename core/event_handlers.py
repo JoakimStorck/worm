@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+from core.participation import utträdeshasard
 from core.occupations.utils import (search_once, vacant_job_indices,
                                     retraining_target)
 
@@ -1480,8 +1481,25 @@ def _pensionera(world, idx, t_now):
     return lamnad_position
 
 
+def _hasardtabell(world):
+    """Utträdeshasarden per kommun, räknad ur deltagandeprofilen. Cachad.
+
+    Faller deltagandet från q(a) till q(a+1) har andelen 1 - q(a+1)/q(a) av
+    dem som var kvar lämnat arbetskraften under året. Hasarden är alltså inte
+    en ny parameter utan profilens egen derivata, och den räknas ur SAMMA
+    kurva som åldrarna drogs ur vid uppstart. Två kurvor för samma sak hade
+    kunnat glida isär, och de skulle göra det tyst.
+    """
+    tabell = getattr(world, "_uttradeshasard", None)
+    if tabell is None:
+        tabell = {str(kod): utträdeshasard(q)
+                  for kod, q in (getattr(world, "participation", None) or {}).items()}
+        world._uttradeshasard = tabell
+    return tabell
+
+
 def _aldras_och_pensioneras(world, event):
-    """Alla fyller år, och de som nått riktåldern lämnar arbetskraften.
+    """Alla fyller år, och en del lämnar arbetskraften.
 
     Körs vid årsskiftet, INTE vid startårets new_year: den ligger på t = 0 och
     är kalenderns början, inte ett årsskifte. Utan undantaget hade hela
@@ -1506,12 +1524,42 @@ def _aldras_och_pensioneras(world, event):
     # försäkring, inte som ett prövat skydd.
     world.refresh_ind()
 
-    ra = float(world.cfg_reader.config.get('simulation', {})
-               .get('age', {}).get('retirement_age', 67))
     status = ind['status'].to_numpy()
     i_arbetskraft = np.isin(status, ('employed', 'unemployed', 'in_education',
                                      'career_break'))
-    avgar = np.flatnonzero(i_arbetskraft & (alder >= ra))
+
+    # UTTRÄDET ÄR EN HASARD, inte en klippa vid riktåldern. Tre saker var fel
+    # med klippan.
+    #
+    # Den stämde inte med profilen: deltagandet sträcker sig till 74 år medan
+    # klippan stod vid 67, så vid första årsskiftet rensades alla 67-73-åringar
+    # ut på en gång -- 650 avgångar det första året mot knappt 300 det andra,
+    # i alla fem frön.
+    #
+    # Den bestämde takten själv: antalet som lämnade var antalet som fyllde
+    # 67, oavsett vad profilen sa om hur många av dem som arbetade. Att 0168
+    # ändrade VEM som låg i arbetskraften ändrade därför inte takten alls.
+    #
+    # Den stämmer inte med verkligheten: Pensionsmyndigheten redovisar att 20
+    # procent av årskullen född 1960 tog ut pension vid exakt 65 år, mot 77
+    # procent för årskullen född 1938. Spridningen är stor och växer.
+    tabell = _hasardtabell(world)
+    if not tabell:
+        raise ValueError(
+            "world.participation är tom: utträdet kan inte räknas utan "
+            "deltagandeprofilen. Den byggs av ScenarioBuilder och följer med "
+            "via ScenarioResult till World.")
+    kommun = ind['municipal_code'].astype(str).to_numpy()
+    h = np.zeros(len(ind))
+    for kod, kurva in tabell.items():
+        i = np.flatnonzero(i_arbetskraft & (kommun == kod))
+        if len(i):
+            # ÖVER PROFILENS TAK lämnar alla: reindex ger NaN där kurvan
+            # slutar, och den fylls med ett. Utan det kunde en individ åldras
+            # förbi 74 och ligga kvar för att ingen hasard var definierad.
+            h[i] = kurva.reindex(np.round(alder[i]).astype(int)
+                                 ).fillna(1.0).to_numpy(float)
+    avgar = np.flatnonzero(i_arbetskraft & (np.random.random(len(ind)) < h))
 
     fran_jobb = 0
     for idx in ind.index[avgar]:
@@ -1529,6 +1577,8 @@ def _aldras_och_pensioneras(world, event):
                    "job_id": lamnad})
     return {"retired": int(len(avgar)),
             "retired_from_job": int(fran_jobb),
+            "exit_age_mean": (round(float(np.nanmean(alder[avgar])), 2)
+                              if len(avgar) else None),
             "age_mean_labour_force": (
                 round(float(np.nanmean(alder[i_arbetskraft])), 2)
                 if i_arbetskraft.any() else None)}

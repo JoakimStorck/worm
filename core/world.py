@@ -24,12 +24,18 @@ from core.individual_views import IndividualViews
 
 class World(IndividualViews):
     def __init__(self, db_path, cfg_reader, outdir, geoworld=None, scope=None,
-                 individuals=None, jobs=None, employers=None, events=None):
+                 individuals=None, jobs=None, employers=None, events=None,
+                 participation=None):
         self.db_path = db_path
         self.cfg_reader = cfg_reader
         self.outdir = outdir
         self.scope = scope
         self.geoworld = geoworld if geoworld is not None else GeoWorld(db_path)
+        # Deltagandeprofilen per kommun, byggd av ScenarioBuilder vid
+        # uppstart. Utträdet vid årsskiftet räknas ur SAMMA kurva som
+        # fördelningen drogs ur -- två kurvor för samma sak hade kunnat glida
+        # isär, och de skulle göra det tyst.
+        self.participation = participation or {}
         self.individuals = individuals if individuals is not None else pd.DataFrame()
         self.jobs = jobs if jobs is not None else pd.DataFrame()
         self.employers = employers if employers is not None else pd.DataFrame()
