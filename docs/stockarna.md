@@ -191,3 +191,32 @@ lämnar de bara när jobbet förstörs eller sägs upp.
 försök utifrån per person och andelen 0,2 räcker inte. Stocken når målet
 först år 2. Det hör till primingen (`omgivning.md`: "Primingen börjar med de
 observerade pendlarna på plats") och är inte C2.
+
+## C3 prövad (2026-09-18)
+
+Avstängd demografi rör nu bara invånarna: anställda inpendlare möter sin
+kommuns utträdeshasard vid sin fasta ålder och återgår till reservoaren också
+utan demografi. Fem år, frö 1 (`output/run_20260918_215751`):
+
+| år | U | V | In | Ut | inpendlare som lämnat |
+|---|---|---|---|---|---|
+| 1 | 2 215 | 1 799 | 1 778 | 1 518 | 26 |
+| 2 | 1 801 | 1 285 | 2 083 | 1 711 | 39 |
+| 3 | 1 659 | 1 007 | 2 213 | 1 714 | 30 |
+| 4 | 1 663 | 926 | 2 301 | 1 726 | 38 |
+| 5 | 1 604 | 808 | 2 372 | 1 730 | |
+
+**Rättelsen är riktig men liten.** Utträdet är profilens hasard i arbetsför
+ålder, omkring 1,7 procent om året, och tar 30–40 inpendlare om året.
+Inpendlarna växer ändå, 2 083 → 2 372 mot matrisens 1 727, och tar
+vakanserna.
+
+**Det är samma fel som i C2, på andra sidan randen.** Inpendlarnas
+sökintensitet (`inpendling_sokfaktor` 25) kalibrerades i O5 mot nivån år 1.
+Stocken sätts av hur ofta reservoaren vinner regionens vakanser mot hur ofta
+inpendlarna lämnar, och ingenting förankrar den vid matrisen. Med In vid
+målet hade arbetslösheten år 5 varit omkring 1 604 − (2 372 − 1 727) ≈ 960,
+5,5 procent. Hur inpendlingen ska förankras är ett designbeslut (C2b) och
+inte gjort här: till skillnad från utpendlingen, där omgivningen är
+efterfrågan, är efterfrågan här regionens egen, och när invånarna går i
+pension utan att ersättas ska inpendlingen kunna växa.

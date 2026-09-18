@@ -287,6 +287,25 @@ def test_reservoaren_aldras_inte_och_inpendlaren_atergar_vid_uttradet():
     assert pd.isna(w.individuals.at[1, "job_id"])
 
 
+def test_utan_demografi_lamnar_inpendlaren_men_invanaren_ar_kvar():
+    """Avstängd demografi rör bara invånarna (C3, docs/stockarna.md). Med
+    switchen hoppades hela årsskiftet över, också inpendlarnas utträde, och
+    de ackumulerades: 2 410 mot matrisens 1 727 efter fem år. Invånaren här
+    hade gått i pension med demografin på (hasarden 1 vid 71)."""
+    import os, sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from test_alder import _varld_med_individer, _arsskifte, _profil
+    w = _varld_med_individer([71.0, 71.0], ["employed", "employed"],
+                             simulation={"demografi": False},
+                             profil=_profil({71: 1.0}))
+    w.individuals["extern"] = [False, True]
+    ut = _arsskifte(w)
+    assert w.individuals["age"].tolist() == [71.0, 71.0], "någon åldrades utan demografi"
+    assert w.individuals.at[0, "status"] == "employed", "invånaren pensionerades utan demografi"
+    assert w.individuals.at[1, "status"] == "extern", "inpendlaren lämnade inte jobbet"
+    assert ut["in_commuters_exit"] == 1 and ut["retired"] == 0
+
+
 def test_uppstarten_tar_med_reservoarens_startdel():
     from core.matching_core import bootstrap_matching
     w = _varld(n_employers=10, size=2, application_window_days=40)

@@ -61,7 +61,10 @@ Före 6a, i tur och ordning:
   - [x] C2 utpendlingen som ett bestånd av platser, inte en ström av erbjudanden.
   - [ ] Uppstarten fyller 1 041 av 1 767 utpendlingsplatser; stocken når målet
         år 2. Primingen ska börja med pendlarna på plats.
-  - [ ] C3 inpendlarnas utträde oberoende av `simulation.demografi`.
+  - [x] C3 inpendlarnas utträde oberoende av `simulation.demografi`. Liten
+        verkan: 30–40 om året.
+  - [ ] C2b inpendlingens förankring: stocken växer förbi matrisen
+        (2 372 mot 1 727 år 5) eftersom sökfaktorn är satt mot år 1. Designbeslut.
   - [ ] C4 modellens vakansnivå (4,75 % öppna mot Dalarnas 2,03 %), och
         därefter uppvärmningens längd.
 - [ ] Ny baslinje, efter omgivningen och inkörningen.

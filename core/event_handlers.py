@@ -1624,9 +1624,12 @@ def _aldras_och_pensioneras(world, event):
     if 'age' not in ind.columns or float(event['time']) <= 0.0:
         return {}
     # Avstängbar för prövningen av primingen (6a-i): utan åldrande och utan
-    # inträde ska serierna vara platta från år 0.
-    if not world.cfg_reader.config.get('simulation', {}).get('demografi', True):
-        return {}
+    # inträde ska serierna vara platta från år 0. AVSTÄNGD DEMOGRAFI RÖR BARA
+    # INVÅNARNA (C3, docs/stockarna.md). Inpendlarnas utträde är
+    # reservoarens omsättning, inte ett åldrande, och hoppades det över
+    # lämnade de jobben bara när de förstördes eller sades upp: 2 410
+    # inpendlare mot matrisens 1 727 efter fem år, och de tog vakanserna.
+    demografi = bool(world.cfg_reader.config.get('simulation', {}).get('demografi', True))
     t_now = float(event['time'])
     # OMGIVNINGEN ÄR STATIONÄR (docs/omgivning.md). Inpendlingsreservoaren
     # åldras inte och lämnar inte arbetskraften: den är ett exogent
@@ -1636,7 +1639,9 @@ def _aldras_och_pensioneras(world, event):
     # varje kommun där individer genereras, också ursprungskommunerna.
     extern = (ind['extern'].fillna(False).astype(bool).to_numpy()
               if 'extern' in ind.columns else np.zeros(len(ind), dtype=bool))
-    alder = pd.to_numeric(ind['age'], errors='coerce').to_numpy(float) + np.where(extern, 0.0, 1.0)
+    alder = pd.to_numeric(ind['age'], errors='coerce').to_numpy(float)
+    if demografi:
+        alder = alder + np.where(extern, 0.0, 1.0)
     ind['age'] = alder
     # En hel kolumn tilldelad byter block i pandas, och kolumnvyerna (0110)
     # kan då tappa kontakten med tabellen. Samma skäl som i
@@ -1648,7 +1653,7 @@ def _aldras_och_pensioneras(world, event):
 
     status = ind['status'].to_numpy()
     i_arbetskraft = np.isin(status, ('employed', 'unemployed', 'in_education',
-                                     'career_break')) & ~extern
+                                     'career_break')) & ~extern & demografi
 
     # UTTRÄDET ÄR EN HASARD, inte en klippa vid riktåldern. Tre saker var fel
     # med klippan.
