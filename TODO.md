@@ -15,8 +15,11 @@ beroenden. Steg 1 (`_union`) är gjort i f4d2c03. Nästa:
 - [x] Steg 2: inget tak på antalet cirklar.
 - [x] Steg 3: en cirkel per händelse, med skärpning av alla cirklar i yrket.
 
-Inträdet på arbetsmarknaden (arbetskraften krymper tre procent per år) byggs
-som steg 6b, efter utbildningsstapeln: inträdarens cirkel är utbildningens.
+Steg 6 är delat i två ("Två situationer" i `docs/utbildningsmodell.md`):
+6a, priming av startpopulationen så att startåret redan är jämviktsläget, och
+6b, inträdet, där de unga kommer in med en utbildningshistorik och inte med
+ett yrke. Före 6a rättas startens yrkeskälla (registret faller tyst tillbaka
+på SNI). Parkerat: studieorten, och val som svarar på arbetsmarknaden.
 
 ---
 

@@ -686,7 +686,9 @@ en vägg, är ett besked om att en tillståndsvariabel slutat bära information.
 - Startpopulationens tidigare cirklar. Massan ur hela arbetslivet kräver
   tidigare yrken; i dag bär individen bara sitt nuvarande. De lägre
   utbildningsstegen saknas av samma skäl: SCB registrerar bara den högsta
-  utbildningen.
+  utbildningen. Avgjort 2026-09-18: ingen fullständig historik byggs.
+  Primingen lägger arbetscirkeln på jobbets yrke och drar utbildningen
+  givet yrket (`utbildningsmodell.md`, "Två situationer").
 - Om en spretig karriär är ett signalproblem i sig, utöver vad cirklarnas
   överlapp ger. Parkerad.
 - Städningen av punktmodellen (avsnitt 2, "Individens position").

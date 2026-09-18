@@ -291,6 +291,59 @@ som koden gör i dag, är cirkulärt men går att försvara som ett
 stationaritetsantagande — utbildningen är den som ledde henne dit. Det
 underskattar mismatchen i startpopulationen.
 
+### Två situationer: priming och inträde (avgjort 2026-09-18)
+
+Modellen har två slags individer, och de byggs åt motsatta håll ur samma
+tabeller.
+
+**Priming.** Startpopulationen ska se ut som en befintlig arbetskraft i
+sysselsättning under startåret, utan en inkörningsperiod där alla börjar
+från noll. Kriteriet är att startårets tvärsnitt är körningens eget
+jämviktsläge. Primingen ska bli bra, men den kan inte vara perfekt, och
+någon fullständig historik byggs inte för varje individ.
+
+- **Jobben först, sedan historiken.** De sysselsatta placeras i jobb, och
+  arbetscirkeln läggs på *jobbets* yrke med massa ur tjänstetiden. I dag
+  dras ett startyrke oberoende av jobben, och tjänstetiden byggs på det.
+  Uppstartsmatchningen placerar sedan 94 procent i ett annat yrke än
+  startyrket (12 165 av 12 962 i baslinjens frö 1, median 0,74 r_o bort).
+  Erfarenheten ligger alltså där hon inte arbetar och suddas ut, medan en tom
+  cirkel byggs där hon arbetar. Det är en inkörningsperiod. Den syns i
+  baslinjen, men går inte att skilja från den krympande arbetskraften: q vid
+  anställning är 0,84 vid uppstarten mot 0,95 under körningen, och andelen
+  över Π stiger 15 procent mellan körningens halvor.
+- **Utbildningen dras givet yrket**: nivån ur TAB4360 och inriktningen ur
+  TAB4359, givet yrke, ålder och kön. Det är samma tabeller som inträdaren
+  använder, lästa åt andra hållet. Var cirkeln ska ligga är öppet beslut 5
+  nedan.
+- **Ingen tidigare yrkeshistorik** för startpopulationen. Den nuvarande
+  arbetscirkeln och utbildningen räcker. Utan tidigare yrken underskattas
+  bredden hos dem med långt arbetsliv, men det ger ingen inkörningsperiod.
+- **De arbetslösa vid start** får ett senaste yrke och en
+  arbetslöshetstid. Arbetscirkeln suddas ut i proportion till den tiden.
+- **Prövningen:** en körning utan åldrande och utan inträde ska ha platta
+  serier från år 0.
+
+**Inträdet.** De oskrivna bladen är de unga som kommer in i arbetskraften.
+De får en utbildningshistorik, inte ett yrke. Grundskola, sedan
+yrkesprogram, högskoleförberedande program eller ingen fullständig
+gymnasieutbildning, därefter arbete eller eftergymnasial utbildning med
+inriktning. Åldern vid inträdet följer nivån. Det första yrket är ett
+**utfall av matchningen** med utbildningsstapeln, och TAB4359 för 25–29-åringar
+blir därmed en validering, inte indata.
+
+- **Valen dras ur kohortandelarna** i TAB655, kalibrerade så att modellens
+  25–34-åringar återger tabellen. Val som svarar på den lokala
+  arbetsmarknaden, genom lön och vakanser, är ett alternativ som ska utredas
+  senare som en egen mekanism. Byggs det in från början finns inget att
+  validera det mot.
+- **Studieorten parkeras.** Gymnasium och högre utbildning finns inte i
+  alla kommuner. Den som utbildar sig måste flytta eller pendla, och vissa
+  kommer inte tillbaka. Det är ett för stort steg nu. Den kända följden är
+  att alla som utbildar sig i modellen stannar, så att det lokala utbudet
+  av högutbildade överskattas i kommuner som Ovansiljans. Mekanismen hör
+  ihop med "Utbildningens geografi" nedan.
+
 ### Öppna beslut
 
 1. **Vad intensiteten kalibreras mot.** Förslag: kvoten ingångslön mot
@@ -631,8 +684,20 @@ jämförs mot en baslinje med fem frön.
 4. **Läsare för TAB4359, TAB4360 och TAB655**, och rakingen till P(yrke |
    inriktning, nivå, ålder, kön), med kontrollerna ovan.
 5. **Massan:** `EDU_MASS` blir studietid × intensitet.
-6. **Utbildningsstapeln och inträdet.** Inträdaren kommer in med sin stapel;
-   startpopulationen får inriktning.
+6. **Priming och inträde** ("Två situationer" ovan). Först rättas
+   startens yrkeskälla. Scenariot anger `occupation_source: register`, men
+   `_register_profile` (`core/scenariobuilder.py`) frågar efter en kolumn
+   `year` som `occupation_weights_by_municipality` saknar. Felet sväljs, och
+   startens individer och jobb dras ur SNI. Nya jobb under körningen dras
+   däremot ur registret via `World._occupation_profile`. Start och körning
+   har därmed olika yrkesstruktur. Det är en tyst reserv, och den rättas
+   som en egen commit.
+   - **6a. Priming.** Jobben först, och arbetscirkeln på jobbets yrke.
+     Utbildningen dras givet yrket. De arbetslösa får ett senaste yrke och
+     en arbetslöshetstid. Uppstartens fortsättningsregel från steg 3 blir
+     då överflödig.
+   - **6b. Inträdet.** Utbildningshistorik ur kohortandelarna, och det
+     första yrket som ett utfall av matchningen.
 7. **Grindvaktsfrågan**, och därefter spärren.
 8. **Omskolningens mål dras** i stället för att medelvärdesbildas.
    Startpunkten försvinner samtidigt. `handle_start_education` räknar
