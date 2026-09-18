@@ -60,6 +60,14 @@ class Omgivning:
         self.inpendling = m[~i_bo & i_arb].reset_index(drop=True)
         self._jobb = m[i_arb].groupby("arb")["n"].sum()
         self._sysselsatta = m[i_bo].groupby("bo")["n"].sum()
+        # Uppslagen per kommun görs en gång: utpendlingen dras vid var femte
+        # sökning, och ett pandas-filter per dragning kostade 17 sekunder av
+        # uppstarten. Ordningen inom varje kommun är tabellens, så dragningarna
+        # är desamma som med filtret.
+        self._ut = {k: (g["arb"].to_numpy(), g["n"].to_numpy(dtype=float))
+                    for k, g in self.utpendling.groupby("bo", sort=False)}
+        self._in = {k: (g["bo"].to_numpy(), g["n"].to_numpy(dtype=float))
+                    for k, g in self.inpendling.groupby("arb", sort=False)}
 
         d = pd.read_sql("SELECT deso_code, population, geom_wkt FROM deso", conn)
         d = d[d["population"].fillna(0) > 0]
@@ -82,8 +90,8 @@ class Omgivning:
 
     def andel_utpendling(self, kommun) -> float:
         k = _kod(kommun)
-        return float(self.utpendling.loc[self.utpendling.bo == k, "n"].sum()
-                     / max(self.sysselsatta(k), 1))
+        ut = self._ut.get(k)
+        return float((ut[1].sum() if ut is not None else 0.0) / max(self.sysselsatta(k), 1))
 
     def andel_inpendling(self, kommun) -> float:
         k = _kod(kommun)
@@ -93,19 +101,19 @@ class Omgivning:
     # ---- dragningar --------------------------------------------------------
     def dra_destination(self, hemkommun, rng) -> str:
         """Kommun utanför regionen dit en invånare i hemkommun pendlar."""
-        g = self.utpendling[self.utpendling.bo == _kod(hemkommun)]
-        if g.empty:
+        ut = self._ut.get(_kod(hemkommun))
+        if ut is None:
             raise ValueError(f"Ingen utpendling från {hemkommun} i matrisen {self.ar}.")
-        p = g["n"].to_numpy(dtype=float)
-        return str(g["arb"].iloc[int(rng.choice(len(p), p=p / p.sum()))])
+        koder, p = ut
+        return str(koder[int(rng.choice(len(p), p=p / p.sum()))])
 
     def dra_ursprung(self, arbetskommun, rng) -> str:
         """Kommun utanför regionen som en inpendlare till arbetskommun bor i."""
-        g = self.inpendling[self.inpendling.arb == _kod(arbetskommun)]
-        if g.empty:
+        inp = self._in.get(_kod(arbetskommun))
+        if inp is None:
             raise ValueError(f"Ingen inpendling till {arbetskommun} i matrisen {self.ar}.")
-        p = g["n"].to_numpy(dtype=float)
-        return str(g["bo"].iloc[int(rng.choice(len(p), p=p / p.sum()))])
+        koder, p = inp
+        return str(koder[int(rng.choice(len(p), p=p / p.sum()))])
 
     def dra_plats(self, kommun, rng):
         """(x, y) i en DeSO i kommunen, dragen med befolkningen som vikt."""

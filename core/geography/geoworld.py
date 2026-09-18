@@ -42,7 +42,15 @@ class GeoWorld:
         """
         Hämtar ett geografiskt lager som GeoDataFrame.
         Laddas från databas första gången, därefter från cache.
+
+        CACHEN LÄSTES ALDRIG. Lagret sparades i _cache men hämtades inte
+        därifrån, så varje anrop tolkade om all geometri: rikets 6 160
+        DeSO-områden tog en halv sekund, och inpendlingsreservoarens 98
+        ursprungskommuner lade 48 av 60 sekunder på det. Ingen anropare ändrar
+        lagret på plats -- filtreringarna ger kopior -- så det delas.
         """
+        if table_name in self._cache:
+            return self._cache[table_name]
         import sqlite3
         query = f"SELECT * FROM {table_name}"
         conn = sqlite3.connect(self.db_path)      # Skapa connection-objekt!

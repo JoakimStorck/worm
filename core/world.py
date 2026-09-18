@@ -387,9 +387,18 @@ class World(IndividualViews):
     def jobb_kommun(self):
         """Jobbens kommunkod som nollutfylld sträng, cachad per tabellängd."""
         n = len(self.jobs)
-        if getattr(self, "_jk_n", None) != n:
+        gammal = getattr(self, "_jk_n", None)
+        if gammal == n:
+            return self._jk
+        # Tabellen växer bara i slutet (nya och externa jobb läggs till), så
+        # bara de nya raderna läses. Att räkna om hela kolumnen vid varje
+        # externt jobb kostade 11 sekunder av uppstarten.
+        if gammal is not None and gammal < n:
+            nya = self.jobs["municipal_code"].iloc[gammal:].astype(str).str.zfill(4).to_numpy()
+            self._jk = np.concatenate([self._jk, nya])
+        else:
             self._jk = self.jobs["municipal_code"].astype(str).str.zfill(4).to_numpy()
-            self._jk_n = n
+        self._jk_n = n
         return self._jk
 
     def omgivning(self):

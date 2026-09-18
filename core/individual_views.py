@@ -27,7 +27,7 @@ class IndividualViews:
                         'notice_job_id', 'individual_id', 'q_last', 'x_occ', 'y_occ',
                         'x', 'y', 'r_i', 'propensity_start_education', 'next_search_time',
                         'last_onet_code', 'propensity_internal_training',
-                        'propensity_internal_job_change', 'municipal_code')
+                        'propensity_internal_job_change', 'municipal_code', 'extern')
     _SAKNAS = object()
 
     def refresh_ind(self, verify=False):

@@ -9,10 +9,9 @@ from core.occupations.utils import (search_once, vacant_job_indices,
 def ar_extern(world, idx) -> bool:
     """Bor individen i omgivningen (docs/omgivning.md)? En inpendlare eller en
     person i inpendlingsreservoaren."""
-    ind = world.individuals
-    if 'extern' not in ind.columns:
+    if 'extern' not in world.individuals.columns:
         return False
-    v = ind.at[idx, 'extern']
+    v = world.get_ind(idx, 'extern')
     return bool(v) if pd.notna(v) else False
 
 
