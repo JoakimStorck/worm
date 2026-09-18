@@ -48,8 +48,10 @@ Regionens invånare kan få erbjudanden om jobb utanför regionen.
   Moraborna i första hand erbjuds jobb i Falun och Rättvik.
 - **Yrket** dras ur destinationskommunens profil i TAB4436 (dagbefolkning),
   samma underlag som regionens egna jobb (`core/bransch.py`).
-- **Platsen** är destinationskommunens tyngdpunkt (`municipalities.geom_wkt`),
-  så pendlingskostnaden räknas med den geometri som redan finns.
+- **Platsen** är en DeSO i destinationskommunen, dragen med befolkningen som
+  vikt (`Omgivning.dra_plats`), så pendlingskostnaden räknas med den geometri
+  som redan finns. Kommunens yta hade hamnat långt från där folk bor (33 km
+  fel i Älvdalen), och befolkningen är en approximation av var jobben ligger.
 - **Priset** är fältets pris för yrket, som för alla jobb.
 - **Inget arbetsställe.** Ett externt jobb uppstår när erbjudandet görs och
   upphör när anställningen upphör. Det har ingen arbetsgivare och ingen
@@ -64,7 +66,7 @@ Regionens vakanser får sökande utifrån.
 - **Den sökande är en riktig agent**, med kompetenscirklar, reservationslön
   och ålder, eftersom hela poängen är att hon konkurrerar med regionens egna.
   Hennes yrke och utbildning dras ur ursprungskommunens profil, och hon bor i
-  ursprungskommunens tyngdpunkt.
+  en DeSO i ursprungskommunen, dragen med befolkningen som vikt.
 - **Ursprunget** dras ur arbetsställets kommuns inpendling i matrisen.
 - **Hon finns i modellen så länge hon arbetar i regionen.** Förlorar eller
   lämnar hon jobbet återgår hon till omgivningen och tas bort. Hon ingår inte
@@ -128,9 +130,10 @@ varje kombination; matrisen, TAB4436 och kommungeometrin täcker riket.
 Varje steg är en egen commit med tester. Mellanlägena mellan O2 och O5 är
 inte kalibrerade och körs inte som baslinje.
 
-- **O1. Underlaget.** **Gjort** (`core/omgivning.py`). `core/omgivning.py`: för ett scenarios kommuner,
-  utpendlingen per destination och inpendlingen per ursprung ur matrisen,
-  och kommunernas tyngdpunkter. Ingen beteendeändring.
+- **O1. Underlaget.** **Gjort** (`core/omgivning.py`): för ett scenarios
+  kommuner, utpendlingen per destination och inpendlingen per ursprung ur
+  matrisen, och platser i en DeSO dragen med befolkningen. Ingen
+  beteendeändring.
 - **O2. Bokföringen.** Individer och jobb bär om de är externa;
   identitetskontrollen räknar med inpendlare och utpendlare (noll tills
   flödena finns). Ingen beteendeändring. **Gjort:** kolumnen `extern`,
