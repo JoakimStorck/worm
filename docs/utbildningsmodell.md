@@ -699,8 +699,11 @@ jämförs mot en baslinje med fem frön.
    `year` som `occupation_weights_by_municipality` saknar. Felet sväljs, och
    startens individer och jobb dras ur SNI. Nya jobb under körningen dras
    däremot ur registret via `World._occupation_profile`. Start och körning
-   har därmed olika yrkesstruktur. Det är en tyst reserv, och den rättas
-   som en egen commit.
+   har därmed olika yrkesstruktur. Det är en tyst reserv. **Rättat:**
+   frågan läser bara de kolumner som finns, och en tabell eller kommun som
+   saknas ger ett fel med besked. För Mora har register- och SNI-profilen
+   26 procent av massan gemensamt. Registret ger undersköterskor överst,
+   SNI-vägen lagerarbetare. Kräver en ny baslinje.
    - **6a. Priming.** Jobben först, och arbetscirkeln på jobbets yrke.
      Utbildningen dras givet yrket. De arbetslösa får ett senaste yrke och
      en arbetslöshetstid. Uppstartens fortsättningsregel från steg 3 blir

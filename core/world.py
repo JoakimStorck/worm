@@ -414,7 +414,8 @@ class World(IndividualViews):
             raise ValueError(
                 f"occupation_source='{src}' kraver tabellerna {krav} plus "
                 f"onet_occupation_space, men {saknas} saknas i databasen. "
-                "Registerkallan fylls av scripts/load_occupation_weights.py, "
+                "Registerkallan fylls av scripts/create_database.py ur "
+                "yrkesregistret (egen CSV: scripts/load_occupation_weights.py), "
                 "SNI-kallan av scripts/create_database.py och "
                 "scripts/load_task_geometry.py. Utan dem skulle nya jobb arva "
                 "mallens yrke och arbetsgivaren driva mot monokultur.")

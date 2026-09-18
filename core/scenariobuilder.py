@@ -349,22 +349,38 @@ class ScenarioBuilder:
 
     def _register_profile(self, municipal_code, year=None):
         """Yrkesprofil ur occupation_weights_by_municipality. Kolumner: onet_code, freq, prob.
-        Koder som saknas i geometritabellen släpps med varning. Tom DataFrame om
-        tabellen saknas eller inte täcker kommunen."""
+        Koder som saknas i geometritabellen släpps med varning.
+
+        INGEN TYST RESERV. Frågan krävde en kolumn year, som tabellen inte har
+        sedan den började byggas ur yrkesregistret (60c64f3). Felet sväljdes,
+        profilen blev tom, och byggaren föll tillbaka på SNI med en rad i
+        loggen. Startens individer och jobb kom därför ur SNI-vägen, medan
+        nya jobb under körningen kom ur registret (World._occupation_profile).
+        Start och körning hade olika yrkesstruktur: för Mora har de två
+        profilerna 26 procent av massan gemensamt. year läses nu bara om
+        kolumnen finns, och saknas tabellen eller kommunen kastas ett fel med
+        besked om hur underlaget byggs."""
         key = ("register", str(municipal_code), year)
         if not hasattr(self, "_reg_cache"):
             self._reg_cache = {}
         if key in self._reg_cache:
             return self._reg_cache[key]
-        try:
-            q = "SELECT onet_code, weight, year FROM occupation_weights_by_municipality WHERE municipal_code = ?"
-            df = pd.read_sql(q, self.conn, params=(str(municipal_code),))
-        except Exception:
-            self._reg_cache[key] = pd.DataFrame(columns=["onet_code", "freq", "prob"])
-            return self._reg_cache[key]
+        bygg = ("Tabellen byggs av scripts/create_database.py ur yrkesregistret "
+                "(data/TAB4347_sv.csv, data/TAB4441_sv.csv) och SSYK-O*NET-"
+                "crosswalken; hämta filerna med scripts/fetch_data.py. Alternativt "
+                "occupation_source: sni i scenariot.")
+        finns = self.conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND "
+            "name='occupation_weights_by_municipality'").fetchone()
+        if finns is None:
+            raise ValueError("occupation_source: register kräver tabellen "
+                             "occupation_weights_by_municipality, som saknas. " + bygg)
+        df = pd.read_sql("SELECT * FROM occupation_weights_by_municipality "
+                         "WHERE municipal_code = ?", self.conn,
+                         params=(str(municipal_code),))
         if df.empty:
-            self._reg_cache[key] = pd.DataFrame(columns=["onet_code", "freq", "prob"])
-            return self._reg_cache[key]
+            raise ValueError(f"occupation_weights_by_municipality saknar kommun "
+                             f"{municipal_code}. " + bygg)
         if year is not None and "year" in df.columns and df["year"].notna().any():
             yrs = df["year"].dropna().astype(int)
             use = int(yrs[yrs <= int(year)].max()) if (yrs <= int(year)).any() else int(yrs.min())
@@ -383,10 +399,7 @@ class ScenarioBuilder:
 
     def municipality_occupational_profile(self, municipal_code, year):
         if self.occupation_source() == "register":
-            prof = self._register_profile(municipal_code, year)
-            if not prof.empty:
-                return prof
-            print(f"[register] inga vikter för kommun {municipal_code} -- faller tillbaka på SNI.")
+            return self._register_profile(municipal_code, year)
         return self._sni_occupational_profile(municipal_code, year)
 
     def _sni_occupational_profile(self, municipal_code, year):
@@ -483,13 +496,12 @@ class ScenarioBuilder:
             for _ in range(int(row['size'])):
                 sni = row['sni_code']
 
-                prof = (self._register_profile(row['municipal_code'])
-                        if self.occupation_source() == "register" else None)
-                if prof is not None and not prof.empty:
+                if self.occupation_source() == "register":
+                    prof = self._register_profile(row['municipal_code'])
                     onet_code = self.rng.choice(prof["onet_code"].to_numpy(),
                                                  p=prof["prob"].to_numpy())
                 else:
-                    # SNI-vägen (default, och fallback om registret saknar kommunen)
+                    # SNI-vägen: arbetsställets bransch ger yrkesfördelningen
                     occ_freq = self.get_onet_codes_with_freq_for_sni(sni)
                     onet_codes, freqs = zip(*occ_freq)
                     onet_code = self.rng.choice(onet_codes, p=np.array(freqs)/np.sum(freqs))
