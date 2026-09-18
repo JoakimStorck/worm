@@ -619,7 +619,10 @@ jämförs mot en baslinje med fem frön.
    tillträde och är därför något för hög.
 1. ~~**`_union` följer sin formel**~~ — gjort. Avdraget görs mot varje
    starkare cirkel i stället för i en kedja (`individmodell.md`, avsnitt 2).
-2. **Inget tak på antalet cirklar.** Arrayerna växer när en rad blir full.
+2. ~~**Inget tak på antalet cirklar.**~~ — gjort. Arrayerna växer med fyra
+   platser när en rad blir full, och `max_circles` avvisas med besked.
+   Antalet cirklar och radens bredd står på årsraden (`circles_*`) och i
+   slutlägets `n_circles`.
 3. **En cirkel per händelse.** `Circles.add` slutar slå ihop på nyckel; varje
    tillträde och varje fortbildning ger en ny cirkel. Beslutat: skärpningen
    gäller alla cirklar i det yrke hon arbetar i, exponeringen bara den

@@ -47,6 +47,15 @@ class CompetenceParams:
     @classmethod
     def from_config(cls, sim: dict) -> "CompetenceParams":
         c = sim.get("competence", {}) or {}
+        # max_circles var ett tak; circle_slots är bara radens startbredd.
+        # Ett scenario som fortfarande anger taket väntar sig att cirklar
+        # faller bort, och ska inte tyst få en annan betydelse.
+        if "max_circles" in c:
+            raise ValueError(
+                "competence.max_circles finns inte längre: antalet cirklar har "
+                "inget tak (docs/individmodell.md, avsnitt 2). Ange "
+                "competence.circle_slots för radens startbredd, eller ta bort "
+                "nyckeln.")
         return cls(
             a=c.get("exposure_rate", 1.0),
             half_life_years=c.get("leak_half_life_years", 15.0),
@@ -55,7 +64,7 @@ class CompetenceParams:
             tau_months=c.get("sharpen_months", 6.0),
             m_ref=c.get("m_ref_years", 2.0),
             gamma=sim.get("sigma_gamma", 0.875),
-            K=c.get("max_circles", 12),
+            K=c.get("circle_slots", 12),
         )
 
 
@@ -70,11 +79,6 @@ class Circles:
         self.key = np.full((n, K), EMPTY, dtype=np.int64)
         self.key_index: dict = {}          # nyckelsträng -> heltal
         self.key_names: list = []
-        # HUR OFTA TAKET BITER. En full rad tappar sin lättaste cirkel utan
-        # spår, och antalet cirklar skrevs inte ut: att taket nåddes i
-        # baslinjen (1e5a890) gick bara att rekonstruera ur händelseloggen.
-        # Räknaren gör steg 2 och 3 i byggordningen prövbara direkt.
-        self.evicted = np.zeros(n, dtype=np.int64)
 
     # ---- nycklar ---------------------------------------------------------
     def code(self, key) -> int:
@@ -87,8 +91,8 @@ class Circles:
     def add(self, i: int, key, x: float, y: float, rho2: float, mass: float,
             rho2_home: float | None = None):
         """Lägg massa på cirkeln med nyckeln key, eller skapa den. Finns den
-        redan sammanvägs radien massviktat. Är alla platser upptagna faller
-        den med minst massa bort (aldrig den nya)."""
+        redan sammanvägs radien massviktat. Är alla platser upptagna växer
+        arrayerna; ingen cirkel faller bort."""
         k = self.code(key)
         row = self.key[i]
         hit = np.flatnonzero(row == k)
@@ -104,14 +108,39 @@ class Circles:
         if free.size:
             j = int(free[0])
         else:
-            j = int(np.argmin(self.mass[i]))
-            self.evicted[i] += 1
+            j = self.K
+            self._grow()
         self.key[i, j] = k
         self.x[i, j], self.y[i, j] = x, y
         self.rho2[i, j] = rho2
         self.rho2_home[i, j] = rho2 if rho2_home is None else rho2_home
         self.mass[i, j] = mass
         return j
+
+    def _grow(self, extra: int = 4):
+        """Lägg till kolumner för hela populationen.
+
+        TAKET BESTÄMDE VAD INDIVIDEN MINNS. Med tolv platser föll den
+        lättaste cirkeln bort när en trettonde kom, och därmed ett yrke hon
+        haft (individmodell.md, avsnitt 2). Minnet ska bestämmas av läckaget
+        och diffusionen, inte av hur många platser som råkar finnas. I
+        baslinjen (1e5a890, b945638) nådde 20 av 34 000 taket och 3 tappade en
+        cirkel, alla under körningens sista år; med en cirkel per händelse
+        blir det fler.
+
+        De nya kolumnerna får samma tomvärden som konstruktorn ger, och en
+        tom plats deltar varken i dynamiken eller i konkurrenskraften. Andra
+        individer räknas därför exakt som förut. Fyra kolumner i taget, inte
+        en fördubbling: månadssteget går över hela bredden för alla, och
+        bara ett fåtal behöver den."""
+        n = self.n
+        self.x = np.hstack([self.x, np.zeros((n, extra))])
+        self.y = np.hstack([self.y, np.zeros((n, extra))])
+        self.rho2 = np.hstack([self.rho2, np.ones((n, extra))])
+        self.rho2_home = np.hstack([self.rho2_home, np.ones((n, extra))])
+        self.mass = np.hstack([self.mass, np.zeros((n, extra))])
+        self.key = np.hstack([self.key, np.full((n, extra), EMPTY, dtype=np.int64)])
+        self.K += extra
 
     # ---- dynamik -----------------------------------------------------------
     def evolve(self, dt_years: float, active_key: np.ndarray, p: CompetenceParams):

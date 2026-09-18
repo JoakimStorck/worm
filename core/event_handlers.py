@@ -1328,12 +1328,12 @@ def _wage_stock_stats(world):
 def _circle_stats(world):
     """Årligt tvärsnitt av antalet kompetenscirklar per individ.
 
-    Taket (max_circles) tar bort den lättaste cirkeln utan att något syns i
-    utfallen. I baslinjen (1e5a890) gick det bara att rekonstruera ur
-    transitioner och händelselogg: 13-17 individer per frö på taket, 2-4
-    som redan tappat en. Steg 2 (inget tak) och steg 3 (en cirkel per
-    händelse) ändrar just den här fördelningen, så den ska kunna läsas av
-    direkt. Tappen är kumulativa från körningens start."""
+    I baslinjen (1e5a890) gick fördelningen bara att rekonstruera ur
+    transitioner och händelselogg. Steg 3 i byggordningen (en cirkel per
+    händelse) ändrar just den, så den ska kunna läsas av direkt.
+    circles_over_12 jämför med det gamla taket, så att baslinjen och
+    senare körningar går att ställa bredvid varandra. circles_width är radens bredd, som växer när någon behöver fler platser
+    (steg 2); den visar vad månadssteget kostar, inte vad någon minns."""
     c = getattr(world, "circles", None)
     if c is None:
         return {}
@@ -1345,9 +1345,8 @@ def _circle_stats(world):
         "circles_p50": float(np.median(n)),
         "circles_p99": float(np.quantile(n, 0.99)),
         "circles_max": int(n.max()),
-        "circles_at_cap": int((n >= c.K).sum()),
-        "circles_evicted_n": int((c.evicted > 0).sum()),
-        "circles_evictions": int(c.evicted.sum()),
+        "circles_over_12": int((n > 12).sum()),
+        "circles_width": int(c.K),
     }
 
 

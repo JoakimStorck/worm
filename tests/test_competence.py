@@ -114,15 +114,55 @@ def test_two_occupations_both_contribute_and_old_one_fades():
     assert q_at(c, p) > 0.05, "men den försvinner inte"
 
 
-def test_cap_evicts_smallest_not_newest():
-    p = CompetenceParams(K=3)
-    c = Circles(1, 3)
+def test_full_row_grows_and_nothing_is_forgotten():
+    """Inget tak (individmodell.md, avsnitt 2): en full rad växer, och den
+    lättaste cirkeln ligger kvar. Tidigare föll den bort."""
+    c = Circles(2, 3)
     c.add(0, "big", 0, 0, 0.1, 10.0)
     c.add(0, "small", 0.1, 0, 0.1, 0.1)
     c.add(0, "mid", 0.2, 0, 0.1, 1.0)
     c.add(0, "new", 0.3, 0, 0.1, 0.5)
     names = {c.key_names[k] for k in c.key[0] if k != EMPTY}
-    assert "small" not in names and "new" in names and "big" in names
+    assert names == {"big", "small", "mid", "new"}
+    assert c.K > 3
+    assert c.counts().tolist() == [4, 0]
+    for arr in (c.x, c.y, c.rho2, c.rho2_home, c.mass, c.key):
+        assert arr.shape == (2, c.K)
+    # den nya cirkeln bär sina egna värden, inte tomvärdena
+    j = int(np.flatnonzero(c.key[0] == c.key_index["new"])[0])
+    assert (c.x[0, j], c.rho2[0, j], c.mass[0, j]) == (0.3, 0.1, 0.5)
+
+
+def test_growth_leaves_everyone_else_unchanged():
+    """De nya kolumnerna ska vara tomma i alla avseenden: den som inte
+    behövde fler platser ska räknas exakt som förut, genom månadsstegen och
+    i konkurrenskraften. Annars är steg 2 inte bara ett borttaget tak."""
+    p = CompetenceParams(K=3)
+    a, b = Circles(2, 3), Circles(2, 3)
+    for c in (a, b):
+        seed_circles(c, 0, "A", 0.3, 0.1, RO, 4.0, 3, p)
+        seed_circles(c, 1, "B", -0.2, 0.3, RO, 6.0, 5, p)
+    b.add(0, "extra", 0.5, -0.1, 0.1, 1.0)          # bara b växer
+    assert b.K > a.K
+    active = np.array([a.code("A"), a.code("B")])
+    assert b.code("A") == active[0] and b.code("B") == active[1]
+    for _ in range(24):
+        a.evolve(1 / 12, np.array([EMPTY, active[1]]), p)
+        b.evolve(1 / 12, np.array([EMPTY, active[1]]), p)
+    jx, jy, jro = [-0.2, 0.1, 0.4], [0.3, 0.0, -0.2], [RO, 0.3, 0.2]
+    assert np.array_equal(a.competitiveness(1, jx, jy, jro, p),
+                          b.competitiveness(1, jx, jy, jro, p))
+    assert np.array_equal(a.mass[1], b.mass[1, :a.K])
+    assert np.array_equal(a.rho2[1], b.rho2[1, :a.K])
+    assert (b.key[1, a.K:] == EMPTY).all() and (b.mass[:, a.K:][b.key[:, a.K:] == EMPTY] == 0).all()
+
+
+def test_the_old_cap_key_is_refused():
+    """max_circles var ett tak. Ett scenario som anger det väntar sig att
+    cirklar faller bort och ska inte tyst få radens startbredd i stället."""
+    with pytest.raises(ValueError, match="circle_slots"):
+        CompetenceParams.from_config({"competence": {"max_circles": 12}})
+    assert CompetenceParams.from_config({"competence": {"circle_slots": 5}}).K == 5
 
 
 def test_same_key_merges_mass_weighted():
@@ -377,22 +417,6 @@ def test_union_is_vectorised_over_jobs():
         assert många[i] == pytest.approx(ett, rel=1e-12)
 
 
-def test_eviction_is_counted_only_when_the_row_is_full():
-    """Taket tar bort den lättaste cirkeln utan spår i utfallen. Räknaren
-    ska öka bara då -- inte när en ledig plats fylls och inte när samma
-    nyckel slås ihop."""
-    c = Circles(2, 3)
-    c.add(0, "a", 0, 0, 0.1, 1.0)
-    c.add(0, "b", 0, 0, 0.1, 2.0)
-    c.add(0, "c", 0, 0, 0.1, 3.0)
-    c.add(0, "a", 0, 0, 0.1, 1.0)               # sammanslagning, ingen ny plats
-    assert c.evicted.tolist() == [0, 0]
-    c.add(0, "d", 0, 0, 0.1, 0.5)
-    c.add(0, "e", 0, 0, 0.1, 0.5)
-    assert c.evicted.tolist() == [2, 0]
-    assert c.counts().tolist() == [3, 0]
-
-
 def test_circle_counts_reach_the_log_and_the_run_table(tmp_path):
     """Hela vägen: årsskiftet mäter cirklarna, den riktiga loggen skriver
     dem, läsaren tolkar raden och körningstabellen bär dem. Slutläget får
@@ -415,11 +439,11 @@ def test_circle_counts_reach_the_log_and_the_run_table(tmp_path):
         "education_level": 3, "municipal_code": "2062"} for k in range(2)]
     ).astype({"job_id": object})
     w.init_competence()
-    K = w.circles.K
-    # individ 0 får fler yrken än taket rymmer; individ 1 har startens tre
-    for k in range(K + 2):
+    # individ 0 får fler yrken än startbredden rymmer; individ 1 har
+    # startens tre
+    for k in range(12):
         w.circles.add(0, f"yrke{k}", 0.1, 0.1, 0.1, 0.01 * (k + 1))
-    assert w.circles.counts().tolist() == [K, 3]
+    assert w.circles.counts().tolist() == [15, 3]
 
     path = tmp_path / "eventlog.csv"
     w.event_logger = EventLogger(str(path))
@@ -430,11 +454,10 @@ def test_circle_counts_reach_the_log_and_the_run_table(tmp_path):
           if r is not None and r.get("event") == "new_year"]
     assert len(ev) == 1
     rad = ev[0]
-    assert int(rad["circles_max"]) == K
-    assert int(rad["circles_at_cap"]) == 1
-    assert int(rad["circles_evicted_n"]) == 1
-    assert int(rad["circles_evictions"]) == 5        # tre från starten plus två
-    assert float(rad["circles_mean"]) == pytest.approx((K + 3) / 2)
+    assert int(rad["circles_max"]) == 15
+    assert int(rad["circles_over_12"]) == 1
+    assert int(rad["circles_width"]) == w.circles.K >= 15
+    assert float(rad["circles_mean"]) == pytest.approx((15 + 3) / 2)
 
     tr = pd.DataFrame({"u_R": [0.7], "u_R_occ": [0.7], "w_neg": [1.0],
                        "w_occ": [1.0], "w_field": [1.0], "wage_ratio": [1.0],
@@ -448,9 +471,8 @@ def test_circle_counts_reach_the_log_and_the_run_table(tmp_path):
                        "u": [10.0], "v": [10.0], "tightness": [1.0],
                        "identity_residual": [0]})
     row = summary_row(str(tmp_path), events=ev, tr=tr, ts=ts)
-    assert row["circles_max"] == K
-    assert row["circles_evictions"] == 5
+    assert row["circles_max"] == 15
+    assert row["circles_width"] == w.circles.K
 
     w._write_competence_summary()
-    assert w.individuals["n_circles"].tolist() == [K, 3]
-    assert w.individuals["n_circles_evicted"].tolist() == [5, 0]
+    assert w.individuals["n_circles"].tolist() == [15, 3]

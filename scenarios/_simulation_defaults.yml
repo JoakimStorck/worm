@@ -185,7 +185,7 @@ simulation:
     diffusion_max_ratio: 4.0
     sharpen_months: 6             # tau_s: månader att återfå skärpa
     m_ref_years: 2.0              # massa som ger nästan full konkurrenskraft
-    max_circles: 12
+    circle_slots: 12              # radens startbredd; växer vid behov, inget tak
     initial_tenure_mean_years: 8  # ålder saknas; tenure dras exponentiellt
     tasks_per_occupation_default: 20   # k för r_o/sqrt(k) om n_tasks saknas
     retraining_radius2: 0.25      # omskolningscirkelns radie^2 (bred)

@@ -24,8 +24,8 @@ händelse ger, dynamiken och varför antalet cirklar saknar tak — står i
 
 *Läget i koden.* Cirklar med samma nyckel slås ihop, så två anställningar i
 samma yrke delar cirkel, och utbildningen är en enda cirkel för den högsta
-nivån, placerad på individens nuvarande yrke. Antalet cirklar är taket
-`max_circles: 12`.
+nivån, placerad på individens nuvarande yrke. Antalet cirklar har inget tak;
+raden växer när den blir full.
 
 Dynamiken har fyra tidsskalor, alla i `core/occupations/competence.py`:
 

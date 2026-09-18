@@ -780,7 +780,6 @@ class World(IndividualViews):
         # Till individtabellen så att slutläget bär dem; årsraden bär
         # fördelningen (_circle_stats).
         ind["n_circles"] = self.circles.counts()
-        ind["n_circles_evicted"] = self.circles.evicted.copy()
         self.refresh_ind()
 
     def set_active_occupation(self, idx, onet_code, x, y, r_o):

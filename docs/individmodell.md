@@ -176,7 +176,10 @@ vad som är mätbart i q, inte av hur många platser som råkar finnas.
 Beräkningskostnad är ett verkligt skäl, men det ska inte bestämma vad
 individen minns.
 
-*Läget i koden.* `max_circles: 12` gäller fortfarande.
+*Läget i koden.* Inget tak. Raden växer med fyra platser när någon behöver
+fler (`Circles._grow`), och `circle_slots: 12` är bara startbredden. Tröskeln
+som hoppar över obetydliga cirklar i konkurrenskraften är inte byggd; i
+baslinjen har ingen fler än fjorton cirklar.
 
 ### Konkurrenskraften
 
