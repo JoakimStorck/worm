@@ -228,6 +228,12 @@ def handle_intrade(event, world):
     med_jobb = status == "employed" and "studerande" in ind.columns and bool(ind.at[idx, "studerande"])
     if status != "student" and not med_jobb:
         return
+    # AVSTÄNGD DEMOGRAFI ÄR INGET ÅLDRANDE OCH INGET INTRÄDE. Utan raden gick
+    # startens studerande in på en marknad utan pensioneringar -- 1 872
+    # inträden på tio år -- och arbetslösheten steg av det skälet. Studenten
+    # förblir student, med eller utan extrajobb.
+    if not bool(world.cfg_reader.config.get("simulation", {}).get("demografi", True)):
+        return
     if "studerande" in ind.columns:
         ind.at[idx, "studerande"] = False
     dr = getattr(world, "_utbildningsdragning", None)

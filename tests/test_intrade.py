@@ -366,3 +366,12 @@ def test_manadsraden_bar_studerande_med_och_utan_jobb():
                       "params": {"year": 2024, "month": 1}}, w)
     rad = [x for typ, x in w.event_logger.events if typ == "new_month"][-1]
     assert (rad["students"], rad["students_employed"]) == (2, 1)
+
+
+def test_utan_demografi_gar_ingen_in():
+    """Avstängd demografi är inget åldrande och inget inträde: studenten
+    förblir student."""
+    w = _varld(["student"], [19.0], sim={"demografi": False}, plan_level="4",
+               plan_field="0", plan_entry_age=19, plan_enters=True, studerande=True)
+    _in(w, 0, 500.0)
+    assert w.individuals.at[0, "status"] == "student"
