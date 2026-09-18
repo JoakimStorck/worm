@@ -144,6 +144,23 @@ MANIFEST = [
         "query_args": {"ar": "2024"},
     },
 
+    # Inträdet (docs/intradet.md): studiedeltagande och förvärvsarbete per
+    # ettårsklass (TAB3731, riket), och utbildningsflöden per kommun (TAB6928).
+    {
+        "type": "scb_px",
+        "dest": os.path.join(DATA_DIR, "Befolkning studiedeltagande utbildningsniva.csv"),
+        "table_id": "TAB3731",
+        "query_fn": "studiedeltagande",
+        "query_args": {"ar": "2024"},
+    },
+    {
+        "type": "scb_px",
+        "dest": os.path.join(DATA_DIR, "Utbildningsfloden kommun.csv"),
+        "table_id": "TAB6928",
+        "query_fn": "utbildningsfloden",
+        "query_args": {"ar": "2024"},
+    },
+
     # Anställda med arbetsplats i kommunen (DAGBEFOLKNING) efter yrke (SSYK3),
     # näringsgren (SNI 2007, grov nivå) och kön. Arbetsställenas bransch per
     # kommun, som i dag tas ur invånarnas bransch (employment_deso_sni,
@@ -693,6 +710,59 @@ def bygg_arbetsmarknad_utbildning_uttag(meta, ar=None):
             "selection": {"selection": val}}
 
 
+
+def bygg_studiedeltagande_uttag(meta, ar=None):
+    """Befolkningen 16-74 per kön, ålder (ettårsklasser 15-29), typ av
+    studiedeltagande, utbildningsnivå, förvärvsarbete och yngsta barnets
+    ålder (TAB3731, riket). Inträdets underlag (docs/intradet.md):
+    avslutningsåldern per nivå och de studerandes arbete (6c). Barnens ålder
+    summerar läsaren bort."""
+    return _utbildningsuttag(meta, ar, ["Kon", "Alder", "Studiedeltagande",
+                                        "UtbildningsNiva", "Sysselsattning", "BarnAlder"])
+
+
+def bygg_utbildningsfloden_uttag(meta, ar=None):
+    """Utbildningsflöden per kommun (TAB6928): befolkningen år 1 och 2,
+    åldersinträden, åldersutträden, inflyttare, utflyttare, examinerade och
+    vidareutbildade, per utbildningsnivå och åldersklass.
+
+    NIVÅGRUPPERNA, inte de 130 utbildningsgrupperna: 02 förgymnasial, 03
+    gymnasial (inte delad på två och tre år), 04 och 05 eftergymnasial
+    kortare och längre än tre år, 09 okänd, 00N alla. ÅLDERSKLASSERNA, inte
+    kön eller födelseland. Perioden är den som slutar året ar. Kommunerna och
+    riket (00), inte länen. Uttaget överstiger gränsen och delas på
+    regionerna."""
+    dim = meta.get("dimension", {})
+
+    def kategorier(namn):
+        return list(dim.get(namn, {}).get("category", {}).get("index", {}).keys())
+
+    regioner = [k for k in kategorier("Region") if re.fullmatch(r"\d{4}", k) or k == "00"]
+    grupper = ["02", "03", "04", "05", "09", "00N"]
+    saknas = set(grupper) - set(kategorier("Utbildngrupp"))
+    if saknas:
+        raise ValueError(f"utbildningsgrupperna {sorted(saknas)} saknas")
+    aldrar = [k for k in kategorier("KonAlderFodelseland") if re.fullmatch(r"\d{2}-\d{2}", k)]
+    perioder = [t for t in kategorier("Tid") if ar is None or t.endswith(str(ar))]
+    if not perioder:
+        raise ValueError(f"ingen period slutar {ar}")
+    tid = perioder[-1]
+    innehall = kategorier("ContentsCode")
+    per_region = len(grupper) * len(aldrar) * len(innehall)
+    steg = max(1, UTTAGSGRANS // per_region)
+    uttag = []
+    for i in range(0, len(regioner), steg):
+        uttag.append({"selection": [
+            {"variableCode": "Region", "valueCodes": regioner[i:i + steg]},
+            {"variableCode": "Utbildngrupp", "valueCodes": grupper},
+            {"variableCode": "KonAlderFodelseland", "valueCodes": aldrar},
+            {"variableCode": "ContentsCode", "valueCodes": innehall},
+            {"variableCode": "Tid", "valueCodes": [tid]}]})
+    return {"params": {"lang": "sv", "outputFormat": "csv",
+                       "outputFormatParams": "UseCodes"},
+            "selections": uttag}
+
+
 QUERY_BUILDERS = {"befolkning_per_alder": bygg_befolkningsuttag,
                   "arbetskraft_per_alder": bygg_arbetskraftsuttag,
                   "yrke_per_utbildningsinriktning": bygg_yrkesutfallsuttag,
@@ -700,7 +770,9 @@ QUERY_BUILDERS = {"befolkning_per_alder": bygg_befolkningsuttag,
                   "lediga_jobb_per_lan": bygg_lediga_jobb_uttag,
                   "yrke_per_utbildningsniva": bygg_yrke_utbildningsniva_uttag,
                   "befolkning_per_utbildning": bygg_befolkning_utbildning_uttag,
-                  "arbetsmarknad_per_utbildning": bygg_arbetsmarknad_utbildning_uttag}
+                  "arbetsmarknad_per_utbildning": bygg_arbetsmarknad_utbildning_uttag,
+                  "studiedeltagande": bygg_studiedeltagande_uttag,
+                  "utbildningsfloden": bygg_utbildningsfloden_uttag}
 
 
 def fetch_scb_px(item):

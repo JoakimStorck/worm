@@ -106,6 +106,15 @@ else:
     log("OBS: Laddar inte sysselsatta per kommun och utbildningsnivå, filen saknas. "
         "Hämta den med: python scripts/fetch_data.py --only \"Arbetsmarknadsstatus kommun utbildning\"")
 
+# Inträdet (docs/intradet.md): studiedeltagande per ettårsklass (TAB3731) och
+# utbildningsflöden per kommun (TAB6928).
+from core.database.load_utbildning import FLODE_FIL, STUDIE_FIL, load_intradet
+if file_exists(STUDIE_FIL) and file_exists(FLODE_FIL):
+    load_intradet(db_path=DB_PATH)
+else:
+    log("OBS: Laddar inte inträdets tabeller, filerna saknas. Hämta dem med: "
+        "python scripts/fetch_data.py --only studiedeltagande och --only Utbildningsfloden")
+
 # Lediga jobb per 100 anställningar och län (TAB6605): skillnaden mellan
 # pendlingsmatrisens sysselsatta och modellens positioner (docs/stockarna.md).
 lediga_csv = "data/Lediga jobb per anstallning lan.csv"

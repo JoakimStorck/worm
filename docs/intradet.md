@@ -1,8 +1,8 @@
 # Inträdet: de unga på väg in (6b och 6c)
 
 Plan, inte specifikation. Utarbetad 2026-09-19 efter spår C
-(`stockarna.md`) och steg 4 och 6a (`utbildningsmodell.md`). Besluten som
-återstår står sist.
+(`stockarna.md`) och steg 4 och 6a (`utbildningsmodell.md`). Besluten står
+sist; de fyra förslagen godtogs.
 
 ## Varför nu
 
@@ -122,8 +122,13 @@ omgivningen (`omgivning.md`, "Flyttningar") och byggs som eget steg.
 
 ## Byggordning
 
-1. **6b-1 Data.** Läsare för TAB3731 (riket) och TAB6928 (per kommun), med
-   kontroller: TAB6928:s befolkning år 2 ska vara år 1 plus nettot.
+1. ~~**6b-1 Data.**~~ Gjort: `population_study_education` (TAB3731, 2024,
+   barnens ålder summerad) och `education_flows_municipality` (TAB6928,
+   2023–2024, nivågrupper 02–05, 09 och alla, åldersklasser, kommunerna och
+   riket). Befolkningen år 2 är år 1 plus nettot i alla celler; komponenterna
+   summerar inte till nettot (dödsfall och ändrade uppgifter saknas) och
+   prövas inte. Gymnasial nivå är en grupp i TAB6928; uppdelningen på två
+   och tre år tas ur TAB655.
 2. **6b-2 Planen och inträdet.** Utbildningsplanen vid 16, studietiden,
    inträdeshändelsen med utbildningens cirklar, andelen som aldrig går in,
    och startanspråket.
@@ -145,7 +150,7 @@ omgivningen (`omgivning.md`, "Flyttningar") och byggs som eget steg.
 - Rekryteringstiden i hotell och restaurang och korrelationen per bransch mot
   TAB4307 (väntas flytta mest med 6c).
 
-## Beslut som återstår
+## Beslut (dialog 2026-09-19: alla fyra förslag godtagna)
 
 1. **Flyttningarna nu eller senare.** Förslag: senare, som eget steg efter
    6c; kullarna blir för stora under tiden, och det står i prövningen.

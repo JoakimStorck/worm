@@ -67,3 +67,49 @@ def test_yrkestotalerna_ska_vara_identiska():
     inr, niv = _tabeller([90, 30, 40])
     with pytest.raises(ValueError, match="olika yrkestotaler"):
         kontrollera_yrkestotaler(inr, niv[niv.ssyk_code != "911"])
+
+
+# ---------------------------------------------------------------------------
+# Inträdets tabeller (docs/intradet.md, 6b-1)
+# ---------------------------------------------------------------------------
+
+def test_studiedeltagandet_summerar_barnens_alder_och_tal_latin1(tmp_path):
+    """TAB3731 i latin-1 (FÖRV). Yngsta barnets ålder är en uppdelning, ingen
+    total: den summeras."""
+    from core.database.load_utbildning import las_studiedeltagande
+    p = _fil(tmp_path, "s.csv",
+             '"Kon","Alder","Studiedeltagande","UtbildningsNiva","Sysselsattning","BarnAlder","Tid","UF0507G1"\n'
+             '"1","19","H","4","FÖRV","4","2024",30\n'
+             '"1","19","H","4","FÖRV","1","2024",2\n'
+             '"1","19","0","4","EJFÖRV","4","2024",5\n', kodning="latin-1")
+    d = las_studiedeltagande(p)
+    assert len(d) == 2
+    assert d.set_index(["study", "employment"]).population[("H", "FÖRV")] == 32
+
+
+FLODE_RUBRIK = ('"Region","Utbildngrupp","KonAlderFodelseland",'
+                '"000008QG 2023-2024","000008QH 2023-2024","000008QI 2023-2024",'
+                '"000008QM 2023-2024"\n')
+
+
+def test_flodena_i_langt_format_utan_de_odefinierade(tmp_path):
+    """Riket har ".." för flyttningarna; de blir ingen rad."""
+    from core.database.load_utbildning import las_utbildningsfloden
+    p = _fil(tmp_path, "f.csv", FLODE_RUBRIK
+             + '"2062","03","18-24",1316,1301,-15,-217\n'
+             + '"00","03","18-24",100,110,10,..\n')
+    d = las_utbildningsfloden(p)
+    ut = d[(d.municipal_code == "2062") & (d.measure == "out_migrants")]
+    assert ut.value.tolist() == [-217] and ut.period.tolist() == ["2023-2024"]
+    assert d[(d.municipal_code == "00")].measure.tolist() == ["population_1", "population_2", "net"]
+
+
+def test_befolkningen_ar_2_ska_vara_ar_1_plus_nettot(tmp_path):
+    from core.database.load_utbildning import las_utbildningsfloden
+    p = _fil(tmp_path, "f.csv", FLODE_RUBRIK + '"2062","03","18-24",1316,1302,-15,-217\n')
+    with pytest.raises(ValueError, match="år 1 plus nettot"):
+        las_utbildningsfloden(p)
+    fel = _fil(tmp_path, "g.csv", FLODE_RUBRIK.replace("000008QM", "000008XX")
+               + '"2062","03","18-24",1316,1301,-15,-217\n')
+    with pytest.raises(ValueError, match="okända"):
+        las_utbildningsfloden(fel)
