@@ -576,12 +576,47 @@ full konkurrenskraft. Den ska vara studietid × intensitet.
 Varje steg är en egen mekanism och en egen commit. Steg som ändrar körningar
 jämförs mot en baslinje med fem frön.
 
-0. **Baslinje** (beslutat, inte körd): fem frön med
-   `SCENARIO=scenarios/ovansiljan_3_kommuner.yml bash kor_0077.sh` på koden i
-   f4d2c03. Senare commits som bara rör dokumentation har samma kod. Den
-   senaste körda baslinjen, 68aa372, föregår 23a53ef, där
-   utbildningscirkeln först nådde startpopulationen, och den ändringen har
-   aldrig körts. Steg 1 isoleras inte: dess effekt är högst 0,009 i q.
+0. ~~**Baslinje**~~ — körd 2026-09-18: fem frön med
+   `SCENARIO=scenarios/ovansiljan_3_kommuner.yml bash kor_0077.sh` på
+   0b23237, som har samma kod som f4d2c03. Körningarna ligger i
+   `output/run_20260918_031900` … `_033613`. Förra baslinjen, 68aa372,
+   ligger i `output/arkiv/run_20260917_150334` … `_151823`. Mellan dem
+   finns tre kodändringar, 23a53ef, 5df814b och f4d2c03, och de isoleras
+   inte från varandra. Inget frö överlappar det andra paketets spann:
+
+   | mått | 68aa372 | 0b23237 | fröspann |
+   |---|---|---|---|
+   | median q vid anställning | 0,909 | 0,950 | 0,002 |
+   | andel q > 1 | 32 % | 40 % | 0,5 pp |
+   | andel q < 0,40 | 8,6 % | 7,3 % | 0,1 pp |
+   | median u_R_occ (mål 0,70) | 0,699 | 0,726 | 0,006 |
+   | lönekvot w/Π vid anställning, p50 | 1,040 | 1,059 | 0,003 |
+   | beståndet över Π, sista året | 71 % | 75 % | 0,7 pp |
+   | anställda vid start | 12 738 | 12 923 | |
+
+   Utbildningscirkeln ger fler en användbar cirkel från början. Därför
+   matchas fler vid uppstarten och q vid anställning stiger. Men u_R_occ
+   flyttar sig bort från målet med fyra gånger fröspannet: tillsättningarna
+   sker längre bort i uppgiftsrummet mellan yrken när en bred cirkel bär
+   kompetensen. Andelen av beståndet över Π rör sig åt fel håll, bort från
+   de 50 procent som definitionen kräver.
+
+   Slutläget är detsamma i båda baslinjerna: omkring 10 700 anställda, 450
+   arbetslösa och 4 280 vakanser (vakansgrad 29 %). Pensionsavgångarna
+   saknar inträde, så de anställda faller från 12 900 till 10 700 på tio år.
+   Andelen över Π stiger 15–16 procent mellan körningens första och andra
+   halva, i alla fem fröna. Vakansmått, bytesfrekvens och lönespridningens
+   nivå går därför inte att kalibrera mot före steg 6.
+
+   **Taket nås redan.** Cirkelnycklarna är yrken (O*NET), utbildningsnivåer
+   och omskolningar. Räknat ur transitionerna har 13–17 individer per frö
+   precis 12 cirklar, och 2–4 har haft fler och tappat den med minst massa.
+   Det gäller omkring 20 av de 15 400 som förekommer i transitionerna, så
+   steg 2 ensamt ska inte ge någon mätbar effekt. Gör det ändå det är något
+   annat fel. Med en cirkel per händelse (steg 3) blir medianen omkring sex
+   cirklar och maxvärdet 16, och 0,4 procent skulle gå över tolv.
+   Uppskattningen räknar uppstartsmatchningen både som arbetscirkel och som
+   tillträde och är därför något för hög.
 1. ~~**`_union` följer sin formel**~~ — gjort. Avdraget görs mot varje
    starkare cirkel i stället för i en kedja (`individmodell.md`, avsnitt 2).
 2. **Inget tak på antalet cirklar.** Arrayerna växer när en rad blir full.

@@ -10,7 +10,8 @@ var projektet står.
 Byggordningen står sist i `docs/utbildningsmodell.md`, med beslut och
 beroenden. Steg 1 (`_union`) är gjort i f4d2c03. Nästa:
 
-- [ ] Steg 0: baslinjen, fem frön på Ovansiljan på koden i f4d2c03.
+- [x] Steg 0: baslinjen, fem frön på Ovansiljan (0b23237). Avläsningen står i
+      byggordningen.
 - [ ] Steg 2: inget tak på antalet cirklar.
 - [ ] Steg 3: en cirkel per händelse, med skärpning av alla cirklar i yrket.
 
