@@ -394,3 +394,47 @@ procentenhet över Dalarnas 2,03, och de utlovade positionerna, omkring 1,8
 procent av jobben, som ännu inte finns i jobbmålet (C4c). Väntan på
 lämpliga sökande är en egen fråga om mismatch, inte om rekryteringens
 tider.
+
+## Rekryteringstiden per bransch: tiden ligger på fel ställen (2026-09-18)
+
+SCB:s rekryteringstid varierar med läget i uppgiftsrummet, T = 47,7 +
+χ(2,2 cos ξ + 156,5 sin ξ) över näringsgrenarna (TAB4307, 2023,
+`scripts/rekryteringstid_mot_uppgiftsrum.py`). Aggregatet räcker därför inte
+som prövning. Modellens motsvarighet per bransch, öppen stock i slutläget
+genom tillsättningar per år (år 5–9), tio år, frö 1, fönstret 20
+(`output/run_20260918_224453`):
+
+| bransch | jobb | öppna | modell, dagar | SCB, dagar |
+|---|---|---|---|---|
+| B+C tillverkning | 2 088 | 25 | 23 | 47 |
+| D+E energi | 200 | 1 | 10 | 71 |
+| F bygg | 2 014 | 23 | 20 | 33 |
+| G handel | 1 695 | 44 | 39 | 30 |
+| H transport | 627 | 11 | 29 | 26 |
+| **I hotell och restaurang** | 737 | **58** | **121** | **12** |
+| J information och kommunikation | 115 | 2 | 27 | 81 |
+| K+L finans, fastighet | 329 | 10 | 48 | 40 |
+| M+N företagstjänster | 1 021 | 24 | 38 | 49 |
+| P+Q utbildning, vård | 6 091 | 127 | 31 | 25 |
+| R+S+T+U övrigt | 764 | 18 | 38 | 21 |
+
+Korrelationen mot SCB är **negativ**, −0,55 (−0,36 med fönstret 40). Nivån
+totalt är ungefär rätt, men tiden ligger där verkligheten är snabbast, och de
+långa rekryteringarna i SCB -- IT, energi, tillverkning -- går fort i
+modellen.
+
+**Hotell och restaurang bär överskottet.** 7,9 procent av branschens jobb står
+öppna, i median 283 dagar, mot SCB:s kortaste rekryteringstid, 12 dagar. Det
+är inte geografin: 43 av 58 ligger i Mora. Det är inte kraven: r_req 0,08 i
+median. Det är lönen. De öppna betalar i median 0,56, de besatta i samma
+bransch 0,69, och de arbetslösas anspråk ligger i median på 0,68 (p25 0,55).
+Jobben är för dåligt betalda för de arbetslösa som finns.
+
+I verkligheten fylls de av dem modellen saknar: unga på väg in, studerande,
+nyanlända -- de med lägst anspråk och kortast erfarenhet. **Golvet kring 3
+procent öppna vakanser är alltså inte i första hand kompetens-mismatch utan
+det saknade inträdet (6b).** Att kalibrera vakansnivån vidare innan inträdet
+finns vore att kalibrera bort en frånvaro.
+
+Mätningen är en ögonblicksbild av stocken och brusig för små branscher (J har
+115 jobb). Mönstret i I är inte brus.
