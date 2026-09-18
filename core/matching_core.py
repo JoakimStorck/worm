@@ -95,6 +95,13 @@ def current_surplus(world, idx, w_off, commute_km):
     ind = world.individuals
     st = world.get_ind(idx, 'status') if 'status' in ind.columns else 'unemployed'
     cfg = search_config(world)
+    from core.event_handlers import ar_extern
+    if ar_extern(world, idx):
+        # Samma regel som i sökningen (O3c): inpendlaren betalar ingen
+        # pendlingskostnad. Utan raden prövades erbjudandet vid stängningen med
+        # kostnaden för 40-60 km och avböjdes -- 3 vunna av 3 320 ansökningar
+        # till Älvdalen.
+        cfg = dict(cfg, commute_cost_per_km=0.0)
     rad = _with_current_reservation(world, idx, world.ind_row(idx), st, cfg)
     w_res = float(rad.get('w_res') or 0.0)
     return float(w_off) - float(cfg['commute_cost_per_km']) * float(commute_km) - w_res
@@ -196,10 +203,21 @@ def apply_once(world, idx, t_now):
         return (None,) * 5
 
     cfg = search_config(world)
+    kandidater = world.vacant_mask()
+    from core.event_handlers import ar_extern
+    if ar_extern(world, idx):
+        # INPENDLARE OCH RESERVOAR (docs/omgivning.md, O3c): bara vakanser i
+        # arbetskommunen, och utan avståndsdämpning och pendlingskostnad --
+        # arbetskommunen är dragen ur pendlingsmatrisen, som redan bär hur
+        # långt folk pendlar (samma princip som för utpendlingen, O4b).
+        ak = world.get_ind(idx, 'arbetskommun') if 'arbetskommun' in ind.columns else None
+        if ak is not None and pd.notna(ak):
+            kandidater = kandidater & (world.jobb_kommun() == str(ak).zfill(4))
+        cfg = dict(cfg, commute_cost_per_km=0.0, commute_decay_km=None)
     rad = _with_current_reservation(world, idx, world.ind_row(idx), st, cfg)
     job_pos, surplus, w_neg, q_hire, km = search_once(
         rad, world.jobs,
-        np.flatnonzero(world.vacant_mask()),
+        np.flatnonzero(kandidater),
         queue=(world.applicant_counts()
                if hasattr(world, 'applicant_counts') else None),
         arrays=world.job_arrays(),

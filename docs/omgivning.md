@@ -87,6 +87,14 @@ personer som bor i omgivningen, skapade vid start.
   de anställdas) styr hur många som anställs och kalibreras i O5.
 - **Vid start** söker en delmängd lika stor som stocken (`extern_start`) med i
   uppstartsmatchningen.
+- **Arbetskommunen (O3c).** Reservoaren genereras per par av ursprung och
+  arbetskommun i proportion till matrisen, och varje person söker bara
+  vakanser i sin arbetskommun, utan avståndsdämpning och utan
+  pendlingskostnad, också när erbjudandet prövas igen vid stängningen. Samma
+  princip som för utpendlingen: matrisen bär avståndet. Yrket dras ur
+  arbetskommunens jobbfördelning i TAB4436, som räknar dagbefolkningen och
+  alltså innehåller inpendlarna; ålder, utbildning och bostad är
+  ursprungets. Startdelen är varje pars egen stock.
 
 ### 3. Flyttningar
 
@@ -163,6 +171,10 @@ inte kalibrerade och körs inte som baslinje.
   Per arbetskommun efter två år Mora 1 063, Orsa 210, Älvdalen 67, mot 1 374,
   124 och 229. Identiteten håller exakt. Reservoarens generering, 98 kommuner
   genom generate_individuals, lägger omkring 70 sekunder till uppbyggnaden.
+- **O3c. Inpendlingens arbetskommun.** **Gjort**, se avsnitt 2. Innan dess
+  fick Orsa 224 inpendlare mot 124 och Älvdalen 79 mot 229. Två år, frö 1,
+  efter: inpendlare 3 293 mot 1 727, jämnt för högt i alla tre kommunerna
+  (Mora 1,9, Orsa 1,5, Älvdalen 2,2 gånger målet) -- en nivå för O5.
 - **O4. Utpendling.** Externa erbjudanden till invånarna, externa jobb utan
   arbetsställe. Startens utpendlare på plats. **Gjort** (`externt_erbjudande`
   och `anta_externt` i `core/matching_core.py`, `World.skapa_externt_jobb`):

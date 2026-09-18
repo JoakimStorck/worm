@@ -302,32 +302,56 @@ def test_uppehall_for_en_inpendlare_ar_en_aterkomst_till_omgivningen():
     assert w.individuals.at[0, "status"] == "extern"
 
 
-def test_reservoaren_fordelas_pa_ursprung_och_startdelen_ar_stocken():
-    """Storleken är faktor gånger stocken, fördelad efter inpendlingen;
-    startdelen är stocken. generate_individuals ersätts: den prövas för
-    regionens invånare, här prövas fördelningen."""
+def test_reservoaren_fordelas_pa_par_och_startdelen_ar_parens_stock():
+    """Storleken är faktor gånger stocken, fördelad på par av ursprung och
+    arbetskommun efter matrisen; startdelen är varje pars egen stock.
+    Rättvik (2031) har två arbetskommuner, så att radernas ordning prövas.
+    generate_individuals ersätts: den prövas för regionens invånare, här
+    prövas fördelningen."""
     from core.scenariobuilder import ScenarioBuilder
     import os, sys
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from conftest import FakeConfig
+    conn = _db()
+    conn.execute("INSERT INTO commuting VALUES ('2031', '2034', 2023, 10)")
     sb = ScenarioBuilder.__new__(ScenarioBuilder)
     sb.rng = np.random.default_rng(0)
     sb.cfg_reader = FakeConfig({"inpendling_reservoar_faktor": 2.0})
-    sb._omgivning = Omgivning(_db(), REGION)          # inpendling 40 + 5 = 45
-    anrop = {}
+    sb._omgivning = Omgivning(conn, REGION)     # 2031->2062 40, 2031->2034 10, 2080->2034 5
 
     def gen(kod, befolkning, andel, u, year=None):
-        anrop[kod] = befolkning
         n = int(round(befolkning * andel))
-        return pd.DataFrame({"municipal_code": kod, "status": ["unemployed"] * n
-                             + ["not_in_labor_force"] * (befolkning - n),
+        return pd.DataFrame({"municipal_code": kod,
+                             "status": ["unemployed"] * n + ["not_in_labor_force"] * (befolkning - n),
                              "pi_o": 1.0, "w_res": 0.7})
     sb.generate_individuals = gen
+    fick_yrke = []                                  # yrket prövas för sig nedan
+    sb._yrke_ur_arbetskommunen = lambda d: fick_yrke.append(len(d))
     res = sb.generate_inpendlingsreservoar(2024)
-    assert res["municipal_code"].value_counts().to_dict() == {"2031": 80, "2080": 10}
+    assert sum(fick_yrke) == len(res), "inte alla fick yrket ur arbetskommunen"
+    par = res.groupby(["municipal_code", "arbetskommun"]).size().to_dict()
+    assert par == {("2031", "2062"): 80, ("2031", "2034"): 20, ("2080", "2034"): 10}
+    start = res[res.extern_start].groupby(["municipal_code", "arbetskommun"]).size().to_dict()
+    assert start == {("2031", "2062"): 40, ("2031", "2034"): 10, ("2080", "2034"): 5}
     assert (res["status"] == "extern").all() and res["extern"].all()
-    assert int(res["extern_start"].sum()) == 45
     assert res["w_neg"].isna().all()
+
+
+def test_inpendlaren_soker_bara_i_sin_arbetskommun_och_utan_avstand():
+    """Arbetskommunen är dragen ur matrisen, som bär avståndet: ingen
+    avståndsdämpning och ingen pendlingskostnad, men bara vakanser där."""
+    from core.matching_core import apply_once
+    w = _varld(n_employers=4, size=2, application_window_days=40,
+               commute_cost_per_km=1.0, commute_decay_km=0.001)
+    w.jobs["municipal_code"] = ["2062"] * 4 + ["2034"] * 4
+    w.jobs["x"] = 50000.0                       # 50 km bort
+    w.individuals = _personer(["extern"], [True], arbetskommun="2034")
+    w.prepare()
+    np.random.seed(2)
+    sokta = {apply_once(w, 0, float(t))[0] for t in range(1, 30)} - {None}
+    assert sokta, "inpendlaren sökte inget: avståndet räknades"
+    kommun = w.jobs.set_index("job_id").loc[list(sokta), "municipal_code"]
+    assert set(kommun) == {"2034"}
 
 
 # ---------------------------------------------------------------------------
@@ -479,3 +503,49 @@ def test_externt_erbjudande_betalar_ingen_pendlingskostnad():
     erbj = [e for e in (externt_erbjudande(w, 0, 1.0, rng) for _ in range(200)) if e]
     assert len(erbj) > 150
     assert min(e["km"] for e in erbj) > 20
+
+
+def test_inpendlarens_yrke_kommer_ur_arbetskommunens_jobb():
+    """TAB4436 räknar dagbefolkningen, som innehåller inpendlarna. Mora har
+    här bara yrket B, Orsa bara C; ursprunget spelar ingen roll."""
+    from core.scenariobuilder import ScenarioBuilder
+    import os, sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from conftest import FakeConfig
+    conn = _db()
+    pd.DataFrame([("2062", "911", "N", "1", 2024, 50), ("2034", "912", "N", "1", 2024, 50)],
+                 columns=["municipal_code", "ssyk_code", "sni_code", "sex", "year",
+                          "employed"]).to_sql("employment_workplace_occupation_sni", conn,
+                                              index=False)
+    pd.DataFrame([("911", "B", 1.0), ("912", "C", 1.0)],
+                 columns=["occupation_code", "onet_code", "share"]).to_sql(
+        "ssyk3_onet_crosswalk", conn, index=False)
+    geo = pd.DataFrame({"onet_code": ["B", "C"], "x_occ": [0.3, -0.4], "y_occ": [0.1, 0.2],
+                        "r_o": 0.27, "chi": 0.3, "xi": 0.3, "geom_source": "occupation",
+                        "w_rel": 1.0, "pi_rel": 1.0})
+    geo.to_sql("onet_occupation_space", conn, index=False)
+    sb = ScenarioBuilder.__new__(ScenarioBuilder)
+    sb.conn = conn
+    sb.rng = np.random.default_rng(0)
+    sb.cfg_reader = FakeConfig({})
+    sb.onet_space_df = geo.set_index("onet_code")
+    sb._price_field = lambda: None
+    d = pd.DataFrame({"municipal_code": ["2031"] * 4, "onet_code": ["X"] * 4,
+                      "arbetskommun": ["2062", "2062", "2034", "2034"]})
+    sb._yrke_ur_arbetskommunen(d)
+    assert d["onet_code"].tolist() == ["B", "B", "C", "C"]
+    assert d["last_onet_code"].tolist() == ["B", "B", "C", "C"]
+    assert np.allclose(d["x_occ"].to_numpy()[:2], 0.3, atol=0.2)
+    assert np.allclose(d["x_occ"].to_numpy()[2:], -0.4, atol=0.2)
+
+
+def test_inpendlarens_erbjudande_provas_utan_pendlingskostnad_vid_stangningen():
+    """Vid stängningen prövas överskottet igen, mot hennes läge nu. Med
+    pendlingskostnaden avböjde inpendlarna nästan varje erbjudande."""
+    from core.matching_core import current_surplus
+    w = _varld(commute_cost_per_km=0.01)
+    w.individuals = _personer(["extern", "unemployed"], [True, False])
+    w.prepare()
+    # w_res 0.3, erbjudandet 0.8, 60 km: 0.8 - 0.6 - 0.3 < 0 med kostnad
+    assert current_surplus(w, 0, 0.8, 60.0) == pytest.approx(0.5)
+    assert current_surplus(w, 1, 0.8, 60.0) == pytest.approx(-0.1)

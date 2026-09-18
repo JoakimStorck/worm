@@ -384,6 +384,14 @@ class World(IndividualViews):
         self._schedule_destruction(new_ids, t_now)
         return len(rows)
 
+    def jobb_kommun(self):
+        """Jobbens kommunkod som nollutfylld sträng, cachad per tabellängd."""
+        n = len(self.jobs)
+        if getattr(self, "_jk_n", None) != n:
+            self._jk = self.jobs["municipal_code"].astype(str).str.zfill(4).to_numpy()
+            self._jk_n = n
+        return self._jk
+
     def omgivning(self):
         """Omgivningen för scenariots kommuner (core/omgivning.py), en gång."""
         if not hasattr(self, "_omgivning"):

@@ -1104,12 +1104,18 @@ class ScenarioBuilder:
         n_tot = int(round(faktor * stock))
         if n_tot <= 0:
             return None
-        per = om.inpendling.groupby("bo")["n"].sum()
-        exakt = per / per.sum() * n_tot
-        antal = np.floor(exakt).astype(int)
-        rest = n_tot - int(antal.sum())
+        # PER PAR AV URSPRUNG OCH ARBETSKOMMUN (O3c). Varje person i
+        # reservoaren har en arbetskommun i regionen och söker bara där, så att
+        # inpendlingen fördelas som i matrisen: Rättviksborna i Mora, inte
+        # där det är närmast. Utan detta fick Orsa 224 inpendlare mot 124 och
+        # Älvdalen 79 mot 229.
+        par = om.inpendling.set_index(["bo", "arb"])["n"]
+        exakt = par / par.sum() * n_tot
+        per_par = np.floor(exakt).astype(int)
+        rest = n_tot - int(per_par.sum())
         if rest > 0:
-            antal.iloc[np.argsort(-(exakt - antal).to_numpy(), kind="stable")[:rest]] += 1
+            per_par.iloc[np.argsort(-(exakt - per_par).to_numpy(), kind="stable")[:rest]] += 1
+        antal = per_par.groupby(level="bo").sum()
         # ARBETSKRAFTEN UR EN BEFOLKNING. generate_individuals placerar
         # arbetskraften inom kommunens ålderspyramid, så en ren arbetskraft
         # (andel 1,0) ryms inte: den kastar när arbetskraften är större än
@@ -1118,12 +1124,24 @@ class ScenarioBuilder:
         # med ursprungskommunens åldrar i arbetskraften, inte i befolkningen.
         ANDEL = 0.4
         delar = []
-        for ursprung, n in antal.items():
+        # Arbetskommunen sätts på ursprungets egna rader i samma slinga, så
+        # att ordningen är rätt av konstruktion. Startdelen är parets egen
+        # stock ur matrisen: inpendlarna vid start fördelas exakt som där.
+        for ursprung, grupp in per_par.groupby(level="bo", sort=False):
+            n = int(grupp.sum())
             if n <= 0:
                 continue
             befolkning = int(np.ceil(n / ANDEL)) + 2
             d = self.generate_individuals(ursprung, befolkning, ANDEL, 0.0, year=year)
-            d = d[d["status"] == "unemployed"].head(int(n))
+            d = d[d["status"] == "unemployed"].head(n).copy()
+            arbetskommun, start = [], []
+            for (_, arb), m in grupp.items():
+                arbetskommun += [str(arb)] * int(m)
+                s0 = min(int(par[(ursprung, arb)]), int(m))
+                start += [True] * s0 + [False] * (int(m) - s0)
+            d["arbetskommun"] = arbetskommun
+            d["extern_start"] = start
+            self._yrke_ur_arbetskommunen(d)
             delar.append(d)
         res = pd.concat(delar, ignore_index=True)
         res["status"] = "extern"
@@ -1131,13 +1149,51 @@ class ScenarioBuilder:
         res["w_neg"] = np.nan
         res["w_last"] = np.nan
         res["unemployed_since"] = np.nan
-        start = np.zeros(len(res), dtype=bool)
-        start[self.rng.choice(len(res), size=min(stock, len(res)), replace=False)] = True
-        res["extern_start"] = start
         log(f"[omgivning] inpendlingsreservoar: {len(res)} personer ur "
-            f"{int((antal > 0).sum())} kommuner, varav {int(start.sum())} söker i "
+            f"{int((antal > 0).sum())} kommuner, varav {int(res['extern_start'].sum())} söker i "
             f"uppstarten (inpendlingsstock {stock})")
         return res
+
+    def _yrke_ur_arbetskommunen(self, d):
+        """Inpendlarens yrke ur ARBETSKOMMUNENS jobbfördelning (TAB4436), inte
+        ur ursprungets invånare.
+
+        TAB4436 räknar dagbefolkningen, som innehåller inpendlarna: det är det
+        underlag som finns om vad inpendlarna gör. Med ursprungets yrken fick en
+        slumpmässig Rättviksbo ett yrke som sällan passade Älvdalens få
+        vakanser, och Älvdalen fick 23 inpendlare mot 229. Ålder, utbildning och
+        bostad är fortfarande ursprungets. Yrket placeras som för invånarna:
+        yrkets tyngdpunkt plus den personliga avvikelsen r_o/sqrt(k), och
+        anspråket är rho gånger yrkets pris."""
+        if not hasattr(self, "_profil"):
+            from core.bransch import Kommunprofil
+            self._profil = Kommunprofil(self.conn)
+        rng = self.rng
+        koder = [self._profil.onet(self._profil.dra_jobb(ak, rng)[1], rng)
+                 for ak in d["arbetskommun"]]
+        geom = self.get_geom_for_onet_codes(koder)
+        ro = np.nan_to_num(geom["r_o"].to_numpy(dtype=float), nan=0.27)
+        k_default = float(self.cfg_reader.config.get("simulation", {})
+                          .get("competence", {}).get("tasks_per_occupation_default", 20))
+        n_tasks = (geom["n_tasks"].to_numpy(dtype=float) if "n_tasks" in geom.columns
+                   else np.full(len(koder), np.nan))
+        n_tasks = np.where(np.isnan(n_tasks), k_default, n_tasks)
+        jit = ro / np.sqrt(np.maximum(n_tasks, 1.0))
+        x = geom["x_occ"].to_numpy(dtype=float) + rng.normal(0.0, jit)
+        y = geom["y_occ"].to_numpy(dtype=float) + rng.normal(0.0, jit)
+        r = np.hypot(x, y); over = r > 1.0
+        x[over] /= r[over]; y[over] /= r[over]
+        d["onet_code"] = koder
+        d["last_onet_code"] = koder
+        d["r_o_home"] = ro
+        d["x_occ"], d["y_occ"] = x, y
+        d["chi"] = np.hypot(x, y)
+        d["xi"] = np.arctan2(y, x) % (2 * np.pi)
+        pf = self._price_field()
+        if pf is not None:
+            rho = self.cfg_reader.config.get("simulation", {}).get("rho_reservation", 0.7)
+            d["pi_o"] = pf.pi_rel_cart(x, y)
+            d["w_res"] = rho * d["pi_o"]
 
     def generate(self, year=None):
         t0 = time.time()
