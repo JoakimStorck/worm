@@ -634,3 +634,10 @@ jämförs mot en baslinje med fem frön.
    startpopulationen får inriktning.
 7. **Grindvaktsfrågan**, och därefter spärren.
 8. **Omskolningens mål dras** i stället för att medelvärdesbildas.
+   Startpunkten försvinner samtidigt. `handle_start_education` räknar
+   `x0` ur `x_occ` och lägger cirkeln `retraining_share` av vägen mot
+   målet. Raden är kvar från 1b23138, när positionen var ett tillstånd och
+   omskolningen flyttade punkten. I 42aeb2a blev slutet av omskolningen en
+   cirkel, men början rördes inte, och sedan dess läser `x0` medelvärdet
+   av alla cirklar. Det är det enda beslut i simuleringen som medelvärdet
+   styr. Cirkeln läggs på målet, och `x0` och `retraining_share` tas bort.

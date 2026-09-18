@@ -249,6 +249,34 @@ urholkar av sig själv: den gamla cirkeln diffunderar medan den nya byggs.
 Sammanfattande mått — centroid, χ̄, ξ̄, riktningskonsekvens, spridning —
 härleds ur cirklarna för loggning och validering. De är inte tillstånd.
 
+### Individens position
+
+Cirklarna är samma sak som den gamla punkten med radie, men ackumulerad:
+individen bygger ett utfall av erfarenheter, och var och en bidrar olika
+mycket till konkurrenskraften i det jobb hon söker. Hon kan ha många.
+
+**Individens position är hennes nuvarande eller senaste erfarenhets
+position**: den pågående anställningens cirkel, annars den cirkel som senast
+tillkom. **Hon har ingen egen radie.** Varje erfarenhet har sin.
+
+Konstruktionens idé syns i golvet. Grundskolan och den allmänna utbildningen
+har radie 1, och därför når den som bara har grundskola alla enkla jobb,
+även diskaren som ligger en bit ut på skivan. Konkurrenskraften är låg men
+aldrig noll. Den som når ett bättre betalt jobb väljer det. Positionen styr
+inget av detta, eftersom q räknas ur cirklarna.
+
+*Läget i koden.* `x_occ`, `y_occ`, `chi`, `xi`, `r_i` och `R` i
+individtabellen är fortfarande `Circles.summarize`: ett medelvärde av alla
+cirklars centrum viktat med massa/ρ², där grundskolecirkeln i origo ingår,
+och r_i är cirklarnas genomsnittliga radie. Det är varken positionen ovan
+eller en radie hon har. Medelvärdet styr ett enda beslut, omskolningens
+startpunkt (steg 8 i byggordningen i `utbildningsmodell.md`). I övrigt läses
+det av `d_task` och `u_R` vid tillträde, av statistiken och av
+händelseloggen. Loggens kopia har varit fryst sedan 8cb9f83: `_KolumnCache` i
+`core/log.py` byggs inte om när kolumnerna skrivs om. Visaren
+(`scripts/export_viz.py`), som flyttar individerna med loggens fält, har
+därför visat individer som står still.
+
 ### Kopplingen till teknikfälten
 
 Technology fields beskriver en teknik som ett fält över samma skiva, φ_K(r).
@@ -653,3 +681,13 @@ en vägg, är ett besked om att en tillståndsvariabel slutat bära information.
   utbildningen.
 - Om en spretig karriär är ett signalproblem i sig, utöver vad cirklarnas
   överlapp ger. Parkerad.
+- Städningen av punktmodellen (avsnitt 2, "Individens position").
+  Medelvärdet i `Circles.summarize` ersätts av positionen ur nuvarande eller
+  senaste erfarenhet, eller tas bort. Samtidigt försvinner det som hänger på
+  punkten: reservgrenarna för q utan cirklar i `search_once` och
+  `matching_core`, `u_R` och `d_task` mätta från medelpunkten, r_i i loggen
+  och visaren, `initial_r` i `configreader`, samt `chi_add`, `r_add`,
+  `xi_add`, `_occ_prob`, `apply_capability_update_LEGACY` och
+  `compute_utility_matrix` i `core/occupations/utils.py`. Den sista anropar
+  `compute_surplus_matrix`, som inte längre finns. Loggrättelsen görs
+  oavsett.
