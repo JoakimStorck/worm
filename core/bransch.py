@@ -167,27 +167,66 @@ class YrkeGivetBransch:
                                  "yrkesregistret och SSYK-O*NET-crosswalken, som "
                                  "scripts/create_database.py bygger; geometrin ur "
                                  "scripts/load_task_geometry.py --write.")
-        df = pd.read_sql(
-            "SELECT o.sni_code, o.size_class, c.onet_code, "
-            "       SUM(o.employed * c.share) AS vikt "
-            "  FROM occupation_by_industry o "
-            "  JOIN ssyk3_onet_crosswalk c ON c.occupation_code = o.ssyk_code "
+        # Två led: P(ssyk | bransch, klass) och P(O*NET | ssyk). Produkten är
+        # samma fördelning som förut; att leden hålls isär är det som låter
+        # ett arbetsställe realisera ett svenskt yrke som EN O*NET-kod.
+        # O*NET-koder utan geometri faller i andra ledet, och ssyk-vikten
+        # skalas med den andel av crosswalken som finns kvar, så att
+        # produkten är oförändrad.
+        cw = pd.read_sql(
+            "SELECT c.occupation_code AS ssyk, c.onet_code, c.share "
+            "  FROM ssyk3_onet_crosswalk c "
             "  JOIN onet_occupation_space g ON g.onet_code = c.onet_code "
-            " GROUP BY 1, 2, 3", conn)
-        df = df[df["vikt"] > 0]
-        self._fordelning = {}
-        for (bransch, klass), g in df.groupby(["sni_code", "size_class"]):
+            " WHERE c.share > 0", conn)
+        self._onet = {}
+        for ssyk, g in cw.groupby("ssyk"):
+            p = g["share"].to_numpy(dtype=float)
+            self._onet[str(ssyk)] = (g["onet_code"].to_numpy(), p / p.sum())
+        kvar = cw.groupby("ssyk")["share"].sum()
+        reg = pd.read_sql("SELECT sni_code, size_class, ssyk_code, SUM(employed) AS e "
+                          "FROM occupation_by_industry GROUP BY 1, 2, 3", conn)
+        reg["vikt"] = reg["e"] * reg["ssyk_code"].map(kvar).fillna(0.0)
+        reg = reg[reg["vikt"] > 0]
+        self._ssyk = {}
+        for (bransch, klass), g in reg.groupby(["sni_code", "size_class"]):
             p = g["vikt"].to_numpy(dtype=float)
-            self._fordelning[(bransch, klass)] = (g["onet_code"].to_numpy(), p / p.sum())
+            self._ssyk[(bransch, klass)] = (g["ssyk_code"].astype(str).to_numpy(), p / p.sum())
 
-    def fordelning(self, bransch, storlek):
+    def _ssyk_fordelning(self, bransch, storlek):
         klass = storleksklass(int(storlek))
         try:
-            return self._fordelning[(str(bransch), klass)]
+            return self._ssyk[(str(bransch), klass)]
         except KeyError:
             raise ValueError(f"Yrkesregistret har inga anställda med O*NET-koppling "
                              f"i bransch {bransch}, {klass}.") from None
 
-    def dra(self, bransch, storlek, rng):
-        koder, p = self.fordelning(bransch, storlek)
-        return str(koder[int(rng.choice(len(koder), p=p))])
+    def fordelning(self, bransch, storlek):
+        """O*NET-fördelningen för ett jobb i branschen och klassen, sett
+        över alla arbetsställen: summan över ssyk av de två leden."""
+        ssyk, ps = self._ssyk_fordelning(bransch, storlek)
+        vikt = {}
+        for s_, p_s in zip(ssyk, ps):
+            for kod, p_o in zip(*self._onet[s_]):
+                vikt[kod] = vikt.get(kod, 0.0) + p_s * p_o
+        koder = np.array(list(vikt))
+        return koder, np.array([vikt[k] for k in koder])
+
+    def dra(self, bransch, storlek, rng, realiserade=None):
+        """(ssyk, O*NET) för ett nytt jobb.
+
+        realiserade är arbetsställets egna svenska yrken, ssyk -> O*NET. Har
+        arbetsstället redan yrket återanvänds dess O*NET-kod: en SSYK3-grupp
+        sprids av crosswalken på i median 19 koder med RMS 0,19 inom gruppen,
+        och utan detta blev bilverkstadens mekaniker 21 olika yrken och ett
+        arbetsställe nästan lika brett som kommunen. Över många arbetsställen
+        är fördelningen densamma som om varje jobb dragits för sig. Ett nytt
+        yrke dras ur crosswalken och läggs till i realiserade."""
+        ssyk, ps = self._ssyk_fordelning(bransch, storlek)
+        s_ = str(ssyk[int(rng.choice(len(ssyk), p=ps))])
+        if realiserade is not None and s_ in realiserade:
+            return s_, realiserade[s_]
+        koder, po = self._onet[s_]
+        kod = str(koder[int(rng.choice(len(koder), p=po))])
+        if realiserade is not None:
+            realiserade[s_] = kod
+        return s_, kod

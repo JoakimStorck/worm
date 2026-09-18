@@ -472,12 +472,13 @@ class ScenarioBuilder:
         for idx, row in employers_df.iterrows():
             geom = row['geometry']
             x, y = geom.x, geom.y
+            realiserade = {}            # arbetsställets svenska yrken -> O*NET
             for _ in range(int(row['size'])):
                 sni = row['sni_code']
 
                 # Yrket följer arbetsställets bransch och storlek, oavsett
                 # occupation_source, som bara gäller invånarna (core/bransch.py).
-                onet_code = yrken.dra(sni, row['size'], self.rng)
+                ssyk_code, onet_code = yrken.dra(sni, row['size'], self.rng, realiserade)
 
                 x_occ, y_occ, r_o, chi, xi, geom_source, wage, r_req = self.get_geom_for_onet_code(onet_code)
                 eta = float(eta_by_employer.get(row.get('employer_id', idx), 0.0))
@@ -492,6 +493,7 @@ class ScenarioBuilder:
                     "zone_code": row['zone_code'],
                     "employer_size": row['size'],
                     "sni_code": sni,
+                    "ssyk_code": ssyk_code,
                     "onet_code": onet_code,
                     "geometry": geom,
                     "x": x,

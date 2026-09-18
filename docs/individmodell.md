@@ -324,7 +324,16 @@ Bredden har tre källor, och de tas i ordningen:
   med RMS 0,19 inom gruppen; städare (911) på 12 koder med RMS 0,33. Ett
   arbetsställe realiserar varje svenskt yrke som EN O\*NET-kod: dess
   mekaniker är samma yrke, inte 21. Ingen ny parameter, och fördelningen
-  över befolkningen är oförändrad.
+  över befolkningen är oförändrad. **Gjort.** Uppmätt i Mora, arbetsställen
+  med minst 20 jobb: antalet O\*NET-koder i effektiv mening föll från 28
+  till 8, men RMS-spridningen bara från 0,333 till 0,327. Förutsägelsen att
+  crosswalken bar det mesta av bredden var fel för det måttet. Ett
+  arbetsställe har i median 20 SSYK3-grupper, och varje grupp realiseras
+  som EN slumpmässig punkt, så gruppens avvikelse från sin centroid finns
+  kvar mellan grupperna. Bredden i rummet sitter i blandningen av svenska
+  yrken och ändras först av b. Jobbens och invånarnas yrkesfördelning har
+  nu 0,65 av massan gemensamt i stället för 0,84: samma väntevärde, men
+  jobben är klumpigare per kod.
 - **c. Branschens grovhet.** G rymmer både bilverkstaden och butiken. Om SCB
   publicerar yrke gånger tvåsiffrig SNI för riket skiljs de åt med data.
 - **b. Ett kärnyrke som sätter arbetsställets specialistprofil.** Kärnan

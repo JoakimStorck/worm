@@ -199,8 +199,8 @@ def test_job_ids_unique_across_municipalities():
     # Testet gäller id:n, inte yrket; yrkesdragningen prövas i test_bransch.py
     class _EttYrke:
         @staticmethod
-        def dra(bransch, storlek, rng):
-            return "11-1011.00"
+        def dra(bransch, storlek, rng, realiserade=None):
+            return "111", "11-1011.00"
     sb._yrken = _EttYrke()
 
     orig = sbmod.assign_deso_code
@@ -726,7 +726,8 @@ def _world_with_industry_occupations(utan=()):
     lika på två O*NET-koder, och en tredjedel läkare (221). I G, bilverkstaden,
     finns bara mekaniker (723).
 
-    Väntat för mallens arbetsställe: Q1 1/3, Q2 1/3, LAK 1/3, aldrig MEK."""
+    Väntat för mallens arbetsställe: LAK 1/3 och 532 2/3, realiserat som EN
+    av Q1 och Q2 (core/bransch.py), aldrig MEK."""
     import sqlite3
     w = make_world(n_employers=1, size=4, simulation={"vacancy_fill_rate": 1.0})
     w.jobs["onet_code"] = "MALL"
@@ -769,7 +770,10 @@ def test_new_jobs_follow_the_employers_industry():
     assert "MEK" not in set(new["onet_code"]), "en mekaniker postades i vården"
     assert (new["onet_code"] != "MALL").all(), "mallens yrke ärvdes"
     andel = new["onet_code"].value_counts(normalize=True)
-    assert andel.to_dict() == pytest.approx({"Q1": 1 / 3, "Q2": 1 / 3, "LAK": 1 / 3}, abs=0.1)
+    assert set(andel.index) in ({"Q1", "LAK"}, {"Q2", "LAK"}), \
+        "arbetsstället realiserade undersköterskan som två O*NET-koder"
+    assert andel["LAK"] == pytest.approx(1 / 3, abs=0.1)
+    assert set(new.loc[new["onet_code"] != "LAK", "ssyk_code"]) == {"532"}
 
 
 def test_employer_does_not_drift_to_monoculture():

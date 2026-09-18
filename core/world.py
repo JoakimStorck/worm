@@ -332,20 +332,29 @@ class World(IndividualViews):
         # som tillfälligt förlorat alla sina positioner måste kunna posta igen
         # (annars dör mikroföretag permanent vid första förstörelsen).
         proto = jobs.drop_duplicates('employer_id', keep='last').set_index('employer_id')
+        # Arbetsställets svenska yrken och deras O*NET-realisering, ur ALLA
+        # dess jobb. Ett nytt jobb i ett yrke som redan finns där får samma
+        # kod (core/bransch.py, YrkeGivetBransch.dra).
+        realiserat = {}
+        if 'ssyk_code' in jobs.columns:
+            har = jobs[jobs['employer_id'].isin(n_new.index) & jobs['ssyk_code'].notna()]
+            for (e, s_), kod in har.groupby(['employer_id', 'ssyk_code'])['onet_code'].first().items():
+                realiserat.setdefault(e, {})[str(s_)] = kod
         rows, new_ids = [], []
         for employer_id, k in n_new.items():
             if employer_id not in proto.index:
                 continue
             base = proto.loc[employer_id]
+            egna = realiserat.setdefault(employer_id, {})
             for _ in range(int(k)):
-                onet_code = self._draw_occupation_for_employer(base)
+                ssyk_code, onet_code = self._draw_occupation_for_employer(base, egna)
                 geom = self._geom_lookup(onet_code)
                 jid = f"N{self._next_job_seq:07d}"      # N = nypostad, undviker krock
                 self._next_job_seq += 1
                 row = base.to_dict()
                 row.update({
                     "job_id": jid, "employer_id": employer_id, "individual_id": None,
-                    "onet_code": onet_code, "active": True,
+                    "onet_code": onet_code, "ssyk_code": ssyk_code, "active": True,
                     # Mallen kopierar ALLA kolumner. Utan denna rad ärver ett
                     # nyskapat jobb mallens pending-flagga och föds osökbart:
                     # det räknas som vakans men kan aldrig tillsättas. Över fem
@@ -375,7 +384,7 @@ class World(IndividualViews):
         self._schedule_destruction(new_ids, t_now)
         return len(rows)
 
-    def _draw_occupation_for_employer(self, base_row):
+    def _draw_occupation_for_employer(self, base_row, realiserade=None):
         """Yrkeskod för ett nytt jobb: arbetsställets bransch och storlek ger
         fördelningen, samma funktion som scenariobyggaren använder
         (core/bransch.py).
@@ -385,13 +394,17 @@ class World(IndividualViews):
         ärvde de mallens yrke, och arbetsgivaren drev mot monokultur: med tio
         procents destruktion per år var ungefär en tredjedel av beståndet
         efter fem år kopior av ETT yrke per arbetsgivare. Mallen bär nu bara
-        branschen och storleken; yrket dras på nytt."""
+        branschen och storleken; yrket dras på nytt.
+
+        Returnerar (ssyk, O*NET). realiserade är arbetsställets svenska yrken
+        och deras O*NET-kod; ett yrke som redan finns där behåller sin kod."""
         if self.conn is None:                   # syntetisk värld utan databas
-            return base_row.get("onet_code")
+            return base_row.get("ssyk_code"), base_row.get("onet_code")
         if not hasattr(self, "_yrken"):
             from core.bransch import YrkeGivetBransch
             self._yrken = YrkeGivetBransch(self.conn)
-        return self._yrken.dra(base_row["sni_code"], base_row["employer_size"], np.random)
+        return self._yrken.dra(base_row["sni_code"], base_row["employer_size"],
+                               np.random, realiserade)
 
     def _geom_lookup(self, onet_code):
         """Yrkets geometri, pris OCH kravintensitet.

@@ -76,8 +76,10 @@ def test_jobben_dras_ur_branschen_inte_ur_kommunens_profil():
     pd.DataFrame({"ssyk_code": ["723"], "sni_code": ["G"],
                   "size_class": ["100+ anställda"], "employed": [10]}).to_sql(
         "occupation_by_industry", sb.conn, index=False)
-    pd.DataFrame({"occupation_code": ["723"], "onet_code": ["53-7062.04"],
-                  "share": [1.0]}).to_sql("ssyk3_onet_crosswalk", sb.conn, index=False)
+    # Två O*NET-koder för mekanikern: arbetsstället ska välja EN av dem
+    pd.DataFrame({"occupation_code": ["723", "723"],
+                  "onet_code": ["53-7062.04", "11-1011.00"],
+                  "share": [0.5, 0.5]}).to_sql("ssyk3_onet_crosswalk", sb.conn, index=False)
     sb.onet_space_df = sb.onet_space_df.assign(
         chi=0.3, xi=0.3, r_o=0.27, geom_source="occupation", w_rel=1.0, pi_rel=1.0)
     sb.onet_space_df.reset_index().to_sql("onet_occupation_space", sb.conn, index=False)
@@ -95,4 +97,46 @@ def test_jobben_dras_ur_branschen_inte_ur_kommunens_profil():
         jobs, _ = sb.generate_jobs_from_employers(emp)
     finally:
         sbmod.assign_deso_code = orig
-    assert (jobs["onet_code"] == "53-7062.04").all()
+    assert jobs["onet_code"].nunique() == 1, "mekanikern realiserades som flera koder"
+    assert jobs["onet_code"].iloc[0] in {"53-7062.04", "11-1011.00"}
+    assert (jobs["ssyk_code"] == "723").all()
+    assert "31-1131.00" not in set(jobs["onet_code"]), "kommunens profil användes"
+
+
+def test_varje_arbetsstalle_realiserar_for_sig():
+    """Realiseringen gäller ETT arbetsställe. Delas den mellan arbetsställen
+    kollapsar befolkningens fördelning till en kod per svenskt yrke."""
+    import geopandas as gpd
+    from shapely.geometry import Point
+    import core.scenariobuilder as sbmod
+
+    sb = _byggare()
+    pd.DataFrame({"ssyk_code": ["723"], "sni_code": ["G"],
+                  "size_class": ["5-9 anställda"], "employed": [10]}).to_sql(
+        "occupation_by_industry", sb.conn, index=False)
+    pd.DataFrame({"occupation_code": ["723", "723"],
+                  "onet_code": ["53-7062.04", "11-1011.00"],
+                  "share": [0.5, 0.5]}).to_sql("ssyk3_onet_crosswalk", sb.conn, index=False)
+    sb.onet_space_df = sb.onet_space_df.assign(
+        chi=0.3, xi=0.3, r_o=0.27, geom_source="occupation", w_rel=1.0, pi_rel=1.0)
+    sb.onet_space_df.reset_index().to_sql("onet_occupation_space", sb.conn, index=False)
+
+    class _GW:
+        deso_zones = None
+    sb.geoworld = _GW()
+    orig = sbmod.assign_deso_code
+    sbmod.assign_deso_code = lambda df, zones, x_col, y_col: "Z"
+    n = 60
+    try:
+        emp = gpd.GeoDataFrame({
+            "employer_id": [f"e{i}" for i in range(n)], "municipal_code": "2062",
+            "size": [6] * n, "sni_code": "G", "layer": "deso", "zone_code": "A",
+            "geometry": [Point(0, 0)] * n})
+        jobs, _ = sb.generate_jobs_from_employers(emp)
+    finally:
+        sbmod.assign_deso_code = orig
+    per = jobs.groupby("employer_id")["onet_code"].nunique()
+    assert (per == 1).all()
+    andel = jobs.drop_duplicates("employer_id")["onet_code"].value_counts(normalize=True)
+    assert set(andel.index) == {"53-7062.04", "11-1011.00"}
+    assert andel.min() > 0.25

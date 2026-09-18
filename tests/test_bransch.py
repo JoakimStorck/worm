@@ -150,3 +150,48 @@ def test_yrke_utan_underlag_kastar():
         y.fordelning("Q", 30)
     with pytest.raises(ValueError, match="occupation_by_industry saknas"):
         YrkeGivetBransch(_yrkesdb(utan=("occupation_by_industry",)))
+
+
+def _tvakoder_db():
+    """Mekaniker (723) på bilverkstaden (G) delas lika på två O*NET-koder,
+    båda med geometri. Chefer (111) har en kod."""
+    conn = sqlite3.connect(":memory:")
+    pd.DataFrame([("723", "G", "10-19 anställda", 80), ("111", "G", "10-19 anställda", 20)],
+                 columns=["ssyk_code", "sni_code", "size_class", "employed"]).to_sql(
+        "occupation_by_industry", conn, index=False)
+    pd.DataFrame([("723", "MEK_A", 0.5), ("723", "MEK_B", 0.5), ("111", "CHEF", 1.0)],
+                 columns=["occupation_code", "onet_code", "share"]).to_sql(
+        "ssyk3_onet_crosswalk", conn, index=False)
+    pd.DataFrame({"onet_code": ["MEK_A", "MEK_B", "CHEF"]}).to_sql(
+        "onet_occupation_space", conn, index=False)
+    return conn
+
+
+def test_arbetsstallet_realiserar_ett_svenskt_yrke_som_en_kod():
+    """Bilverkstadens mekaniker är samma yrke, inte en spridning över
+    crosswalkens koder."""
+    from core.bransch import YrkeGivetBransch
+    y = YrkeGivetBransch(_tvakoder_db())
+    rng = np.random.default_rng(1)
+    egna = {}
+    jobb = [y.dra("G", 15, rng, egna) for _ in range(200)]
+    mek = {kod for s_, kod in jobb if s_ == "723"}
+    assert len(mek) == 1
+    assert {kod for s_, kod in jobb if s_ == "111"} == {"CHEF"}
+    assert egna == {"723": mek.pop(), "111": "CHEF"}
+
+
+def test_over_manga_arbetsstallen_ar_fordelningen_oforandrad():
+    """Realiseringen per arbetsställe får inte flytta befolkningens
+    fördelning: över många arbetsställen ska den vara produkten av leden."""
+    from core.bransch import YrkeGivetBransch
+    y = YrkeGivetBransch(_tvakoder_db())
+    rng = np.random.default_rng(2)
+    koder = []
+    for _ in range(3000):
+        egna = {}
+        koder += [kod for _, kod in (y.dra("G", 15, rng, egna) for _ in range(5))]
+    andel = pd.Series(koder).value_counts(normalize=True)
+    assert andel.to_dict() == pytest.approx({"MEK_A": 0.4, "MEK_B": 0.4, "CHEF": 0.2}, abs=0.02)
+    k, p = y.fordelning("G", 15)
+    assert dict(zip(k, p)) == pytest.approx({"MEK_A": 0.4, "MEK_B": 0.4, "CHEF": 0.2})

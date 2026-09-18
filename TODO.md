@@ -28,7 +28,7 @@ Före 6a, i tur och ordning:
       bilverkstad. `sni_onet_link` slutar användas för jobb.
 - [ ] Yrkesbredden inom ett arbetsställe (individmodell.md avsnitt 3,
       "Arbetsställets yrken"), i ordningen:
-  - [ ] a. ett svenskt yrke realiseras som en O*NET-kod per arbetsställe
+  - [x] a. ett svenskt yrke realiseras som en O*NET-kod per arbetsställe
   - [ ] c. yrke gånger tvåsiffrig SNI, om SCB publicerar den
   - [ ] b. kärnyrke som sätter specialistprofilen, med stödyrken kvar
 - [ ] `employment_municipality_sni` pensioneras, eller hämtas riktigt.
