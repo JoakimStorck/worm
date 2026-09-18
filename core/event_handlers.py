@@ -752,7 +752,10 @@ def _uppdatera_reservation(world, idx, t_now=None):
     if not np.isfinite(start):
         return
     w_last = _tal(world, idx, 'w_last')
-    if not np.isfinite(w_last) or w_last <= 0:
+    # INTRÄDAREN har ingen senaste lön men en startpercentil i sin
+    # relevansfördelning (docs/intradet.md, beslut 3); hon går percentilvägen.
+    # Utan p_claim0 och utan senaste lön finns inget att sänka från.
+    if (not np.isfinite(w_last) or w_last <= 0) and not np.isfinite(_tal(world, idx, 'p_claim0')):
         return
 
     t_halv = float(sim.get('reservation_half_days', 150.0))
@@ -769,6 +772,8 @@ def _uppdatera_reservation(world, idx, t_now=None):
         ind.at[idx, 'w_res'] = _med_takt(world, idx, mal, t_now)
         return
 
+    if not np.isfinite(w_last) or w_last <= 0:
+        return
     golv = reservationsgolv(world, idx)
     if golv >= w_last:
         ind.at[idx, 'w_res'] = w_last
@@ -1728,7 +1733,12 @@ def _aldras_och_pensioneras(world, event):
             world, {**event, "event_type": "retirement", "agent_id": idx},
             extra={"left_vacancy": lamnad is not None,
                    "job_id": lamnad})
-    return {"retired": int(len(avgar)),
+    # INTRÄDET (6b-2, docs/intradet.md): de som fyllt 16 får en plan.
+    nya = 0
+    if demografi:
+        from core.intrade import nya_sextonaringar
+        nya = nya_sextonaringar(world, t_now)
+    return {"retired": int(len(avgar)), "new_students": nya,
             "retired_from_job": int(fran_jobb),
             "in_commuters_exit": int(len(tillbaka)),
             "exit_age_mean": (round(float(np.nanmean(alder[avgar])), 2)
@@ -1767,6 +1777,12 @@ def handle_new_year(event, world):
     world.refresh_ind()      # revisionen skriver med en Series levande: bygg om vyerna (0110)
     world.event_logger.log_event(world, event, extra=extra, print_line=True)
 
+def handle_intrade(event, world):
+    """Inträdet efter avslutade studier (core/intrade.py, docs/intradet.md)."""
+    from core.intrade import handle_intrade as _intrade
+    return _intrade(event, world)
+
+
 RULE_SWITCH = {
     "start_job": handle_start_job,
     "start_job_search": handle_start_job_search,
@@ -1779,4 +1795,5 @@ RULE_SWITCH = {
     "destroy_job": handle_destroy_job,
     "new_month": handle_new_month,
     "new_year": handle_new_year,
+    "intrade": handle_intrade,
 }

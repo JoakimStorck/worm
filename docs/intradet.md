@@ -129,9 +129,21 @@ omgivningen (`omgivning.md`, "Flyttningar") och byggs som eget steg.
    summerar inte till nettot (dödsfall och ändrade uppgifter saknas) och
    prövas inte. Gymnasial nivå är en grupp i TAB6928; uppdelningen på två
    och tre år tas ur TAB655.
-2. **6b-2 Planen och inträdet.** Utbildningsplanen vid 16, studietiden,
-   inträdeshändelsen med utbildningens cirklar, andelen som aldrig går in,
-   och startanspråket.
+2. **6b-2 Planen och inträdet** (`core/intrade.py`). Vid årsskiftet får den
+   som fyllt 16 och står utanför arbetskraften en plan och status
+   `student` -- en ny status, skild från `in_education`, som är omskolning
+   inom arbetskraften. Avslutningsåldern per nivå är ökningen i andelen av
+   åldersklassen som slutat studera med nivån (TAB3731), så att olika stora
+   årskullar inte läses som inträden. **Förgymnasial och kort gymnasial nivå
+   räknas bara 16–20**: deras andel stiger också vid 24–25, men det är
+   invandring och vuxenutbildning (nivå 1 fick annars 40 procent av sina
+   avslutningar vid 25). Forskarnivån får 30–33. Inträdet är en händelse
+   inom avslutningsåret; den rensar genereringens slumpade yrke och lön,
+   lägger utbildningens cirklar som i 6a-ii och sätter anspråket vid
+   medianen i relevansfördelningen (`intrade_ansprak_percentil` 0,5).
+   Anspråkets uppdatering återvände förut när senaste lön saknades;
+   inträdaren går nu percentilvägen. För Mora: nivå 4 44 procent, nivå 6
+   21, nivå 2 10, nivå 3 9, nivå 5 13; aldrig in omkring 8 procent.
 3. **6b-3 Startpopulationen 16–29** utanför arbetskraften: studerande med
    plan eller utanför.
 4. **6b-4 Prövning** med demografin på, tio år.
@@ -165,3 +177,33 @@ omgivningen (`omgivning.md`, "Flyttningar") och byggs som eget steg.
    procent), eller ur TAB3731:s icke förvärvsarbetande icke studerande (16
    procent vid 29). Förslag: profilen, som redan bär utträdet, så att in
    och ut räknas ur samma kurva.
+
+## 6b-2 prövad (2026-09-19)
+
+Tio år med demografin på, frö 1 (`output/run_20260919_002709`):
+
+| år | arbetskraft | utan inträde (O5) | pension | nya studenter | gick in | aldrig in | u_bas | öppna vakanser |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 16 470 | 16 493 | 866 | 398 | 13 | 0 | 6,7 % | 8,7 % |
+| 3 | 15 313 | 15 273 | 551 | 415 | 32 | 3 | 3,1 % | 11,4 % |
+| 5 | 14 571 | 14 301 | 500 | 345 | 238 | 15 | 2,6 % | 14,8 % |
+| 7 | 14 154 | 13 394 | 450 | 299 | 227 | 22 | 2,4 % | 16,8 % |
+| 9 | 13 741 | 12 489 | 462 | 341 | 269 | 21 | 2,4 % | 18,8 % |
+
+**Mekaniken fungerar.** 340–415 nya 16-åringar per år (TAB6928: 413 fyller 18
+i Ovansiljan), omkring 250 inträden om året från år 4 och 6–8 procent som
+aldrig går in.
+
+**Arbetskraften krymper ändå, av tre skäl.** (1) Startens unga utanför
+arbetskraften, omkring 1 800 i 16–29, och årskullarna som var 17–19 vid
+start får ingen plan; det är 6b-3, och därför kommer nästan ingen in år 1–3.
+(2) Den som läser vidare går in vid 22–26, så jämviktsinträdet, omkring 330
+om året, nås först efter tio år. (3) Pensionsavgångarna, 450–550 om året, är
+större än en årskull; i verkligheten fylls gapet av inflyttning, som inte
+är byggd.
+
+**Följden är en allt stramare region, inte ett fel i inträdet.**
+Positionerna ligger fast medan arbetskraften krymper: öppna vakanser 10 → 19
+procent, u_bas 2,4. Två mekanismer saknas för att det ska bli rätt:
+flyttningarna, och att inpendlingen kan växa när regionen stramas åt (C2b
+låser den vid startårets matris).

@@ -314,6 +314,10 @@ simulation:
   # procent i tioårssvepet med fönstret 20. Analysen visar körningens andel
   # (pending_pct) mot den här.
   utlovad_andel: 0.018
+  # INTRÄDARENS STARTANSPRÅK (docs/intradet.md, beslut 3): percentilen i
+  # hennes relevansfördelning när hon går in utan tidigare lön. Därifrån
+  # sänks det med arbetslöshetens längd som för alla.
+  intrade_ansprak_percentil: 0.5
   hiring_decision_days: 10
   notice_period_days: 30
   min_surplus: 0.0          # acceptera om S > min_surplus
