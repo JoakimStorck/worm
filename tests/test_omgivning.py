@@ -640,3 +640,72 @@ def test_platserna_raknas_ur_de_externa_jobb_som_redan_finns():
     assert _upptagna_i_platserna(w, "2062") == {"2031": 10}
     rng = np.random.default_rng(0)
     assert {w.dra_ledig_utplats("2062", rng) for _ in range(100)} == {"2080"}
+
+
+# ---------------------------------------------------------------------------
+# C2b: inpendlingen som ett bestånd av platser (docs/stockarna.md)
+# ---------------------------------------------------------------------------
+
+def _invarld(n=6):
+    """Reservoar i Falun (2080) med arbetskommun Orsa (2034): paret har 5
+    platser i _db. Regionens jobb flyttas till Orsa så att de kan sökas."""
+    w = _utvarld(application_window_days=40)
+    w.jobs["municipal_code"] = "2034"
+    w.individuals = _personer(["extern"] * n, [True] * n, municipal_code="2080",
+                              arbetskommun="2034", pi_o=1.0)
+    w.prepare()
+    return w
+
+
+def test_reservoaren_soker_bara_med_ledig_plats_i_sitt_par():
+    """Utan platserna sattes inpendlingen av sökintensiteten, som O5
+    kalibrerade mot nivån år 1: 2 372 inpendlare mot matrisens 1 727 efter
+    fem år. Upptagna är de anställda och de som tackat ja."""
+    from core.matching_core import apply_once
+    from core.event_handlers import tillbaka_till_omgivningen
+    w = _invarld()
+    np.random.seed(1)
+    assert apply_once(w, 5, 1.0)[0] is not None, "fixturen: reservoaren ska kunna söka"
+    for i in range(4):
+        _anstall(w, i, i)
+    w.individuals.at[4, "accepted_job_id"] = w.jobs.at[4, "job_id"]
+    assert not w.inplats_ledig(5)
+    assert apply_once(w, 5, 1.0)[0] is None, "sökte fast paret var fullt"
+    tillbaka_till_omgivningen(w, 0, 20.0)
+    assert w.inplats_ledig(5)
+    np.random.seed(1)
+    assert apply_once(w, 5, 1.0)[0] is not None
+
+
+def test_ansokningar_fyller_inte_samma_plats_tva_ganger():
+    """Två reservoarmedlemmar ansökte medan en plats fanns. Vid stängningen
+    tar den första platsen genom sitt löfte, och den andra är inte längre
+    behörig."""
+    from core.event_handlers import handle_close_vacancy
+    w = _invarld()
+    for i in range(4):
+        _anstall(w, i, i)
+    w._pushed = []
+    orig = w._push_event
+    w._push_event = lambda ev, _o=orig: (w._pushed.append(ev), _o(ev))[1]
+    for idx, pos in ((4, 6), (5, 7)):
+        jid = w.jobs.at[pos, "job_id"]
+        w.file_application(jid, idx, 0.0, q=0.9, w_neg=0.8, surplus=0.1, commute_km=5.0)
+        handle_close_vacancy({"time": 40.0, "agent_id": idx, "event_type": "close_vacancy",
+                              "params": {"job_id": jid}}, w)
+    vinnare = [e["agent_id"] for e in w._pushed if e["event_type"] == "start_job"]
+    assert vinnare == [4]
+
+
+def test_platsraknningen_ar_densamma_utan_kolumnvyer():
+    """Frågan läser kolumnvyerna när de hör till tabellen och annars
+    tabellen själv; båda vägarna ska räkna samma platser."""
+    w = _invarld()
+    for i in range(4):
+        _anstall(w, i, i)
+    w.individuals.at[4, "accepted_job_id"] = w.jobs.at[4, "job_id"]
+    med_vyer = w.inplats_ledig(5)
+    w._iv = None
+    assert med_vyer is False and w.inplats_ledig(5) is False
+    w.individuals.at[4, "accepted_job_id"] = None
+    assert w.inplats_ledig(5)

@@ -63,8 +63,9 @@ Före 6a, i tur och ordning:
         år 2. Primingen ska börja med pendlarna på plats.
   - [x] C3 inpendlarnas utträde oberoende av `simulation.demografi`. Liten
         verkan: 30–40 om året.
-  - [ ] C2b inpendlingens förankring: stocken växer förbi matrisen
-        (2 372 mot 1 727 år 5) eftersom sökfaktorn är satt mot år 1. Designbeslut.
+  - [x] C2b inpendlingen som ett bestånd av platser per par av ursprung och
+        arbetskommun. Att den ska kunna växa när regionen stramas åt är en egen
+        mekanism, efter inträdet och flyttningarna.
   - [ ] C4 modellens vakansnivå (4,75 % öppna mot Dalarnas 2,03 %), och
         därefter uppvärmningens längd.
 - [ ] Ny baslinje, efter omgivningen och inkörningen.

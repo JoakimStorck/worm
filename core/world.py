@@ -489,6 +489,84 @@ class World(IndividualViews):
         if i.size:
             up[2][i[0]] = max(up[2][i[0]] - 1, 0)
 
+    # ---- omgivningens platser för inpendlarna (docs/stockarna.md, C2b) ------
+    def _inplatser(self):
+        """(par per rad, rader per par, kapacitet per par) för
+        inpendlingsreservoaren. Paret är ursprung (municipal_code) och
+        arbetskommun, kapaciteten matrisens inpendling för paret. Byggs om när
+        individtabellen byts eller ändrar längd."""
+        ind = self.individuals
+        nyckel = (id(ind), len(ind))
+        if getattr(self, "_inplats_nyckel", None) != nyckel:
+            n = len(ind)
+            par_per_rad = np.full(n, -1, dtype=int)
+            rader, kap = [], []
+            if "extern" in ind.columns:
+                ext = np.flatnonzero(ind["extern"].fillna(False).astype(bool).to_numpy())
+            else:
+                ext = np.zeros(0, dtype=int)
+            if ext.size:
+                om = self.omgivning().inpendling
+                n_par = {(str(b).zfill(4), str(a).zfill(4)): float(v)
+                         for b, a, v in zip(om["bo"], om["arb"], om["n"])}
+                if "arbetskommun" not in ind.columns:
+                    raise ValueError("Reservoaren saknar kolumnen arbetskommun (O3c); "
+                                     "generera scenariot på nytt.")
+                bo = ind["municipal_code"].astype(str).str.zfill(4).to_numpy()
+                ak = ind["arbetskommun"].astype(str).str.zfill(4).to_numpy()
+                index = {}
+                for r in ext:
+                    par = (bo[r], ak[r])
+                    if par not in n_par:
+                        raise ValueError(f"Inpendlaren på rad {r} har paret {par}, som "
+                                         "saknas i pendlingsmatrisens inpendling.")
+                    if par not in index:
+                        index[par] = len(kap)
+                        kap.append(n_par[par])
+                        rader.append([])
+                    par_per_rad[r] = index[par]
+                    rader[index[par]].append(r)
+            self._inplats = (par_per_rad, [np.asarray(r, dtype=int) for r in rader],
+                             np.asarray(kap, dtype=float))
+            self._inplats_nyckel = nyckel
+        return self._inplats
+
+    def inplats_ledig(self, idx):
+        """Har inpendlaren idx:s par en ledig plats?
+
+        Upptagna är parets reservoarmedlemmar som är anställda i regionen
+        eller har tackat ja till ett jobb där. De räknas ur tabellen vid varje
+        fråga, inte inkrementellt: vägarna in och ut ur ett jobb är många
+        (tillträde, byte, uppsägning, förstörelse, utträde, jobb som
+        försvinner före tillträdet), och en räknare som missar en av dem
+        glider tyst. Parets rader är högst några tusen.
+
+        Syntetiska världar utan databas har ingen omgivning och ingen spärr."""
+        if getattr(self, "conn", None) is None:
+            return True
+        par_per_rad, rader, kap = self._inplatser()
+        ind = self.individuals
+        # Kolumnvyerna (0110) när de hör till tabellen: pandas kolumnaccess
+        # kostade en millisekund per fråga, och uppstartens reservoar frågar
+        # tiotusentals gånger.
+        iv = getattr(self, "_iv", None)
+        if iv and getattr(self, "_iv_id", None) == id(ind) and "status" in iv:
+            pos = idx if self._iv_pos is None else self._iv_pos[idx]
+            status, lofte = iv["status"], iv.get("accepted_job_id")
+        else:
+            pos = ind.index.get_loc(idx)
+            status = ind["status"].to_numpy()
+            lofte = (ind["accepted_job_id"].to_numpy()
+                     if "accepted_job_id" in ind.columns else None)
+        k = par_per_rad[pos]
+        if k < 0:
+            return True
+        r = rader[k]
+        upptagen = status[r] == "employed"
+        if lofte is not None:
+            upptagen = upptagen | pd.notna(lofte[r])
+        return bool(upptagen.sum() < kap[k])
+
     def skapa_externt_jobb(self, t_now, kommun, bransch, ssyk, onet_code, x, y, hemkommun):
         """Ett jobb utanför regionen, för en utpendlare (docs/omgivning.md, O4).
 

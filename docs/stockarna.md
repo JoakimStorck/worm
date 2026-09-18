@@ -220,3 +220,29 @@ målet hade arbetslösheten år 5 varit omkring 1 604 − (2 372 − 1 727) ≈ 
 inte gjort här: till skillnad från utpendlingen, där omgivningen är
 efterfrågan, är efterfrågan här regionens egen, och när invånarna går i
 pension utan att ersättas ska inpendlingen kunna växa.
+
+## C2b prövad (2026-09-18)
+
+Inpendlingen har platser per par av ursprung och arbetskommun, lika många som
+matrisens inpendling (1 727 för Ovansiljan). Upptagna är parets
+reservoarmedlemmar som är anställda i regionen eller har tackat ja; de räknas
+ur tabellen vid varje fråga. En reservoarmedlem söker inte och är inte
+behörig i urvalet när paret är fullt. En anställd inpendlare som byter jobb
+behöver ingen ny plats. Valt framför en omkalibrerad sökfaktor, som hade
+gällt en kommun och glidit med demografin, och framför en modell av
+reservoarens hemmamarknad. Att inpendlingen ska kunna växa när regionen
+stramas åt är en egen mekanism, att pröva mot matrisens tidsserie när
+inträdet och flyttningarna finns. Fem år, frö 1 (`output/run_20260918_221128`):
+
+| år | U | V | In | Ut | u |
+|---|---|---|---|---|---|
+| 0 | 2 687 | 2 306 | 1 247 | 1 041 | 15,5 % |
+| 1 | 2 124 | 1 938 | 1 598 | 1 572 | 12,3 % |
+| 2 | 1 643 | 1 566 | 1 628 | 1 702 | 9,5 % |
+| 3 | 1 356 | 1 261 | 1 649 | 1 713 | 7,8 % |
+| 4 | 1 258 | 1 160 | 1 652 | 1 709 | 7,3 % |
+| 5 | 1 190 | 1 065 | 1 677 | 1 717 | 6,9 % |
+
+Båda pendlingsstockarna står still vid 96–97 procent av matrisen från år 2.
+Det som rör sig är vakanserna, som invånarna nu fyller i stället för
+inpendlarna, och de faller fortfarande omkring 100 om året. Det är C4.

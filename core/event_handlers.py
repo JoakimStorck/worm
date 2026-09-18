@@ -877,6 +877,11 @@ def handle_close_vacancy(event, world):
         # extern: inpendlingsreservoaren (docs/omgivning.md) är behörig som
         # den arbetslösa. Utan raden föll varje extern ansökan här, tyst --
         # 12 048 ansökningar och ingen inpendlare på två år.
+        # Reservoaren också bara med en ledig plats i paret (C2b): ansökningar
+        # som lämnats medan platser fanns kan annars fylla samma plats flera
+        # gånger när annonserna stängs.
+        if st == 'extern' and hasattr(world, 'inplats_ledig') and not world.inplats_ledig(k):
+            return False
         if st in ('unemployed', 'extern'):
             return pd.isna(world.get_ind(k, 'job_id'))
         if st != 'employed':

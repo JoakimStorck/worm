@@ -206,6 +206,13 @@ def apply_once(world, idx, t_now):
     kandidater = world.vacant_mask()
     from core.event_handlers import ar_extern
     if ar_extern(world, idx):
+        # PLATSERNA (C2b, docs/stockarna.md). Den som inte redan är inpendlare
+        # söker bara när hennes par av ursprung och arbetskommun har en ledig
+        # plats. Utan spärren sattes stocken av sökintensiteten, som O5
+        # kalibrerade mot nivån år 1: 2 372 inpendlare mot matrisens 1 727
+        # efter fem år, och de tog vakanserna.
+        if st == 'extern' and hasattr(world, 'inplats_ledig') and not world.inplats_ledig(idx):
+            return (None,) * 5
         # INPENDLARE OCH RESERVOAR (docs/omgivning.md, O3c): bara vakanser i
         # arbetskommunen, och utan avståndsdämpning och pendlingskostnad --
         # arbetskommunen är dragen ur pendlingsmatrisen, som redan bär hur
