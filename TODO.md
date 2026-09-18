@@ -5,7 +5,21 @@ var projektet står.
 
 ---
 
-## Nu: kalibrering
+## Nu: kompetens och utbildning
+
+Byggordningen står sist i `docs/utbildningsmodell.md`, med beslut och
+beroenden. Steg 1 (`_union`) är gjort i f4d2c03. Nästa:
+
+- [ ] Steg 0: baslinjen, fem frön på Ovansiljan på koden i f4d2c03.
+- [ ] Steg 2: inget tak på antalet cirklar.
+- [ ] Steg 3: en cirkel per händelse, med skärpning av alla cirklar i yrket.
+
+Inträdet på arbetsmarknaden (arbetskraften krymper tre procent per år) byggs
+som steg 6b, efter utbildningsstapeln: inträdarens cirkel är utbildningens.
+
+---
+
+## Kalibrering
 
 Geometrin är integrerad och kör, men parametrarna är gissade utifrån
 avståndsfördelningar, inte kalibrerade mot data.

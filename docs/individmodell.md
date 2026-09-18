@@ -118,8 +118,15 @@ inte får. Det är relativt och inte absolut, så att den som har en bred profil
 från början inte straffas av samma gräns som den med en smal.
 
 **Skärpning.** Den aktiva cirkeln dras mot sin vilaradie med tidskonstanten
-τ_s: dρ²/dt = (ρ_home² − ρ²)/τ_s. Vad som händer med en tidigare cirkel i samma
-yrke när hon återvänder dit är öppet (avsnitt 11).
+τ_s: dρ²/dt = (ρ_home² − ρ²)/τ_s.
+
+**Återkomsten till ett tidigare yrke** (avgjort). Med en cirkel per händelse
+får den som återvänder en ny cirkel, medan den gamla ligger kvar med massan
+men utan spets. Skärpningen gäller därför **alla cirklar i det yrke hon nu
+arbetar i**, medan exponeringen — ny massa — bara går till den pågående
+anställningens cirkel. Annars vore erfarenhet ingen fördel vid återkomst: så
+länge cirklar slogs ihop på nyckel skärptes den gamla på sex månader, och det
+beteendet behålls.
 
 | Parameter | Betydelse | Värde |
 |---|---|---|
@@ -637,12 +644,6 @@ en vägg, är ett besked om att en tillståndsvariabel slutat bära information.
   Inträdarens cirkel *är* utbildningens: hon kommer in med sin
   utbildningsstapel och utan anställning. Därför byggs inträdet efter
   utbildningscirklarna.
-- Återkomsten till ett tidigare yrke. Med en cirkel per händelse får den som
-  återvänder en ny cirkel med liten massa, medan den gamla — massan kvar,
-  spetsen borta — ligger inaktiv och skärps inte. Så länge cirklar slogs ihop
-  på nyckel skärptes den gamla på sex månader. Om skärpningen ska gälla alla
-  cirklar i det yrke hon nu arbetar i, eller bara den nya, avgör om erfarenhet
-  är en fördel vid återkomst.
 - Startpopulationens tidigare cirklar. Massan ur hela arbetslivet kräver
   tidigare yrken; i dag bär individen bara sitt nuvarande. De lägre
   utbildningsstegen saknas av samma skäl: SCB registrerar bara den högsta

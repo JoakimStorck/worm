@@ -573,14 +573,22 @@ full konkurrenskraft. Den ska vara studietid × intensitet.
 
 ## Byggordning
 
-Varje steg är en egen mekanism och en egen commit.
+Varje steg är en egen mekanism och en egen commit. Steg som ändrar körningar
+jämförs mot en baslinje med fem frön.
 
+0. **Baslinje** (beslutat, inte körd): fem frön med
+   `SCENARIO=scenarios/ovansiljan_3_kommuner.yml bash kor_0077.sh` på koden i
+   f4d2c03. Senare commits som bara rör dokumentation har samma kod. Den
+   senaste körda baslinjen, 68aa372, föregår 23a53ef, där
+   utbildningscirkeln först nådde startpopulationen, och den ändringen har
+   aldrig körts. Steg 1 isoleras inte: dess effekt är högst 0,009 i q.
 1. ~~**`_union` följer sin formel**~~ — gjort. Avdraget görs mot varje
    starkare cirkel i stället för i en kedja (`individmodell.md`, avsnitt 2).
 2. **Inget tak på antalet cirklar.** Arrayerna växer när en rad blir full.
-3. **En cirkel per händelse.** `Circles.add` slutar slå ihop på nyckel. Kräver
-   först beslut om skärpning vid återkomst till ett tidigare yrke
-   (`individmodell.md`, avsnitt 11).
+3. **En cirkel per händelse.** `Circles.add` slutar slå ihop på nyckel; varje
+   tillträde och varje fortbildning ger en ny cirkel. Beslutat: skärpningen
+   gäller alla cirklar i det yrke hon arbetar i, exponeringen bara den
+   pågående anställningens (`individmodell.md`, avsnitt 2).
 4. **Läsare för TAB4359, TAB4360 och TAB655**, och rakingen till P(yrke |
    inriktning, nivå, ålder, kön), med kontrollerna ovan.
 5. **Massan:** `EDU_MASS` blir studietid × intensitet.
