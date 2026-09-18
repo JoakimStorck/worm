@@ -337,6 +337,16 @@ någon fullständig historik byggs inte för varje individ.
   halveras på fyra år (2 272 → 1 327) och pendlingen växer. Den dominerande
   inkörningen sitter i arbetsmarknadens stockar: uppstartsmatchningen lämnar
   marknaden långt från körningens jämviktsläge.
+- **Uppstartens ordning** (dialog 2026-09-18): svag, stark, mitten --
+  femtedelar efter konkurrenskraften i det egna startyrket, tre omgångar per
+  grupp -- och högst tre erbjudanden utifrån per person. Prövat mot alla på en
+  gång, svagast först i strikt ordning och ett sänkt anspråk i svansen (grenen
+  `experiment/svagast-forst`). Ordningen ger lägre stockar vid start och en
+  nästan platt lönespridning; resten av inkörningen, arbetslösheten ned
+  omkring 40 procent på fyra år utan demografi, är modellens egen relaxation
+  genom jobbens omsättning och nås inte med ordningen. En tidsförkortad
+  sökning (grenen `experiment/tidsforkortad-uppstart`) konvergerade först
+  efter 4,5 virtuella år och tömde vakanserna, eftersom jobbflödena saknades.
 
 **Inträdet.** De oskrivna bladen är de unga som kommer in i arbetskraften.
 De får en utbildningshistorik, inte ett yrke. Grundskola, sedan

@@ -95,3 +95,48 @@ def test_uppstarten_primar():
         assert c.mass[i, j] > 0
         assert "START" not in {c.key_names[k] for k in c.key[i] if k != EMPTY} \
             or w.jobs.set_index("job_id").at[w.individuals.at[i, "job_id"], "onet_code"] == "START"
+
+
+def _uppstartsvarld(n=10):
+    """Tio arbetslösa i samma startyrke, med stigande tjänstetid och därmed
+    stigande konkurrenskraft i yrket: 0 och 1 är den svagaste femtedelen, 8
+    och 9 den starkaste."""
+    w = _varld(["unemployed"] * n, list(np.linspace(0.05, 6.0, n)),
+               application_window_days=40)
+    return w
+
+
+def test_uppstarten_soker_i_ordningen_svag_stark_mitten(monkeypatch):
+    import core.matching_core as mc
+    w = _uppstartsvarld()
+    omg = {"n": 0}
+    sokte = []
+    monkeypatch.setattr(mc, "apply_once", lambda world, i, t: sokte.append((omg["n"], i)))
+    monkeypatch.setattr(mc, "externt_erbjudande", lambda *a, **k: None)
+
+    def stang(world, t, immediate=False):
+        omg["n"] += 1
+        return 0
+    monkeypatch.setattr(mc, "close_all_windows", stang)
+    mc.bootstrap_matching(w, 0.0, log=None)
+    per = {}
+    for r, i in sokte:
+        per.setdefault(r, set()).add(i)
+    assert per[0] == per[2] == {0, 1}, "den svagaste femtedelen ska söka ensam först"
+    assert per[3] == {0, 1, 8, 9}, "sedan den starkaste"
+    assert per[6] == set(range(10)), "sist mitten"
+
+
+def test_uppstarten_ger_hogst_tre_erbjudanden_utifran_per_person(monkeypatch):
+    import core.matching_core as mc
+    w = _uppstartsvarld()
+    erbj = {}
+
+    def rakna(world, i, t, rng):
+        erbj[i] = erbj.get(i, 0) + 1
+        return None
+    monkeypatch.setattr(mc, "externt_erbjudande", rakna)
+    monkeypatch.setattr(mc, "apply_once", lambda world, i, t: None)
+    monkeypatch.setattr(mc, "close_all_windows", lambda world, t, immediate=False: 0)
+    mc.bootstrap_matching(w, 0.0, log=None)
+    assert erbj and max(erbj.values()) == 3

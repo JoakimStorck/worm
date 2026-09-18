@@ -54,7 +54,10 @@ Före 6a, i tur och ordning:
       generate_individuals); många ursprung bidrar med ett fåtal personer.
 - [x] 6a-i: primingen flyttar erfarenheten till jobben (`core/priming.py`).
 - [ ] Inkörningen i arbetsmarknadens stockar: utan åldrande och inträde
-      halveras arbetslösheten på fyra år och pendlingen växer förbi målet.
+      faller arbetslösheten omkring 40 % på fyra år och pendlingen växer förbi
+      målet. Uppstartens ordning är prövad (svag, stark, mitten); resten är
+      relaxation genom jobbens omsättning. Utred takten (spår C), annars
+      uppvärmning med den riktiga simuleringen.
 - [ ] Ny baslinje, efter omgivningen och inkörningen.
 
 ---

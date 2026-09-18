@@ -415,6 +415,28 @@ def close_all_windows(world, t_now, immediate=False):
     return len(starter)
 
 
+# Uppstartens ordning: femtedel 0 är svagast, 4 starkast.
+GRUPPORDNING = ([0], [4], [1, 2, 3])
+
+
+def _uppstartsgrupper(world, ind):
+    """Femtedel efter konkurrenskraft i det egna startyrket, för varje
+    arbetslös invånare; -1 för alla andra (reservoaren söker efter grupperna).
+    None utan cirklar eller startyrke."""
+    if not hasattr(world, 'circles') or not {'x_occ', 'y_occ', 'r_o_home'} <= set(ind.columns):
+        return None
+    p_c = world.competence_params()
+    arbl = np.flatnonzero((ind['status'] == 'unemployed').to_numpy())
+    styrka = np.array([float(world.circles.competitiveness(
+        int(i), [float(ind.at[i, 'x_occ'])], [float(ind.at[i, 'y_occ'])],
+        [float(ind.at[i, 'r_o_home'])], p_c)[0]) for i in arbl])
+    grupp = np.full(len(ind), -1)
+    if len(arbl):
+        rang = np.argsort(np.argsort(styrka, kind='stable'), kind='stable')
+        grupp[arbl] = np.minimum(rang * 5 // len(arbl), 4)
+    return grupp
+
+
 def bootstrap_matching(world, t_now=0.0, log=print):
     """Uppstarten: samma matchning som körningen, i slumpmässiga omgångar.
 
@@ -440,7 +462,9 @@ def bootstrap_matching(world, t_now=0.0, log=print):
     """
     sim = world.cfg_reader.config.get('simulation', {})
     per_vak = float(sim.get('bootstrap_applicants_per_vacancy', 2.4))
-    max_omg = int(sim.get('bootstrap_max_rounds', 40))
+    max_omg = int(sim.get('bootstrap_max_rounds', 18))
+    grupp_omg = int(sim.get('bootstrap_grupp_omgangar', 3))
+    max_ext = int(sim.get('bootstrap_externa_forsok', 3))
 
     # Jobbkolumnerna och cirklarna måste finnas: uppstarten är samma kod som
     # körningen och behöver active, pending och competitiveness. Anropet är
@@ -457,6 +481,8 @@ def bootstrap_matching(world, t_now=0.0, log=print):
     totalt, omgångar, per_omgång = 0, 0, []
     par = []
     tomma = 0
+    ext_forsok = {}
+    grupp = _uppstartsgrupper(world, ind)
 
     while omgångar < max_omg:
         # KÖN BYGGS OM VARJE OMGÅNG ur dem som fortfarande är arbetslösa. Ett
@@ -480,6 +506,26 @@ def bootstrap_matching(world, t_now=0.0, log=print):
             i_ko = i_ko | ((ind['status'] == 'extern')
                            & ind['extern_start'].fillna(False).astype(bool))
         kö = list(ind.index[i_ko])
+        # ORDNINGEN: SVAG, STARK, MITTEN (dialog 2026-09-18). Femtedelar
+        # efter konkurrenskraften i det egna startyrket. Den svagaste
+        # femtedelen söker ensam de första omgångarna och får de jobb där den
+        # passar; sedan den starkaste, som tar de krävande jobben innan
+        # mittgruppen hunnit dit; sedan de tre mittersta. Tidigare grupper
+        # söker vidare. Med alla på en gång tog de starka också jobb som de
+        # svaga passat i, och de svaga blev kvar med vakanser som inte passade
+        # dem; med de svagaste först i strikt ordning tog mittgrupperna de
+        # krävande jobben, och de starkas lön föll från 1,10 till 0,95.
+        # Reservoaren (O3b) söker efter grupperna. Fem år utan demografi, frö
+        # 1: arbetslösa 2 347 vid start mot 2 272 med alla på en gång men 1 643
+        # vakanser mot 2 155, och lönespridningen nästan platt.
+        fas = omgångar // grupp_omg
+        if grupp is not None and fas < len(GRUPPORDNING):
+            tillatna = set(g for grp in GRUPPORDNING[:fas + 1] for g in grp)
+            kö = [i for i in kö if grupp[i] in tillatna]
+            if not kö:
+                omgångar += 1
+                per_omgång.append(0)
+                continue
         if not kö:
             break
         n_vak = int(world.vacant_mask().sum())
@@ -494,7 +540,13 @@ def bootstrap_matching(world, t_now=0.0, log=print):
             # Utpendlarna på plats (docs/omgivning.md, O4): en invånare kan få
             # ett erbjudande utifrån också i uppstarten, och tillträder då
             # direkt.
-            erbj = externt_erbjudande(world, i, t_now, np.random)
+            # Högst bootstrap_externa_forsok erbjudanden utifrån per person.
+            # Utan tak fick de som blev kvar ett nytt i varje omgång, och
+            # utpendlingen blåstes upp: 2 074 vid start mot matrisens 1 767.
+            erbj = None
+            if ext_forsok.get(i, 0) < max_ext:
+                ext_forsok[i] = ext_forsok.get(i, 0) + 1
+                erbj = externt_erbjudande(world, i, t_now, np.random)
             if erbj is not None:
                 anta_externt(world, i, t_now, erbj, omedelbart=True)
                 externa += 1
@@ -522,7 +574,7 @@ def bootstrap_matching(world, t_now=0.0, log=print):
         # omgångar i rad betyder att de kvarvarande arbetslösa och de
         # kvarvarande positionerna inte kan matchas under gällande villkor.
         tomma = tomma + 1 if fyllda == 0 else 0
-        if tomma >= 2:
+        if tomma >= 2 and (grupp is None or omgångar >= grupp_omg * len(GRUPPORDNING)):
             break
 
     # PRIMINGEN (6a-i, core/priming.py): erfarenheten flyttas till jobben.
