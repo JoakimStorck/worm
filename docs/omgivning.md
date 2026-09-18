@@ -128,12 +128,15 @@ varje kombination; matrisen, TAB4436 och kommungeometrin täcker riket.
 Varje steg är en egen commit med tester. Mellanlägena mellan O2 och O5 är
 inte kalibrerade och körs inte som baslinje.
 
-- **O1. Underlaget.** `core/omgivning.py`: för ett scenarios kommuner,
+- **O1. Underlaget.** **Gjort** (`core/omgivning.py`). `core/omgivning.py`: för ett scenarios kommuner,
   utpendlingen per destination och inpendlingen per ursprung ur matrisen,
   och kommunernas tyngdpunkter. Ingen beteendeändring.
 - **O2. Bokföringen.** Individer och jobb bär om de är externa;
   identitetskontrollen räknar med inpendlare och utpendlare (noll tills
-  flödena finns). Ingen beteendeändring.
+  flödena finns). Ingen beteendeändring. **Gjort:** kolumnen `extern`,
+  `analyze_world` räknar arbetskraften bland invånarna och jobben bland
+  regionens, månads- och årsraderna bär `in_commuters` och `out_commuters`,
+  och tidsseriens residual är U − (L − J + V + In − Ut).
 - **O3. Inpendling och jobbmålet.** Jobbmålet blir hela kolumnsumman. Externa
   sökande till regionens vakanser; anställda inpendlare som agenter, borttagna
   när anställningen upphör. Startens inpendlare på plats.

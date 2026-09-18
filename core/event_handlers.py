@@ -1239,6 +1239,9 @@ def handle_new_month(event, world):
         "not_in_labour_force": not_in_labour_force,
         "active_jobs": n_jobs,
         "posted": n_posted,
+        # Randen (docs/omgivning.md): identiteten är U = L - J + V + In - Ut
+        "in_commuters": stats['in_commuters'],
+        "out_commuters": stats['out_commuters'],
     }
     m_extra.update(_wage_flow_quantiles(world))
     world.event_logger.log_event(world, event, extra=m_extra, print_line=True)
@@ -1633,6 +1636,8 @@ def handle_new_year(event, world):
         "unmatched_jobs": unmatched_jobs,
         "not_in_labour_force": not_in_labour_force,
         "active_jobs": stats['total_jobs'],
+        "in_commuters": stats['in_commuters'],
+        "out_commuters": stats['out_commuters'],
     }
     extra.update(aldrande)
     extra.update(_wage_stock_stats(world))          # FÖRE revisionen

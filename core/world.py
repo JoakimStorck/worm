@@ -485,6 +485,13 @@ class World(IndividualViews):
             self.individuals["notice_job_id"] = pd.Series(
                 [None] * len(self.individuals), index=self.individuals.index,
                 dtype="object")
+        # OMGIVNINGEN (docs/omgivning.md). En extern individ är en inpendlare,
+        # ett externt jobb ett jobb utanför regionen som en utpendlare har.
+        # Kolumnerna hör till schemat, så att bokföringen alltid kan skilja
+        # regionens egna från randens; ingen skapas förrän flödena finns (O3, O4).
+        for tabell in (self.individuals, self.jobs):
+            if "extern" not in tabell.columns:
+                tabell["extern"] = False
         if "onet_code" in self.individuals.columns and not hasattr(self, "circles"):
             self.init_competence()
         self.refresh_ind()

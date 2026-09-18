@@ -44,7 +44,7 @@ Före 6a, i tur och ordning:
       arbetsgivare.
 - [ ] `employment_municipality_sni` pensioneras, eller hämtas riktigt.
 - [ ] Omgivningen, regionens öppna rand (`docs/omgivning.md`): O1 underlaget (klart),
-      O2 bokföringen, O3 inpendling och jobbmålet, O4 utpendling, O5
+      O2 bokföringen (klart), O3 inpendling och jobbmålet, O4 utpendling, O5
       kalibrering. Före 6a; flyttningarna med 6b.
 - [ ] Ny baslinje, efter omgivningen.
 

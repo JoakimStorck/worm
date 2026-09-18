@@ -6,21 +6,43 @@ import numpy as np
 import pandas as pd
 
 
-def analyze_world(world):
-    """
-    Returns extended statistics about the current world.
-    """
+def _extern(df):
+    if "extern" not in df.columns:
+        return pd.Series(False, index=df.index)
+    return df["extern"].fillna(False).astype(bool)
 
+
+def analyze_world(world):
+    """Stockar för regionen, med den öppna randen isärhållen (docs/omgivning.md).
+
+    ARBETSKRAFTEN ÄR INVÅNARNA. Sysselsatta, arbetslösa och de utanför
+    arbetskraften räknas bland regionens invånare; en inpendlare (extern
+    individ) ingår inte. Utpendlarna -- invånare vars jobb är externt -- är
+    sysselsatta invånare.
+
+    JOBBEN ÄR REGIONENS. total_jobs och unmatched_jobs räknar de aktiva jobb
+    som ligger i regionen; ett externt jobb har ingen vakans här.
+
+    Därmed gäller U = L - J + V + In - Ut, där In är inpendlare i regionens
+    jobb och Ut invånare i externa jobb. Med en sluten rand är båda noll och
+    identiteten den gamla.
+    """
+    ind, jobs = world.individuals, world.jobs
+    boende = ~_extern(ind)
+    status = ind['status']
+    regional = ~_extern(jobs)
+    aktiv = (jobs['active'].astype(bool) if 'active' in jobs.columns
+             else pd.Series(True, index=jobs.index))
     stats = {
-        "total_individuals": len(world.individuals),
-        "total_jobs": int(world.jobs['active'].sum()) if 'active' in world.jobs.columns else len(world.jobs),
+        "total_individuals": int(boende.sum()),
+        "total_jobs": int((aktiv & regional).sum()),
         "total_employers": len(world.employers),
-        "employed_individuals": len(world.individuals[(world.individuals['status'] == 'employed')]),
-        "unemployed_individuals": len(world.individuals[(world.individuals['status'] == 'unemployed')]),
-        "unmatched_jobs": int((world.jobs['individual_id'].isna() & world.jobs['active']).sum())
-                          if 'active' in world.jobs.columns
-                          else int(world.jobs['individual_id'].isna().sum()),
-        "individuals_not_in_labour_force": len(world.individuals[(world.individuals['status'] == 'not_in_labor_force')]),   
+        "employed_individuals": int((boende & (status == 'employed')).sum()),
+        "unemployed_individuals": int((boende & (status == 'unemployed')).sum()),
+        "unmatched_jobs": int((jobs['individual_id'].isna() & aktiv & regional).sum()),
+        "individuals_not_in_labour_force": int((boende & (status == 'not_in_labor_force')).sum()),
+        "in_commuters": int((~boende & (status == 'employed')).sum()),
+        "out_commuters": int((jobs['individual_id'].notna() & aktiv & ~regional).sum()),
     }
     # V MOT SCB:s VAKANSBEGREPP. unmatched_jobs räknar alla obesatta aktiva
     # positioner, också de som är UTLOVADE: någon har tackat ja men inte
@@ -29,10 +51,9 @@ def analyze_world(world):
     # befattning som rekryteringen ännu inte löst; en tillsatt befattning med
     # tillträde om en månad är inte ledig. Identiteten U = L - J + V använder
     # unmatched_jobs och rörs inte -- open_vacancies är jämförelsetalet.
-    if 'active' in world.jobs.columns and 'pending' in world.jobs.columns:
-        stats["open_vacancies"] = int((world.jobs['individual_id'].isna()
-                                       & world.jobs['active']
-                                       & ~world.jobs['pending'].fillna(False).astype(bool)).sum())
+    if 'active' in jobs.columns and 'pending' in jobs.columns:
+        stats["open_vacancies"] = int((jobs['individual_id'].isna() & aktiv & regional
+                                       & ~jobs['pending'].fillna(False).astype(bool)).sum())
     else:
         stats["open_vacancies"] = stats["unmatched_jobs"]
     return stats

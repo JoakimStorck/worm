@@ -158,6 +158,9 @@ def timeseries_table(events):
             continue
         emp, unemp = _f(r, "employed"), _f(r, "unemployed")
         vac, J = _f(r, "unmatched_jobs"), _f(r, "active_jobs")
+        # Randen (docs/omgivning.md). Loggar från före O2 saknar fälten; där
+        # var randen stängd och båda noll.
+        inp, utp = _f(r, "in_commuters", 0.0), _f(r, "out_commuters", 0.0)
         L = emp + unemp
         rows.append({
             "time": r["time"], "year": r["time"] / 365.25,
@@ -172,8 +175,9 @@ def timeseries_table(events):
             # SCB:s vakansgrad räknar lediga befattningar, inte utlovade.
             "v_open": 100 * _f(r, "open_vacancies", vac) / J if J else np.nan,
             "tightness": vac / unemp if unemp else np.nan,
-            # U = L - J + V ska hålla exakt; avvikelsen är ett larm.
-            "identity_residual": unemp - (L - J + vac),
+            "in_commuters": inp, "out_commuters": utp,
+            # U = L - J + V + In - Ut ska hålla exakt; avvikelsen är ett larm.
+            "identity_residual": unemp - (L - J + vac + inp - utp),
         })
     return pd.DataFrame(rows)
 

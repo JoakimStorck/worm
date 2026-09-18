@@ -75,3 +75,69 @@ def test_saknat_underlag_kastar():
         Omgivning(_db(utan=("commuting",)), REGION)
     with pytest.raises(ValueError, match="saknar kommunerna"):
         Omgivning(_db(), ["2062", "2039"])
+
+
+# ---------------------------------------------------------------------------
+# O2: bokföringen med öppen rand
+# ---------------------------------------------------------------------------
+
+def _randvarld():
+    """Invånare: tre arbetar i regionen, en utpendlar, två arbetslösa, en
+    utanför arbetskraften. Två inpendlare. Regionen har fem aktiva jobb (alla
+    tillsatta: tre invånare, två inpendlare) och ett förstört; utpendlarens
+    jobb är externt."""
+    import os, sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from conftest import make_world
+    w = make_world(n_employers=1, size=7)
+    w.jobs = w.jobs.iloc[:7].copy()
+    w.jobs["active"] = [True] * 5 + [False, True]
+    w.jobs["extern"] = [False] * 6 + [True]
+    w.individuals = pd.DataFrame({
+        "individual_id": [f"i{k}" for k in range(9)],
+        "status": ["employed"] * 4 + ["unemployed"] * 2 + ["not_in_labor_force"]
+                  + ["employed"] * 2,
+        "extern": [False] * 7 + [True, True],
+        "job_id": list(w.jobs.job_id.iloc[[0, 1, 2, 6]]) + [None] * 3
+                  + list(w.jobs.job_id.iloc[[3, 4]]),
+    })
+    innehavare = {0: "i0", 1: "i1", 2: "i2", 3: "i7", 4: "i8", 6: "i3"}
+    w.jobs["individual_id"] = [innehavare.get(k) for k in range(7)]
+    return w
+
+
+def test_arbetskraften_ar_invanarna_och_jobben_regionens():
+    from core.statistics.basic_stats import analyze_world
+    s = analyze_world(_randvarld())
+    assert (s["employed_individuals"], s["unemployed_individuals"],
+            s["individuals_not_in_labour_force"]) == (4, 2, 1)
+    assert s["total_individuals"] == 7, "inpendlarna är inte invånare"
+    assert (s["total_jobs"], s["unmatched_jobs"]) == (5, 0), "det externa jobbet är inte regionens"
+    assert (s["in_commuters"], s["out_commuters"]) == (2, 1)
+    L = s["employed_individuals"] + s["unemployed_individuals"]
+    U = s["unemployed_individuals"]
+    assert U == L - s["total_jobs"] + s["unmatched_jobs"] \
+        + s["in_commuters"] - s["out_commuters"]
+    assert U != L - s["total_jobs"] + s["unmatched_jobs"], \
+        "fixturen ska skilja den nya identiteten från den gamla"
+
+
+def test_tidsserien_raknar_randen_och_gamla_loggar_ar_slutna():
+    from core.analysis.eventlog import timeseries_table
+    rad = {"event": "new_month", "time": 30.0, "month": 1, "employed": 4, "unemployed": 2,
+           "unmatched_jobs": 0, "active_jobs": 5, "posted": 0, "not_in_labour_force": 1}
+    ts = timeseries_table([dict(rad, in_commuters=2, out_commuters=1),
+                           dict(rad, unmatched_jobs=1)])   # sluten: 4 = 5 - 1
+    assert ts["identity_residual"].tolist() == [0.0, 0.0]
+
+
+def test_varlden_bar_kolumnen_extern():
+    import os, sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from conftest import make_world
+    w = make_world(n_employers=2, size=2)
+    w.individuals = pd.DataFrame({"individual_id": ["a"], "status": ["unemployed"],
+                                  "job_id": [None]})
+    w.prepare()
+    assert "extern" in w.individuals.columns and "extern" in w.jobs.columns
+    assert not w.individuals["extern"].any() and not w.jobs["extern"].any()

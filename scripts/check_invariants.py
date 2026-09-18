@@ -4,9 +4,11 @@ check_invariants.py  (scripts/)
 Pekar ut VILKA individer och positioner som bryter bokföringen, i stället för
 att bara konstatera att residualen är skild från noll.
 
-Identiteten U = L - J + V bygger på att antalet sysselsatta är exakt lika med
-antalet tillsatta aktiva positioner. Bryts den finns ett av följande fel, och
-skriptet räknar och exemplifierar var och en:
+Identiteten U = L - J + V + In - Ut (docs/omgivning.md) bygger på att antalet
+sysselsatta är exakt lika med antalet tillsatta aktiva positioner. Med öppen
+rand räknas båda sidor ALLA: sysselsatta invånare och inpendlare (externa
+individer), regionens jobb och externa jobb. Bryts den finns ett av följande
+fel, och skriptet räknar och exemplifierar var och en:
 
   A  sysselsatt utan job_id
   B  sysselsatt vars job_id inte finns i jobbtabellen
