@@ -525,13 +525,18 @@ def bootstrap_matching(world, t_now=0.0, log=print):
         if tomma >= 2:
             break
 
+    # PRIMINGEN (6a-i, core/priming.py): erfarenheten flyttas till jobben.
+    from core.priming import prima_startpopulationen
+    primad = (prima_startpopulationen(world, t_now, rng)
+              if sim.get('priming', True) else {})       # avstängbar för jämförelse
+
     import pandas as pd
     st = {"matchings": pd.DataFrame(par, columns=["individual_id", "job_id",
                                                   "utility"]),
           "bootstrap_rounds": omgångar, "bootstrap_hired": totalt,
           "bootstrap_labour_force": n_start,
           "bootstrap_share_hired": round(totalt / max(n_start, 1), 4),
-          "bootstrap_per_round": per_omgång}
+          "bootstrap_per_round": per_omgång, **primad}
     if log:
         log(f"Uppstart: {totalt} av {n_start} matchade på {omgångar} omgångar "
             f"({100 * totalt / max(n_start, 1):.1f} %), "

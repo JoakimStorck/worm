@@ -323,6 +323,20 @@ någon fullständig historik byggs inte för varje individ.
   arbetslöshetstid. Arbetscirkeln suddas ut i proportion till den tiden.
 - **Prövningen:** en körning utan åldrande och utan inträde ska ha platta
   serier från år 0.
+- **6a-i gjort** (`core/priming.py`, avgjord ordning 2026-09-18). Startyrkets
+  cirkel guidar uppstartsmatchningen; efter placeringen får den anställda
+  jobbets cirkel med tjänstetidens massa och vilaradien, och startyrkets
+  cirkel tas bort. Den arbetslösa behåller startyrket som senaste yrke,
+  läckt och utsuddat efter en arbetslöshetstid dragen exponentiellt med
+  medel 115 dagar (baslinjens median 80 som exponentialfördelning), och
+  arbetslöshetens klocka ställs bakåt lika mycket. Uppstartens
+  fortsättningsregel från steg 3 är borttagen. Utbildningen givet yrket är
+  6a-ii, efter steg 4. **Prövningen, fem år utan åldrande och inträde, frö
+  1: serierna är inte platta.** Primingen flackar av q vid anställning
+  något (0,748 → 0,937 mot 0,735 → 0,972 utan), men arbetslösheten
+  halveras på fyra år (2 272 → 1 327) och pendlingen växer. Den dominerande
+  inkörningen sitter i arbetsmarknadens stockar: uppstartsmatchningen lämnar
+  marknaden långt från körningens jämviktsläge.
 
 **Inträdet.** De oskrivna bladen är de unga som kommer in i arbetskraften.
 De får en utbildningshistorik, inte ett yrke. Grundskola, sedan

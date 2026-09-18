@@ -520,8 +520,8 @@ def test_circle_counts_reach_the_log_and_the_run_table(tmp_path):
 
 
 def test_hires_and_training_through_the_engine():
-    """Genom motorn: uppstarten i eget yrke fortsätter startens arbetscirkel,
-    en senare anställning i samma yrke får en egen cirkel, och en
+    """Genom motorn: varje anställning får en egen cirkel, också uppstartens
+    i eget yrke, en senare anställning i samma yrke likaså, och en
     fortbildning lägger en cirkel på anställningens position utan att röra
     anställningens massa."""
     import os, sys
@@ -554,30 +554,32 @@ def test_hires_and_training_through_the_engine():
         except KeyError:
             pass                   # senare steg kräver full scenariokonfiguration
 
-    # Uppstarten i samma yrke: ingen ny cirkel, startcirkeln är aktiv
+    # Uppstarten i samma yrke ger också en ny cirkel; primingen
+    # (core/priming.py) flyttar sedan tjänstetidens massa dit
     anstall(0, 0.0, bootstrap=True)
-    assert c.counts()[0] == 3
-    assert w._active_slot[0] == start
+    assert c.counts()[0] == 4
+    forsta = w._active_slot[0]
+    assert forsta not in (EMPTY, start)
 
     # Arbetslös, sedan anställd igen i samma yrke: en ny cirkel
     _become_unemployed(w, 0, 100.0)
     assert w._active_slot[0] == EMPTY
     anstall(1, 200.0)
-    assert c.counts()[0] == 4
+    assert c.counts()[0] == 5
     ny = w._active_slot[0]
-    assert ny not in (EMPTY, start) and c.latest(0, "11-1011.00") == ny
+    assert ny not in (EMPTY, start, forsta) and c.latest(0, "11-1011.00") == ny
     assert c.mass[0, ny] == 0.0
 
-    # Fortbildning: en femte cirkel på anställningens plats, samma yrke
+    # Fortbildning: en sjätte cirkel på anställningens plats, samma yrke
     for _ in range(3):
         w.evolve_competence(1 / 12)
     m_ny = c.mass[0, ny]
     handle_start_internal_training({"time": 300.0, "agent_id": 0,
                                     "event_type": "start_internal_training",
                                     "params": {"training_years": 0.5}}, w)
-    assert c.counts()[0] == 5
+    assert c.counts()[0] == 6
     kurs = c.latest(0, "11-1011.00")
-    assert kurs not in (ny, start)
+    assert kurs not in (ny, start, forsta)
     assert (c.x[0, kurs], c.y[0, kurs]) == (c.x[0, ny], c.y[0, ny])
     assert c.mass[0, kurs] == pytest.approx(0.5 * w.competence_params().a)
     assert c.mass[0, ny] == m_ny, "fortbildningen lade massa på anställningen"

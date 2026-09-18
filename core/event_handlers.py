@@ -193,8 +193,7 @@ def handle_start_job(event, world):
     _jr = jobs.iloc[pos] if pos is not None else None
     if _jr is not None and 'onet_code' in jobs.columns:
         world.set_active_occupation(idx, _jr['onet_code'], _jr['x_occ'], _jr['y_occ'],
-                                    _jr.get('r_o', 0.27),
-                                    continuation=bool(event.get('params', {}).get('bootstrap')))
+                                    _jr.get('r_o', 0.27))
         if 'last_onet_code' in individuals.columns:
             individuals.at[idx, 'last_onet_code'] = _jr['onet_code']
     # Positionen är känd; ingen boolesk skanning behövs. Skriv kolumnvärdet,
@@ -1619,6 +1618,10 @@ def _aldras_och_pensioneras(world, event):
     """
     ind = world.individuals
     if 'age' not in ind.columns or float(event['time']) <= 0.0:
+        return {}
+    # Avstängbar för prövningen av primingen (6a-i): utan åldrande och utan
+    # inträde ska serierna vara platta från år 0.
+    if not world.cfg_reader.config.get('simulation', {}).get('demografi', True):
         return {}
     t_now = float(event['time'])
     # OMGIVNINGEN ÄR STATIONÄR (docs/omgivning.md). Inpendlingsreservoaren

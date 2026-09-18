@@ -215,4 +215,11 @@ inte kalibrerade och körs inte som baslinje.
     mot 1 727 (15 gav 1 840, 40 gav 1 590). Den kalibreras om efter 6b, när
     regionens arbetskraft är stationär.
   - Kvar: en kommun med annan pendling (Oxelösund, Göteborg, Åre).
+  - **Rättelse (prövningen av 6a-i).** Påståendet ovan att tillväxten beror
+    på det saknade inträdet stämmer bara delvis. Utan åldrande och inträde
+    växer inpendlingen ändå, från 1 695 till 2 572 på fyra år, och
+    utpendlingen från 2 074 till 2 817 -- förbi målet 1 767 när invånarna inte
+    blir färre. Arbetslösheten halveras på fyra år. Uppstarten lämnar alltså
+    arbetsmarknaden långt från körningens jämviktsläge, och O5 kalibrerade mot
+    ett system i rörelse. Kalibreringen görs om när inkörningen är löst.
 - **Därefter** 6a (priming), ny baslinje, och flyttningarna med 6b.

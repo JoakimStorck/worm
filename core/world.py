@@ -783,25 +783,19 @@ class World(IndividualViews):
         ind["n_circles"] = self.circles.counts()
         self.refresh_ind()
 
-    def set_active_occupation(self, idx, onet_code, x, y, r_o, continuation=False):
+    def set_active_occupation(self, idx, onet_code, x, y, r_o):
         """Anropas vid tillträde. Varje anställning är en händelse och får en
         egen cirkel utan massa; den får exponering i kommande månadssteg, och
         alla cirklar i yrket skärps.
 
-        UNDANTAGET ÄR UPPSTARTEN (continuation). Startpopulationens
-        arbetscirkel är redan den pågående anställningen, med massa ur
-        tjänstetiden. Placeras hon vid uppstarten i samma yrke fortsätter hon
-        den, i stället för att börja om med en tom cirkel bredvid. 797 av 12 962
-        uppstartsanställningar i baslinjen (frö 1) var sådana; de övriga
-        hamnade i ett annat yrke och får en ny cirkel även här."""
+        Uppstartens anställning i det egna startyrket fortsatte tidigare
+        startcirkeln (steg 3). Primingen (core/priming.py, 6a-i) flyttar nu
+        tjänstetidens massa till jobbets cirkel för alla uppstartens
+        anställda, så undantaget behövs inte."""
         if not hasattr(self, "circles"):
             return
-        from core.occupations.competence import EMPTY
-        c = self.circles
-        j = c.latest(idx, str(onet_code)) if continuation else EMPTY
-        if j == EMPTY:
-            j = c.add(idx, str(onet_code), float(x), float(y), float(r_o) ** 2, 0.0,
-                      rho2_home=float(r_o) ** 2)
+        j = self.circles.add(idx, str(onet_code), float(x), float(y), float(r_o) ** 2, 0.0,
+                             rho2_home=float(r_o) ** 2)
         self._active_slot[idx] = j
 
     def clear_active_occupation(self, idx):

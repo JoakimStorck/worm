@@ -52,7 +52,10 @@ Före 6a, i tur och ordning:
       pendling (Oxelösund, Göteborg, Åre).
 - [ ] Reservoarens generering tar omkring 70 s (98 ursprungskommuner genom
       generate_individuals); många ursprung bidrar med ett fåtal personer.
-- [ ] Ny baslinje, efter omgivningen.
+- [x] 6a-i: primingen flyttar erfarenheten till jobben (`core/priming.py`).
+- [ ] Inkörningen i arbetsmarknadens stockar: utan åldrande och inträde
+      halveras arbetslösheten på fyra år och pendlingen växer förbi målet.
+- [ ] Ny baslinje, efter omgivningen och inkörningen.
 
 ---
 

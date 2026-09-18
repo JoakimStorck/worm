@@ -104,11 +104,12 @@ class Circles:
         aldrig, så en högre plats är en senare händelse."""
         k = self.code(key)
         row = self.key[i]
-        free = np.flatnonzero(row == EMPTY)
-        if free.size:
-            j = int(free[0])
-        else:
-            j = self.K
+        # Platsen efter den sista upptagna, inte den första lediga: en
+        # borttagen cirkel (remove) lämnar en lucka som inte återanvänds, så
+        # att en högre plats fortfarande är en senare händelse.
+        upptagna = np.flatnonzero(row != EMPTY)
+        j = int(upptagna[-1]) + 1 if upptagna.size else 0
+        if j >= self.K:
             self._grow()
         self.key[i, j] = k
         self.x[i, j], self.y[i, j] = x, y
@@ -331,6 +332,13 @@ class Circles:
         return (c_s * ny).sum(axis=0)
 
     # ---- sammanfattning --------------------------------------------------------
+    def remove(self, i: int, j: int):
+        """Tar bort cirkeln på plats j. Luckan återanvänds inte (add)."""
+        self.key[i, j] = EMPTY
+        self.mass[i, j] = 0.0
+        self.x[i, j] = self.y[i, j] = 0.0
+        self.rho2[i, j] = self.rho2_home[i, j] = 1.0
+
     def latest(self, i: int, key) -> int:
         """Platsen för den senaste cirkeln med nyckeln key, eller EMPTY."""
         k = self.key_index.get(key)
