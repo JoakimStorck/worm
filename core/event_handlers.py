@@ -6,6 +6,46 @@ from core.participation import utträdeshasard
 from core.occupations.utils import (search_once, vacant_job_indices,
                                     retraining_target)
 
+def ar_extern(world, idx) -> bool:
+    """Bor individen i omgivningen (docs/omgivning.md)? En inpendlare eller en
+    person i inpendlingsreservoaren."""
+    ind = world.individuals
+    if 'extern' not in ind.columns:
+        return False
+    v = ind.at[idx, 'extern']
+    return bool(v) if pd.notna(v) else False
+
+
+def tillbaka_till_omgivningen(world, idx, t_now):
+    """En inpendlare som lämnar sitt jobb i regionen återgår till
+    inpendlingsreservoaren (docs/omgivning.md, O3b). Hon blir inte arbetslös
+    här: hon ingår inte i regionens arbetskraft. Positionen frigörs, hon har
+    ingen lön i regionen, anspråket blir åter reservoarens ρ·Π, hemyrkets
+    cirkel blir åter den aktiva, och hon söker regionens vakanser igen med
+    reservoarens takt."""
+    ind = world.individuals
+    held = ind.at[idx, 'job_id'] if 'job_id' in ind.columns else None
+    if pd.notna(held):
+        pos = world.job_index().get(held)
+        if pos is not None:
+            jobs = world.jobs
+            jobs.iat[pos, jobs.columns.get_loc('individual_id')] = np.nan
+            world.set_job_filled(held, False, t_now)
+        ind.at[idx, 'job_id'] = np.nan
+    ind.at[idx, 'status'] = 'extern'
+    ind.at[idx, 'w_neg'] = np.nan
+    if 'pi_o' in ind.columns and pd.notna(ind.at[idx, 'pi_o']):
+        rho = float(world.cfg_reader.config.get('simulation', {}).get('rho_reservation', 0.7))
+        ind.at[idx, 'w_res'] = rho * float(ind.at[idx, 'pi_o'])
+    world.clear_active_occupation(idx)
+    if hasattr(world, 'circles') and 'onet_code' in ind.columns:
+        from core.occupations.competence import EMPTY
+        hem = world.circles.latest(idx, str(ind.at[idx, 'onet_code']))
+        if hem != EMPTY:
+            world._active_slot[idx] = hem
+    world.schedule_search(idx, world.search_interval(idx, t_now))
+
+
 def _become_unemployed(world, idx, t_now, free_job=True):
     """Sätter en individ till arbetslös och frigör hennes eventuella position.
 
@@ -16,6 +56,9 @@ def _become_unemployed(world, idx, t_now, free_job=True):
     direkt.
     """
     ind = world.individuals
+    if ar_extern(world, idx):
+        tillbaka_till_omgivningen(world, idx, t_now)
+        return
     if free_job and 'job_id' in ind.columns:
         held = world.get_ind(idx, 'job_id')
         if pd.notna(held):
@@ -105,11 +148,14 @@ def handle_start_job(event, world):
                 'event_detail': 'job_gone_before_start_kept_previous', 'job_id': job_id})
             return
 
-        individuals.at[idx, 'status'] = 'unemployed'
-        individuals.at[idx, 'job_id'] = np.nan
-        bli_arbetslos(world, idx, float(event['time']))
         if 'accepted_job_id' in individuals.columns:
             individuals.at[idx, 'accepted_job_id'] = None
+        if ar_extern(world, idx):
+            tillbaka_till_omgivningen(world, idx, float(event['time']))
+        else:
+            individuals.at[idx, 'status'] = 'unemployed'
+            individuals.at[idx, 'job_id'] = np.nan
+            bli_arbetslos(world, idx, float(event['time']))
         world.schedule_search(idx, world.search_interval(idx, float(event['time'])))
         world.event_logger.log_event(world, event, extra={
             'event_detail': 'job_gone_before_start', 'job_id': job_id})
@@ -814,7 +860,10 @@ def handle_close_vacancy(event, world):
         if 'accepted_job_id' in ind.columns and pd.notna(world.get_ind(k, 'accepted_job_id')):
             return False
         st = world.get_ind(k, 'status')
-        if st == 'unemployed':
+        # extern: inpendlingsreservoaren (docs/omgivning.md) är behörig som
+        # den arbetslösa. Utan raden föll varje extern ansökan här, tyst --
+        # 12 048 ansökningar och ingen inpendlare på två år.
+        if st in ('unemployed', 'extern'):
             return pd.isna(world.get_ind(k, 'job_id'))
         if st != 'employed':
             return False
@@ -1112,6 +1161,13 @@ def handle_internal_job_change(event, world):
 
 def handle_career_break(event, world):
     idx = event['agent_id']
+    if ar_extern(world, idx):
+        # En inpendlare som gör uppehåll lämnar regionens jobb och återgår
+        # till omgivningen (docs/omgivning.md); hennes uppehåll är inte
+        # regionens.
+        tillbaka_till_omgivningen(world, idx, float(event['time']))
+        world.event_logger.log_event(world, event, extra={'event_detail': 'career_break_extern'})
+        return
     individuals = world.individuals
     jobs = world.jobs
     # Nolla jobb-koppling om den finns
@@ -1145,6 +1201,11 @@ def handle_destroy_job(event, world):
     jobs.iat[pos, jobs.columns.get_loc('individual_id')] = np.nan
 
     idx = _resolve_individual_index(world, holder)
+    if idx is not None and ar_extern(world, idx):
+        # Positionen är redan frigjord ovan; inpendlaren återgår till
+        # omgivningen i stället för att bli arbetslös här.
+        tillbaka_till_omgivningen(world, idx, float(event['time']))
+        idx = None
     if idx is not None:
         ind = world.individuals
         ind.at[idx, 'status'] = 'unemployed'
@@ -1547,7 +1608,15 @@ def _aldras_och_pensioneras(world, event):
     if 'age' not in ind.columns or float(event['time']) <= 0.0:
         return {}
     t_now = float(event['time'])
-    alder = pd.to_numeric(ind['age'], errors='coerce').to_numpy(float) + 1.0
+    # OMGIVNINGEN ÄR STATIONÄR (docs/omgivning.md). Inpendlingsreservoaren
+    # åldras inte och lämnar inte arbetskraften: den är ett exogent
+    # randvillkor, och en reservoar som åldrades utan påfyllning hade krympt
+    # och blivit äldre under körningen. Utan undantaget gick 64 inpendlare i
+    # pension på två år i Ovansiljan, eftersom deltagandeprofilen byggs för
+    # varje kommun där individer genereras, också ursprungskommunerna.
+    extern = (ind['extern'].fillna(False).astype(bool).to_numpy()
+              if 'extern' in ind.columns else np.zeros(len(ind), dtype=bool))
+    alder = pd.to_numeric(ind['age'], errors='coerce').to_numpy(float) + np.where(extern, 0.0, 1.0)
     ind['age'] = alder
     # En hel kolumn tilldelad byter block i pandas, och kolumnvyerna (0110)
     # kan då tappa kontakten med tabellen. Samma skäl som i
@@ -1559,7 +1628,7 @@ def _aldras_och_pensioneras(world, event):
 
     status = ind['status'].to_numpy()
     i_arbetskraft = np.isin(status, ('employed', 'unemployed', 'in_education',
-                                     'career_break'))
+                                     'career_break')) & ~extern
 
     # UTTRÄDET ÄR EN HASARD, inte en klippa vid riktåldern. Tre saker var fel
     # med klippan.

@@ -59,21 +59,34 @@ Regionens invånare kan få erbjudanden om jobb utanför regionen.
 - **Takten** kalibreras så att stocken av utpendlare per kommun motsvarar
   matrisen. Separationen följer samma regler som för regionens jobb.
 
-### 2. Inpendling
+### 2. Inpendling: en reservoar (avgjort 2026-09-18)
 
-Regionens vakanser får sökande utifrån.
+Regionens vakanser får sökande utifrån, ur en **inpendlingsreservoar**:
+personer som bor i omgivningen, skapade vid start.
 
-- **Den sökande är en riktig agent**, med kompetenscirklar, reservationslön
-  och ålder, eftersom hela poängen är att hon konkurrerar med regionens egna.
-  Hennes yrke och utbildning dras ur ursprungskommunens profil, och hon bor i
-  en DeSO i ursprungskommunen, dragen med befolkningen som vikt.
-- **Ursprunget** dras ur arbetsställets kommuns inpendling i matrisen.
-- **Hon finns i modellen så länge hon arbetar i regionen.** Förlorar eller
-  lämnar hon jobbet återgår hon till omgivningen och tas bort. Hon ingår inte
-  i regionens arbetskraft och söker inte som arbetslös här.
-- **Takten**, alltså hur många externa sökande en vakans får, kalibreras så
-  att stocken av inpendlare per kommun motsvarar matrisen. Inpendlingen blir
-  därmed delvis endogen: fler vakanser ger fler externa sökande.
+- **De är riktiga agenter**, med kompetenscirklar, reservationslön och ålder,
+  eftersom hela poängen är att de konkurrerar med regionens egna. De genereras
+  med samma funktion som regionens invånare (`generate_individuals`), i sina
+  egna kommuner: ålder, utbildning och yrke ur ursprungskommunens underlag,
+  bostad i en DeSO där. Ursprungen dras ur regionens inpendling i matrisen.
+- **Varför en reservoar** och inte agenter som skapas vid ansökan och tas bort
+  när de lämnar: urvalet bedömer de sökandes konkurrenskraft ur deras rad i
+  kompetenscirklarna, så varje extern sökande -- också den som inte får jobbet
+  -- hade behövt en rad, och rader kan inte tas bort utan att individernas
+  index förskjuts. Reservoaren återanvänder sökning, urval, löner och
+  kompetens utan specialfall.
+- **Status `extern`.** De ingår inte i regionens arbetskraft. Deras läge i
+  omgivningen modelleras inte: de söker med anspråket ρ·Π som en invånare vid
+  start, och det sänks inte med tiden. Hemyrkets cirkel är aktiv, eftersom de
+  arbetar i omgivningen. Anställs de blir de inpendlare (`employed`,
+  `extern`); lämnar de jobbet -- förstört, uppsägning, uppehåll, tillträde som
+  gick förlorat -- återgår de till reservoaren och blir inte arbetslösa här.
+- **Stationär.** Reservoaren åldras inte och lämnar inte arbetskraften.
+- **Storlek och takt.** `inpendling_reservoar_faktor` (3,0) gånger
+  matrisens inpendlingsstock ger urval; `inpendling_sokfaktor` (5,0, samma som
+  de anställdas) styr hur många som anställs och kalibreras i O5.
+- **Vid start** söker en delmängd lika stor som stocken (`extern_start`) med i
+  uppstartsmatchningen.
 
 ### 3. Flyttningar
 
@@ -144,9 +157,12 @@ inte kalibrerade och körs inte som baslinje.
   jobben ur hela kolumnsumman och de sysselsatta invånarna ur hela radsumman,
   också för en ensam kommun; `jobbandelar` och delmatrisen är borta. Utan
   O3b och O4 fyller invånarna inpendlarnas jobb, så läget körs inte.
-- **O3. Inpendling och jobbmålet.** Jobbmålet blir hela kolumnsumman. Externa
-  sökande till regionens vakanser; anställda inpendlare som agenter, borttagna
-  när anställningen upphör. Startens inpendlare på plats.
+- **O3b. Inpendlingen.** **Gjort:** reservoaren enligt avsnitt 2. Provkörning,
+  Ovansiljan, två år, frö 1: 5 181 i reservoaren ur 98 kommuner; inpendlare
+  649 vid start, 1 122 efter ett år och 1 370 efter två, mot matrisens 1 727.
+  Per arbetskommun efter två år Mora 1 063, Orsa 210, Älvdalen 67, mot 1 374,
+  124 och 229. Identiteten håller exakt. Reservoarens generering, 98 kommuner
+  genom generate_individuals, lägger omkring 70 sekunder till uppbyggnaden.
 - **O4. Utpendling.** Externa erbjudanden till invånarna, externa jobb utan
   arbetsställe. Startens utpendlare på plats.
 - **O5. Kalibrering.** Takterna mot matrisens stockar per kommun; mäts över

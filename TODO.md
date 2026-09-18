@@ -44,8 +44,10 @@ Före 6a, i tur och ordning:
       arbetsgivare.
 - [ ] `employment_municipality_sni` pensioneras, eller hämtas riktigt.
 - [ ] Omgivningen, regionens öppna rand (`docs/omgivning.md`): O1 underlaget (klart),
-      O2 bokföringen (klart), O3 inpendling och jobbmålet, O4 utpendling, O5
+      O2 bokföringen (klart), O3 inpendling och jobbmålet (klart), O4 utpendling, O5
       kalibrering. Före 6a; flyttningarna med 6b.
+- [ ] Reservoarens generering tar omkring 70 s (98 ursprungskommuner genom
+      generate_individuals); många ursprung bidrar med ett fåtal personer.
 - [ ] Ny baslinje, efter omgivningen.
 
 ---

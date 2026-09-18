@@ -122,6 +122,13 @@ simulation:
 
   occupation_concentration: 1.5
 
+  # --- Omgivningen (docs/omgivning.md) ---
+  # Inpendlingsreservoaren: storlek som multipel av matrisens inpendlingsstock
+  # (ger urval), och sökintervallet som multipel av den arbetslösas (styr hur
+  # många som anställs; kalibreras i O5).
+  inpendling_reservoar_faktor: 3.0
+  inpendling_sokfaktor: 5.0
+
   # --- Ålder (docs/individmodell.md, avsnitt 11) ---
   # Åldern dras ur SCB:s befolkning per ettårsklass (population_by_age) och
   # ökar med ett år vid varje årsskifte. Den som når riktåldern lämnar

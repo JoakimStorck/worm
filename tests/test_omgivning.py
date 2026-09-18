@@ -171,3 +171,160 @@ def test_en_ensam_kommun_far_ocksa_sin_rand():
 def test_utan_matris_ingen_tyst_reserv():
     with pytest.raises(ValueError, match="commuting saknas"):
         _byggare(_db(utan=("commuting",))).pendlingsmarginaler(REGION)
+
+
+# ---------------------------------------------------------------------------
+# O3b: inpendlingsreservoaren
+# ---------------------------------------------------------------------------
+
+def _varld(n_employers=4, size=2, **sim):
+    import os, sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from conftest import make_world
+    return make_world(n_employers=n_employers, size=size, simulation=sim)
+
+
+def _personer(statusar, extern, **extra):
+    n = len(statusar)
+    d = {"individual_id": [f"p{k}" for k in range(n)], "status": list(statusar),
+         "extern": list(extern), "job_id": pd.Series([None] * n, dtype="object"),
+         "w_res": 0.3, "chi": 0.3, "xi": 0.3, "r_i": 0.0, "x_occ": 0.3, "y_occ": 0.1,
+         "x": 0.0, "y": 0.0, "w_neg": np.nan, "q_last": np.nan,
+         "propensity_start_education": 0.0, "propensity_internal_training": 0.0,
+         "propensity_quit_job": 0.0, "propensity_career_break": 0.0,
+         "propensity_internal_job_change": 0.0}
+    d.update(extra)
+    return pd.DataFrame(d, index=range(n))
+
+
+def _anstall(w, idx, pos):
+    jid = w.jobs.at[pos, "job_id"]
+    w.individuals.at[idx, "status"] = "employed"
+    w.individuals.at[idx, "job_id"] = jid
+    w.jobs.at[pos, "individual_id"] = w.individuals.at[idx, "individual_id"]
+    w.set_job_filled(jid, True)
+    return jid
+
+
+def test_en_extern_sokande_ar_behorig_och_kan_vinna():
+    """Utan behörigheten föll varje extern ansökan tyst i urvalet: 12 048
+    ansökningar och ingen inpendlare på två år."""
+    from core.event_handlers import handle_close_vacancy
+    w = _varld(application_window_days=40)
+    w._pushed = []
+    orig = w._push_event
+    w._push_event = lambda ev, _o=orig: (w._pushed.append(ev), _o(ev))[1]
+    w.individuals = _personer(["unemployed", "extern"], [False, True])
+    jid = w.jobs.iloc[0]["job_id"]
+    for i, q in enumerate((0.31, 0.92)):
+        w.file_application(jid, i, 0.0, q=q, w_neg=0.8, surplus=0.1, commute_km=5.0)
+    handle_close_vacancy({"time": 40.0, "agent_id": 0, "event_type": "close_vacancy",
+                          "params": {"job_id": jid}}, w)
+    vinnare = [e["agent_id"] for e in w._pushed if e["event_type"] == "start_job"]
+    assert vinnare == [1]
+
+
+def test_inpendlaren_som_mister_jobbet_atergar_till_omgivningen():
+    """Hon blir inte arbetslös i regionen: hon ingår inte i arbetskraften."""
+    from core.event_handlers import handle_destroy_job, _become_unemployed
+    from core.statistics.basic_stats import analyze_world
+    w = _varld()
+    w.individuals = _personer(["unemployed", "unemployed", "unemployed"],
+                              [True, True, False], pi_o=1.2)
+    w.prepare()
+    j0 = _anstall(w, 0, 0)
+    _anstall(w, 1, 1)
+    _anstall(w, 2, 2)
+    handle_destroy_job({"time": 10.0, "agent_id": None, "event_type": "destroy_job",
+                        "params": {"job_id": j0}}, w)
+    _become_unemployed(w, 1, 12.0)
+    _become_unemployed(w, 2, 12.0)
+    assert w.individuals["status"].tolist() == ["extern", "extern", "unemployed"]
+    assert w.individuals["job_id"].isna().all()
+    assert w.individuals.at[0, "w_res"] == pytest.approx(0.7 * 1.2)
+    assert np.isfinite(w.individuals.at[0, "next_search_time"])
+    s = analyze_world(w)
+    assert (s["unemployed_individuals"], s["in_commuters"]) == (1, 0)
+
+
+def test_reservoaren_soker_med_egen_takt():
+    w = _varld(inpendling_sokfaktor=2.0, on_the_job_search_factor=5.0)
+    w.individuals = _personer(["extern", "employed"], [True, False])
+    np.random.seed(0)
+    ext = [w.search_interval(0, 0.0) for _ in range(4000)]
+    ans = [w.search_interval(1, 0.0) for _ in range(4000)]
+    assert np.mean(ext) / np.mean(ans) == pytest.approx(2.0 / 5.0, rel=0.1)
+
+
+def test_reservoaren_far_ansoka():
+    """apply_once släppte bara igenom anställda och arbetslösa."""
+    from core.matching_core import apply_once
+    w = _varld(application_window_days=40)
+    w.individuals = _personer(["extern"], [True])
+    w.prepare()
+    np.random.seed(1)
+    assert apply_once(w, 0, 1.0)[0] is not None
+
+
+def test_reservoaren_aldras_inte_och_gar_inte_i_pension():
+    import os, sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from test_alder import _varld_med_individer, _arsskifte, _profil
+    # hasarden 1 vid 71, den nya åldern: invånaren som fyller 71 lämnar säkert
+    # Inpendlaren är redan 71: hasarden är 1 för henne utan att hon åldras,
+    # så pensionsundantaget prövas skilt från åldersundantaget.
+    w = _varld_med_individer([70.0, 71.0], ["employed", "employed"],
+                             profil=_profil({71: 1.0}))
+    w.individuals["extern"] = [False, True]
+    _arsskifte(w)
+    assert w.individuals["age"].tolist() == [71.0, 71.0], "inpendlaren åldrades"
+    assert w.individuals.at[0, "status"] == "not_in_labor_force", "fixturen ska pensionera invånaren"
+    assert w.individuals.at[1, "status"] == "employed", "inpendlaren pensionerades"
+
+
+def test_uppstarten_tar_med_reservoarens_startdel():
+    from core.matching_core import bootstrap_matching
+    w = _varld(n_employers=10, size=2, application_window_days=40)
+    w.individuals = _personer(["extern"] * 2, [True] * 2, extern_start=[True, False])
+    w.jobs["r_req"] = 0.0
+    bootstrap_matching(w, 0.0, log=None)
+    assert w.individuals["status"].tolist() == ["employed", "extern"]
+
+
+def test_uppehall_for_en_inpendlare_ar_en_aterkomst_till_omgivningen():
+    from core.event_handlers import handle_career_break
+    w = _varld()
+    w.individuals = _personer(["unemployed"], [True], pi_o=1.0)
+    w.prepare()
+    _anstall(w, 0, 0)
+    handle_career_break({"time": 5.0, "agent_id": 0, "event_type": "career_break",
+                         "params": {}}, w)
+    assert w.individuals.at[0, "status"] == "extern"
+
+
+def test_reservoaren_fordelas_pa_ursprung_och_startdelen_ar_stocken():
+    """Storleken är faktor gånger stocken, fördelad efter inpendlingen;
+    startdelen är stocken. generate_individuals ersätts: den prövas för
+    regionens invånare, här prövas fördelningen."""
+    from core.scenariobuilder import ScenarioBuilder
+    import os, sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from conftest import FakeConfig
+    sb = ScenarioBuilder.__new__(ScenarioBuilder)
+    sb.rng = np.random.default_rng(0)
+    sb.cfg_reader = FakeConfig({"inpendling_reservoar_faktor": 2.0})
+    sb._omgivning = Omgivning(_db(), REGION)          # inpendling 40 + 5 = 45
+    anrop = {}
+
+    def gen(kod, befolkning, andel, u, year=None):
+        anrop[kod] = befolkning
+        n = int(round(befolkning * andel))
+        return pd.DataFrame({"municipal_code": kod, "status": ["unemployed"] * n
+                             + ["not_in_labor_force"] * (befolkning - n),
+                             "pi_o": 1.0, "w_res": 0.7})
+    sb.generate_individuals = gen
+    res = sb.generate_inpendlingsreservoar(2024)
+    assert res["municipal_code"].value_counts().to_dict() == {"2031": 80, "2080": 10}
+    assert (res["status"] == "extern").all() and res["extern"].all()
+    assert int(res["extern_start"].sum()) == 45
+    assert res["w_neg"].isna().all()

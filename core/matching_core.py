@@ -58,7 +58,13 @@ def _with_current_reservation(world, idx, rad, st, cfg):
     alternativ är att stanna: lönen hon har minus dess pendling, plus en
     bytesfriktion. Utan friktionen byter hon för en krona; med en för hög
     byter ingen. Uttryckt som andel av nuvarande lön biter den lika på alla
-    nivåer. För den arbetslösa är kolumnen w_res rätt.
+    nivåer. För den arbetslösa är kolumnen w_res rätt, och likaså för en
+    person i inpendlingsreservoaren (status extern, docs/omgivning.md): hennes
+    alternativ i omgivningen modelleras inte, så hon har anspråket ρ·Π som en
+    invånare som söker vid start. Att låta henne jämföra som en anställd med
+    yrkets fulla pris gjorde att ingen i reservoaren någonsin sökte: med 5
+    procents friktion och 40 km pendling från Rättvik fanns inget positivt
+    överskott.
 
     EGEN FUNKTION sedan 0095, eftersom samma jämförelse nu görs på två
     ställen: när hon söker och när ett erbjudande kommer. Två kopior av den
@@ -181,7 +187,8 @@ def apply_once(world, idx, t_now):
 
     ind = world.individuals
     st = world.get_ind(idx, 'status') if 'status' in ind.columns else 'unemployed'
-    if st not in ('employed', 'unemployed'):
+    # extern: inpendlingsreservoaren söker regionens vakanser (docs/omgivning.md)
+    if st not in ('employed', 'unemployed', 'extern'):
         return (None,) * 5
     # Den som redan sagt upp sig för ett annat jobb söker inte vidare
     if st == 'employed' and 'notice_job_id' in ind.columns \
@@ -333,7 +340,15 @@ def bootstrap_matching(world, t_now=0.0, log=print):
         #
         # I körningen får den som misslyckas en ny sökning var 28:e dag. Här
         # får hon en ny omgång. Det är samma sak.
-        kö = list(ind.index[ind['status'] == 'unemployed'])
+        # INPENDLARNA PÅ PLATS (docs/omgivning.md, O3b). En delmängd av
+        # inpendlingsreservoaren, lika stor som matrisens inpendlingsstock,
+        # söker med de arbetslösa invånarna; resten av reservoaren söker
+        # först under körningen. Utan dem fyllde invånarna inpendlarnas jobb.
+        i_ko = ind['status'] == 'unemployed'
+        if 'extern_start' in ind.columns:
+            i_ko = i_ko | ((ind['status'] == 'extern')
+                           & ind['extern_start'].fillna(False).astype(bool))
+        kö = list(ind.index[i_ko])
         if not kö:
             break
         n_vak = int(world.vacant_mask().sum())

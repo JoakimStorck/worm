@@ -1071,6 +1071,74 @@ class ScenarioBuilder:
         return {"jobb": {k: om.jobb(k) for k in koder},
                 "boende": {k: om.sysselsatta(k) for k in koder}}
 
+    def generate_inpendlingsreservoar(self, year):
+        """Inpendlingsreservoaren (docs/omgivning.md, O3b).
+
+        Personer som bor i omgivningen och kan söka regionens vakanser. De
+        genereras med samma funktion som regionens invånare, i sina egna
+        kommuner: ålder, utbildning och yrke ur ursprungskommunens underlag,
+        bostad i en DeSO där. Ursprungen dras ur pendlingsmatrisens
+        inpendling, så att Rättvik dominerar för Ovansiljan.
+
+        VARFÖR EN RESERVOAR och inte agenter som skapas vid ansökan och tas
+        bort när de lämnar: urvalet bedömer de sökandes konkurrenskraft ur
+        deras rad i kompetenscirklarna, så varje extern sökande -- också den
+        som inte får jobbet -- hade behövt en rad, och rader kan inte tas bort
+        utan att individernas index förskjuts. Reservoaren återanvänder
+        sökning, urval, löner och kompetens utan specialfall.
+
+        Status extern: de ingår inte i regionens arbetskraft, och deras läge i
+        omgivningen modelleras inte. De söker med anspråket ρ·Π som en invånare
+        vid start, och det sänks inte med tiden (unemployed_since saknas). En delmängd lika stor som
+        inpendlingsstocken (extern_start) söker med i uppstarten, så att
+        inpendlarna finns på plats från början. Storleken är
+        inpendling_reservoar_faktor gånger stocken; den ger urval, medan
+        antalet anställda styrs av sökintensiteten (inpendling_sokfaktor, O5).
+        """
+        om = getattr(self, "_omgivning", None)
+        if om is None or om.inpendling.empty:
+            return None
+        sim = self.cfg_reader.config.get("simulation", {})
+        faktor = float(sim.get("inpendling_reservoar_faktor", 3.0))
+        stock = int(om.inpendling["n"].sum())
+        n_tot = int(round(faktor * stock))
+        if n_tot <= 0:
+            return None
+        per = om.inpendling.groupby("bo")["n"].sum()
+        exakt = per / per.sum() * n_tot
+        antal = np.floor(exakt).astype(int)
+        rest = n_tot - int(antal.sum())
+        if rest > 0:
+            antal.iloc[np.argsort(-(exakt - antal).to_numpy(), kind="stable")[:rest]] += 1
+        # ARBETSKRAFTEN UR EN BEFOLKNING. generate_individuals placerar
+        # arbetskraften inom kommunens ålderspyramid, så en ren arbetskraft
+        # (andel 1,0) ryms inte: den kastar när arbetskraften är större än
+        # befolkningen i de åldrar där deltagandet är positivt. En befolkning
+        # med andelen ANDEL genereras därför, och dess arbetskraft behålls --
+        # med ursprungskommunens åldrar i arbetskraften, inte i befolkningen.
+        ANDEL = 0.4
+        delar = []
+        for ursprung, n in antal.items():
+            if n <= 0:
+                continue
+            befolkning = int(np.ceil(n / ANDEL)) + 2
+            d = self.generate_individuals(ursprung, befolkning, ANDEL, 0.0, year=year)
+            d = d[d["status"] == "unemployed"].head(int(n))
+            delar.append(d)
+        res = pd.concat(delar, ignore_index=True)
+        res["status"] = "extern"
+        res["extern"] = True
+        res["w_neg"] = np.nan
+        res["w_last"] = np.nan
+        res["unemployed_since"] = np.nan
+        start = np.zeros(len(res), dtype=bool)
+        start[self.rng.choice(len(res), size=min(stock, len(res)), replace=False)] = True
+        res["extern_start"] = start
+        log(f"[omgivning] inpendlingsreservoar: {len(res)} personer ur "
+            f"{int((antal > 0).sum())} kommuner, varav {int(start.sum())} söker i "
+            f"uppstarten (inpendlingsstock {stock})")
+        return res
+
     def generate(self, year=None):
         t0 = time.time()
         log(f"[TIMER] generate: startat")
@@ -1190,6 +1258,10 @@ class ScenarioBuilder:
             all_employers.append(employers)
             all_jobs.append(jobs)
             log(f"[TIMER] Kommun {municipal_code} totalt: {time.time()-t1:.2f} s")
+
+        reservoar = self.generate_inpendlingsreservoar(year)
+        if reservoar is not None:
+            all_individuals.append(reservoar)
 
         t2 = time.time()
         all_individuals = pd.concat(all_individuals, ignore_index=True)

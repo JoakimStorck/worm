@@ -578,6 +578,13 @@ class World(IndividualViews):
                 if np.isfinite(pi_o) and pi_o > 0 and np.isfinite(w):
                     factor = factor / (1.0 + gamma * max(0.0, (pi_o - w) / pi_o))
             lead = float(sim.get('on_the_job_search_ramp_days', 180.0)) if first else 0.0
+        elif status == 'extern':
+            # Inpendlingsreservoaren (docs/omgivning.md): arbetar i
+            # omgivningen och söker regionens vakanser med en egen takt, som
+            # kalibreras mot matrisens inpendlingsstock (O5).
+            factor = float(sim.get('inpendling_sokfaktor',
+                                   sim.get('on_the_job_search_factor', 5.0)))
+            lead = 0.0
         else:
             return None
         if timing['dist'] == 'exponential':
@@ -618,7 +625,7 @@ class World(IndividualViews):
         # ledig utan att någon blir arbetslös.
         # Samma funktion som körningen: uppstartens bestånd får rampen som
         # ett tillträde vid t = 0 (first=True).
-        mask = self.individuals['status'].isin(('unemployed', 'employed'))
+        mask = self.individuals['status'].isin(('unemployed', 'employed', 'extern'))
         for idx in self.individuals.index[mask]:
             self.schedule_search(idx, self.search_interval(idx, 0.0, first=True))
 
@@ -704,7 +711,8 @@ class World(IndividualViews):
         self._active_slot = np.full(len(ind), -1, dtype=np.int64)
         st = ind["status"].to_numpy() if "status" in ind.columns else None
         if st is not None:
-            for i in np.flatnonzero(st == "employed"):
+            # extern: reservoaren arbetar i omgivningen, i sitt eget yrke
+            for i in np.flatnonzero((st == "employed") | (st == "extern")):
                 if codes[i] is not None and not (isinstance(codes[i], float) and np.isnan(codes[i])):
                     self._active_slot[i] = self.circles.latest(i, str(codes[i]))
         self._write_competence_summary()
