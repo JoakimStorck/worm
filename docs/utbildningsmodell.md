@@ -733,10 +733,26 @@ jämförs mot en baslinje med fem frön.
      för alla åldrar), i snabbmat och kök (8,6 mot 2,1) och som servitörer
      (3,4 mot 0,8) -- de lågbetalda jobb som står tomma i modellen
      (`stockarna.md`, "Rekryteringstiden per bransch").
-   - Rakingen: den tredje marginalen, nivå × inriktning, tas ur TAB655 som
-     FORM, normerad till de anställdas total, och TAB655:s 25–34 används för
-     25–29. Befolkning mot anställda och tioårsklasser mot femårsklasser står
-     kvar som skillnader, inte utjämnade.
+   - **Rakingen är gjord** (`core/utbildningsfordelning.py`, 4b). Den tredje
+     marginalen, nivå × inriktning, tas ur TAB655 som FORM: tabellen anpassas
+     först med tvådimensionell IPF till de anställdas nivå- och
+     inriktningstotaler, som de två andra tabellerna redan bestämmer, så att
+     bara sambandet -- oddskvoterna och de strukturella nollorna -- följer
+     med. Som marginal hade den motsagt de andra, och IPF hade pendlat.
+     Femårsklassen får tioårsklassen som innehåller den (25–29 och 30–34 får
+     25–34). Alla 20 klasser av ålder och kön konvergerar mot alla tre
+     marginalerna, på 1,3 sekunder. Rimlighet, 25–29 år:
+
+     | utbildning | vanligaste yrkena |
+     |---|---|
+     | eftergymnasial ≥ 3 år, vård (kvinnor) | sjuksköterskor 31 %, 266 16 %, läkare 13 % |
+     | gymnasial 3 år, vård (kvinnor) | undersköterskor 31 %, personliga assistenter 15 %, barnskötare 12 % |
+     | gymnasial 3 år, teknik (män) | byggnadshantverkare 12 %, 741 9 %, mekaniker 7 % |
+     | eftergymnasial ≥ 3 år, teknik (män) | ingenjörer 22 %, mjukvaruutvecklare 18 %, 311 14 % |
+     | gymnasial 3 år, allmän (män) | butik 15 %, lager 6 % |
+
+     16–24 år med förgymnasial utbildning: snabbmat och kök 18 %, butik 12 %,
+     vårdbiträden 7 %, servering 5 %.
 5. **Massan:** `EDU_MASS` blir studietid × intensitet.
 6. **Priming och inträde** ("Två situationer" ovan). Först rättas
    startens yrkeskälla. Scenariot anger `occupation_source: register`, men
