@@ -264,3 +264,54 @@ def nya_sextonaringar(world, t_now):
     for idx in kand:
         tilldela_plan(world, idx, t_now, rng)
     return int(len(kand))
+
+
+# ---------------------------------------------------------------------------
+# 6b-3: startpopulationens unga utanför arbetskraften
+# ---------------------------------------------------------------------------
+UNGA_ALDRAR = (16, 29)
+
+
+def andel_studerande(conn):
+    """P(studerar | förvärvsarbetar inte, ålder), 16-29, ur TAB3731.
+
+    Startpopulationens unga utanför arbetskraften är de som inte
+    förvärvsarbetar (de arbetslösa är få i de åldrarna). Bland dem studerar
+    95 procent vid 16, drygt hälften vid 19 och en tredjedel vid 29."""
+    if not _tabell_finns(conn, "population_study_education"):
+        raise ValueError("Tabellen population_study_education saknas. " + HAMTA)
+    d = pd.read_sql("SELECT age, study, employment, SUM(population) AS n "
+                    "FROM population_study_education GROUP BY 1, 2, 3", conn)
+    d = d[d.employment != "FÖRV"]
+    ut = {}
+    for a in range(UNGA_ALDRAR[0], UNGA_ALDRAR[1] + 1):
+        g = d[d.age == str(a)]
+        tot = float(g.n.sum())
+        if tot <= 0:
+            raise ValueError(f"TAB3731 saknar åldern {a}. " + HAMTA)
+        ut[a] = float(g[g.study != "0"].n.sum()) / tot
+    return ut
+
+
+def prima_unga(world, t_now, rng):
+    """Startpopulationens invånare 16-29 utanför arbetskraften: studerande med
+    en plan som avslutas efter hennes ålder, med sannolikheten ur TAB3731,
+    annars kvar utanför. Utan steget fick ingen av dem någonsin en plan, och
+    årskullarna som var 17-19 vid start kom aldrig in."""
+    if getattr(world, "conn", None) is None:
+        return {}
+    ind = world.individuals
+    p = andel_studerande(world.conn)
+    ext = ind["extern"].fillna(False).astype(bool) if "extern" in ind.columns else False
+    age = pd.to_numeric(ind["age"], errors="coerce")
+    utan_plan = (ind["plan_level"].isna() if "plan_level" in ind.columns
+                 else pd.Series(True, index=ind.index))
+    kand = ind.index[(age >= UNGA_ALDRAR[0]) & (age < UNGA_ALDRAR[1] + 1)
+                     & (ind["status"] == "not_in_labor_force") & ~ext & utan_plan]
+    n = 0
+    for idx in kand:
+        a = float(ind.at[idx, "age"])
+        if rng.random() < p[int(a)]:
+            tilldela_plan(world, idx, t_now, rng, efter_alder=int(a))
+            n += 1
+    return {"unga_studerande": n, "unga_utanfor": int(len(kand) - n)}

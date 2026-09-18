@@ -177,3 +177,42 @@ def test_arsskiftet_med_demografi_gor_femtonaringen_till_student():
     ut = _aldras_och_pensioneras(w, {"time": 365.25, "agent_id": None, "event_type": "new_year",
                                      "params": {"year": 2025}})
     assert w.individuals.at[0, "status"] == "student" and ut["new_students"] == 1
+
+
+def test_startens_unga_blir_studerande_med_en_plan_efter_sin_alder():
+    """Bland dem som inte förvärvsarbetar studerar alla vid 20 och ingen vid
+    25 (raderna byggs här). _studie har också förvärvsarbetande, som vid 20
+    till en tredjedel studerar; räknades de med blev andelen 0,68. Den
+    20-åriga studenten kan inte ha gymnasiet som slutmål: nivå 4 avslutas
+    vid 19."""
+    from core.intrade import andel_studerande, prima_unga
+    w = _varld(["not_in_labor_force", "not_in_labor_force", "employed", "not_in_labor_force"],
+               [20.0, 25.0, 20.0, 40.0])
+    rader = []
+    for a in range(16, 30):
+        # nivå 5 finns inte i planen här, så raderna rör bara andelen studerande
+        # och de skalas med årskullen, som resten av _studie
+        rader += [(str(a), "H" if a < 22 else "0", "5", "EJFÖRV", 100 + 100 * (a % 2))]
+    rader += [("30-34", "0", "5", "EJFÖRV", 200)]      # också klassen 30-34, som i _studie
+    pd.DataFrame(rader, columns=["age", "study", "level", "employment", "population"]).assign(
+        sex="1", year=2024).to_sql("population_study_education", w.conn, index=False,
+                                   if_exists="append")
+    assert andel_studerande(w.conn)[20] == pytest.approx(1.0)
+    ut = prima_unga(w, 0.0, np.random.default_rng(0))
+    assert list(w.individuals.status) == ["student", "not_in_labor_force", "employed",
+                                          "not_in_labor_force"]
+    assert ut == {"unga_studerande": 1, "unga_utanfor": 1}
+    assert w.individuals.at[0, "plan_level"] == "6" and int(w.individuals.at[0, "plan_entry_age"]) > 20
+
+
+def test_primingen_gor_de_unga_till_studerande():
+    """Kopplingen i prima_startpopulationen."""
+    from core.priming import prima_startpopulationen
+    w = _varld(["not_in_labor_force"], [17.0])
+    pd.DataFrame([("17", "H", "4", "EJFÖRV", 100)] + [(str(a), "0", "4", "EJFÖRV", 100)
+                                                      for a in range(16, 30) if a != 17],
+                 columns=["age", "study", "level", "employment", "population"]).assign(
+        sex="1", year=2024).to_sql("population_study_education", w.conn, index=False,
+                                   if_exists="append")
+    prima_startpopulationen(w, 0.0, np.random.default_rng(0))
+    assert w.individuals.at[0, "status"] == "student"

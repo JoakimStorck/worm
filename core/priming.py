@@ -80,8 +80,12 @@ def prima_startpopulationen(world, t_now=0.0, rng=None):
                 ind.at[i, "unemployed_since"] = float(t_now) - d
             arbetslosa += 1
     utb = prima_utbildningen(world, rng)
+    # 6b-3 (docs/intradet.md): de unga utanför arbetskraften blir studerande
+    # med en plan eller står kvar utanför.
+    from core.intrade import prima_unga
+    unga = prima_unga(world, t_now, rng)
     world._write_competence_summary()
-    return {"priming_flyttade": flyttade, "priming_arbetslosa": arbetslosa, **utb}
+    return {"priming_flyttade": flyttade, "priming_arbetslosa": arbetslosa, **utb, **unga}
 
 
 # ---------------------------------------------------------------------------

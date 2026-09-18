@@ -144,8 +144,12 @@ omgivningen (`omgivning.md`, "Flyttningar") och byggs som eget steg.
    Anspråkets uppdatering återvände förut när senaste lön saknades;
    inträdaren går nu percentilvägen. För Mora: nivå 4 44 procent, nivå 6
    21, nivå 2 10, nivå 3 9, nivå 5 13; aldrig in omkring 8 procent.
-3. **6b-3 Startpopulationen 16–29** utanför arbetskraften: studerande med
-   plan eller utanför.
+3. ~~**6b-3 Startpopulationen 16–29**~~ Gjort (`prima_unga`, anropad av
+   primingen). Den som står utanför arbetskraften blir student med
+   sannolikheten P(studerar | förvärvsarbetar inte, ålder) ur TAB3731 --
+   0,95 vid 16, 0,53 vid 19, 0,69 vid 21, 0,35 vid 29 -- med en plan som
+   avslutas efter hennes ålder (nivån viktad med sannolikheten att avslutas
+   senare), annars kvar utanför.
 4. **6b-4 Prövning** med demografin på, tio år.
 5. **6c** Studerande med extrajobb.
 6. **Flyttningar** genom omgivningen, per ålder och utbildning ur TAB6928.
@@ -207,3 +211,33 @@ Positionerna ligger fast medan arbetskraften krymper: öppna vakanser 10 → 19
 procent, u_bas 2,4. Två mekanismer saknas för att det ska bli rätt:
 flyttningarna, och att inpendlingen kan växa när regionen stramas åt (C2b
 låser den vid startårets matris).
+
+## 6b-3 prövad (2026-09-19)
+
+Tio år med demografin på, frö 1 (`output/run_20260919_003833`). Vid start
+blev 788 unga studerande och 249 stod kvar utanför.
+
+| år | arbetskraft | 6b-2 | utan inträde | pension | gick in | u_bas | öppna vakanser |
+|---|---|---|---|---|---|---|---|
+| 1 | 16 470 | 16 470 | 16 493 | 866 | 124 | 6,7 % | 8,7 % |
+| 3 | 15 625 | 15 313 | 15 273 | 553 | 179 | 3,6 % | 10,4 % |
+| 5 | 15 051 | 14 571 | 14 301 | 510 | 281 | 2,8 % | 12,7 % |
+| 9 | 14 394 | 13 741 | 12 489 | 455 | 310 | 2,5 % | 16,1 % |
+
+**Deltagandet per ålder är ett utfall, och det stämmer där studierna är
+avslutade.** År 10 mot BAS-profilen:
+
+| ålder | modellen | BAS |
+|---|---|---|
+| 16–19 | 0,20 | 0,40 |
+| 20–24 | 0,70 | 0,81 |
+| 25–29 | 0,865 | 0,862 |
+| 30–34 | 0,92 | 0,88 |
+
+Underskottet vid 16–24 är de studerande som arbetar, 6c. Överskottet vid
+30–34 säger att andelen som aldrig går in, 1 minus platåns topp, är något
+för låg för just den åldern; platån toppar vid 45–54.
+
+Arbetskraften krymper fortfarande omkring 150 om året från år 5:
+pensionsavgångarna, omkring 480, är större än inträdet, omkring 300, när
+inflyttningen saknas.
