@@ -241,3 +241,47 @@ för låg för just den åldern; platån toppar vid 45–54.
 Arbetskraften krymper fortfarande omkring 150 om året från år 5:
 pensionsavgångarna, omkring 480, är större än inträdet, omkring 300, när
 inflyttningen saknas.
+
+## 6c gjord och prövad (2026-09-19)
+
+**Mekaniken.** En studerande bär `studerande = True`. Med extrajobb är hon
+`employed` och sysselsatt, som i BAS; utan är hon `student`, söker extrajobb
+och är aldrig arbetslös. Varje väg som lämnar ett jobb -- uppsägning till
+arbetslöshet, förstört jobb, jobb som försvinner före tillträdet, uppehåll
+-- skickar henne tillbaka till studierna, på samma ställen som inpendlaren
+skickas tillbaka till omgivningen. Hon söker bara jobb med kravintensitet i
+regionens nedre kvartil och högst 20 km bort (`World.studentjobb`), med ett
+anspråk vid 10:e percentilen i sin relevansfördelning, och får inga
+erbjudanden utifrån. Vid inträdet blir extrajobbet en vanlig anställning; den
+som aldrig går in slutar. Vid start blir de anställda 16–29 studerande med
+extrajobb med P(studerar | förvärvsarbetar, ålder) och de arbetslösa under
+20 -- BAS har ingen arbetslöshet där -- studenter med P(studerar |
+förvärvsarbetar inte, ålder), båda ur TAB3731. Månadsraden bär `students`
+och `students_employed`.
+
+**Söktakten** kalibrerades mot andelen studerande som förvärvsarbetar,
+fem år med demografi, frö 1:
+
+| ålder | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | medel |
+|---|---|---|---|---|---|---|---|---|---|---|
+| TAB3731 | 0,11 | 0,21 | 0,36 | 0,38 | 0,40 | 0,42 | 0,44 | 0,46 | 0,48 | 0,36 |
+| söktakt 6 (tio år) | 0,22 | 0,41 | 0,45 | 0,50 | 0,54 | 0,42 | 0,51 | 0,57 | 0,60 | 0,47 |
+| **söktakt 12** | 0,08 | 0,17 | 0,17 | 0,27 | 0,43 | 0,51 | 0,47 | 0,50 | 0,57 | 0,35 |
+| söktakt 20 | 0,09 | 0,12 | 0,10 | 0,28 | 0,41 | 0,50 | 0,40 | 0,43 | 0,60 | 0,33 |
+
+Söktakt 12 träffar medlet. Gradienten är plattare än datans: 18–19 för lågt
+och 20–24 något högt. Varje ettårsklass har 100–150 studerande.
+
+**Deltagandet** efter fem år med demografi och söktakt 12: 16–19 0,31, 20–24
+0,79, 25–29 0,89, 30–34 0,89 mot BAS 0,40, 0,81, 0,86, 0,88. Utan 6c var
+16–19 0,20 och 20–24 0,70.
+
+**Vakanserna** (tio år utan demografi, söktakt 12,
+`output/run_20260919_010343`): öppna vakanser år 9 2,5 procent, mot omkring 4
+utan 6c och Dalarnas 2,03. Hotell och restaurang 90 dagar mot 121 utan 6c,
+men SCB:s är 12; korrelationen per bransch mot TAB4307 är fortfarande −0,44.
+
+**Utan demografi går startens studerande ändå in** (1 872 inträden på tio år)
+på en marknad utan pensioneringar, och arbetslösheten steg till omkring 5,2
+procent. `simulation.demografi: false` ska betyda inget åldrande och inget
+inträde; det rättas för sig.

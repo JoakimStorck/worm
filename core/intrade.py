@@ -162,17 +162,48 @@ def _plan(world):
     return p
 
 
-def tilldela_plan(world, idx, t_now, rng, efter_alder=None):
-    """Gör idx till student med en plan och schemalägger inträdet."""
+def studentens_ansprak(world, idx):
+    """Den studerandes anspråk för ett extrajobb (6c): percentilen
+    studerande_ansprak_percentil i hennes relevansfördelning. Extrajobbet
+    jämförs inte med en heltidslön; anspråket är lågt och sänks inte med
+    tiden, eftersom hon aldrig är arbetslös."""
+    from core.event_handlers import _normkvantil, reservationsgolv
+    from core.matching_core import relevansfordelning
+    sim = world.cfg_reader.config.get("simulation", {})
+    if "studerande_ansprak_percentil" not in sim:
+        raise ValueError("simulation.studerande_ansprak_percentil saknas (docs/intradet.md, 6c).")
+    f = relevansfordelning(world, idx)
+    if f:
+        med, sd, _n = f
+        return float(med * np.exp(sd * _normkvantil(float(sim["studerande_ansprak_percentil"]))))
+    return reservationsgolv(world, idx)
+
+
+def _studerande_kolumn(world):
+    ind = world.individuals
+    if "studerande" not in ind.columns:
+        ind["studerande"] = False
+        world.refresh_ind()
+
+
+def tilldela_plan(world, idx, t_now, rng, efter_alder=None, med_jobb=False):
+    """Gör idx till studerande med en plan och schemalägger inträdet. Utan
+    jobb blir hon student och söker extrajobb; med jobb (startens unga i
+    arbetskraften, 6c) behåller hon det."""
     ind = world.individuals
     for kol in PLAN_KOLUMNER:
         if kol not in ind.columns:
             ind[kol] = pd.Series([None] * len(ind), index=ind.index, dtype="object")
             world.refresh_ind()
+    _studerande_kolumn(world)
     kommun = str(ind.at[idx, "municipal_code"]).zfill(4)
     l, f, a, in_ = _plan(world).dra(kommun, rng, efter_alder)
     alder = float(ind.at[idx, "age"])
-    ind.at[idx, "status"] = "student"
+    ind.at[idx, "studerande"] = True
+    if not med_jobb:
+        ind.at[idx, "status"] = "student"
+        ind.at[idx, "w_res"] = studentens_ansprak(world, idx)
+        world.schedule_search(idx, world.search_interval(idx, t_now))
     ind.at[idx, "plan_level"], ind.at[idx, "plan_field"] = l, f
     ind.at[idx, "plan_entry_age"], ind.at[idx, "plan_enters"] = a, in_
     # Inom avslutningsåret, likformigt: gymnasiet slutar i juni, högskolan
@@ -191,8 +222,14 @@ def handle_intrade(event, world):
     from core.priming import Utbildningsdragning
     idx, t_now = event["agent_id"], float(event["time"])
     ind = world.individuals
-    if idx not in ind.index or ind.at[idx, "status"] != "student":
+    if idx not in ind.index:
         return
+    status = ind.at[idx, "status"]
+    med_jobb = status == "employed" and "studerande" in ind.columns and bool(ind.at[idx, "studerande"])
+    if status != "student" and not med_jobb:
+        return
+    if "studerande" in ind.columns:
+        ind.at[idx, "studerande"] = False
     dr = getattr(world, "_utbildningsdragning", None)
     if dr is None:
         dr = world._utbildningsdragning = Utbildningsdragning(world.conn)
@@ -217,8 +254,23 @@ def handle_intrade(event, world):
                 raise ValueError(f"O*NET-koden {mal[1]} saknar geometri.")
             world.circles.add(pos, f"EDU:{lvl}", float(geom["x_occ"]), float(geom["y_occ"]),
                               EDU_RADIUS2[lvl], EDU_MASS[lvl])
+    if med_jobb:
+        # Extrajobbet blir en vanlig anställning för den som går in; den som
+        # aldrig går in slutar.
+        if not bool(ind.at[idx, "plan_enters"]):
+            from core.event_handlers import tillbaka_till_studierna
+            tillbaka_till_studierna(world, idx, t_now)
+            ind.at[idx, "status"] = "not_in_labor_force"
+            ind.at[idx, "next_search_time"] = np.nan
+            world.event_logger.log_event(world, event, extra={
+                "event_detail": "never_entered_left_job", "agent_id": idx, "level": l, "field": f})
+            return
+        world.event_logger.log_event(world, event, extra={
+            "event_detail": "entered_kept_job", "agent_id": idx, "level": l, "field": f})
+        return
     # Genereringens slumpade yrke för den som stod utanför arbetskraften är
     # ingen erfarenhet; hon har inget senaste yrke och ingen senaste lön.
+    # (Extrajobbets cirkel ligger kvar: den är erfarenhet.)
     for kol in ("onet_code", "last_onet_code", "w_res", "w_last", "w_neg"):
         if kol in ind.columns:
             ind.at[idx, kol] = np.nan
@@ -272,8 +324,8 @@ def nya_sextonaringar(world, t_now):
 UNGA_ALDRAR = (16, 29)
 
 
-def andel_studerande(conn):
-    """P(studerar | förvärvsarbetar inte, ålder), 16-29, ur TAB3731.
+def andel_studerande(conn, forvarvsarbetar=False):
+    """P(studerar | förvärvsarbetar eller inte, ålder), 16-29, ur TAB3731.
 
     Startpopulationens unga utanför arbetskraften är de som inte
     förvärvsarbetar (de arbetslösa är få i de åldrarna). Bland dem studerar
@@ -282,7 +334,7 @@ def andel_studerande(conn):
         raise ValueError("Tabellen population_study_education saknas. " + HAMTA)
     d = pd.read_sql("SELECT age, study, employment, SUM(population) AS n "
                     "FROM population_study_education GROUP BY 1, 2, 3", conn)
-    d = d[d.employment != "FÖRV"]
+    d = d[d.employment == "FÖRV"] if forvarvsarbetar else d[d.employment != "FÖRV"]
     ut = {}
     for a in range(UNGA_ALDRAR[0], UNGA_ALDRAR[1] + 1):
         g = d[d.age == str(a)]
@@ -314,4 +366,24 @@ def prima_unga(world, t_now, rng):
         if rng.random() < p[int(a)]:
             tilldela_plan(world, idx, t_now, rng, efter_alder=int(a))
             n += 1
-    return {"unga_studerande": n, "unga_utanfor": int(len(kand) - n)}
+    # 6c: STARTENS UNGA I ARBETSKRAFTEN. En gymnasieelev med två kvällar i
+    # veckan är sysselsatt i BAS och ligger därför i modellens arbetskraft,
+    # men med vuxnas beteende. Den anställda blir studerande med extrajobb
+    # med P(studerar | förvärvsarbetar, ålder); den arbetslösa under 20 --
+    # BAS har ingen arbetslöshet där -- blir student med P(studerar |
+    # förvärvsarbetar inte, ålder).
+    p_f = andel_studerande(world.conn, forvarvsarbetar=True)
+    unga_lf = ind.index[(age >= UNGA_ALDRAR[0]) & (age < UNGA_ALDRAR[1] + 1)
+                        & ind["status"].isin(["employed", "unemployed"]) & ~ext & utan_plan]
+    med_jobb = utan = 0
+    for idx in unga_lf:
+        a = int(float(ind.at[idx, "age"]))
+        if ind.at[idx, "status"] == "employed":
+            if rng.random() < p_f[a]:
+                tilldela_plan(world, idx, t_now, rng, efter_alder=a, med_jobb=True)
+                med_jobb += 1
+        elif a < 20 and rng.random() < p[a]:
+            tilldela_plan(world, idx, t_now, rng, efter_alder=a)
+            utan += 1
+    return {"unga_studerande": n, "unga_utanfor": int(len(kand) - n),
+            "unga_studerande_med_jobb": med_jobb, "unga_arbetslosa_till_studier": utan}

@@ -15,6 +15,34 @@ def ar_extern(world, idx) -> bool:
     return bool(v) if pd.notna(v) else False
 
 
+def ar_studerande(world, idx) -> bool:
+    """Studerar individen (6c, docs/intradet.md)? Med extrajobb är hon
+    anställd, utan är hon student; i båda fallen är hon aldrig arbetslös."""
+    if 'studerande' not in world.individuals.columns:
+        return False
+    v = world.individuals.at[idx, 'studerande']
+    return bool(v) if pd.notna(v) else False
+
+
+def tillbaka_till_studierna(world, idx, t_now):
+    """En studerande som lämnar sitt extrajobb blir inte arbetslös: utan jobb
+    är hon i BAS studerande, utanför arbetskraften (6c). Positionen frigörs
+    och hon söker ett nytt extrajobb med studentens takt."""
+    ind = world.individuals
+    held = ind.at[idx, 'job_id'] if 'job_id' in ind.columns else None
+    if pd.notna(held):
+        pos = world.job_index().get(held)
+        if pos is not None:
+            jobs = world.jobs
+            jobs.iat[pos, jobs.columns.get_loc('individual_id')] = np.nan
+            world.set_job_filled(held, False, t_now)
+        ind.at[idx, 'job_id'] = np.nan
+    ind.at[idx, 'status'] = 'student'
+    ind.at[idx, 'w_neg'] = np.nan
+    world.clear_active_occupation(idx)
+    world.schedule_search(idx, world.search_interval(idx, t_now))
+
+
 def tillbaka_till_omgivningen(world, idx, t_now):
     """En inpendlare som lämnar sitt jobb i regionen återgår till
     inpendlingsreservoaren (docs/omgivning.md, O3b). Hon blir inte arbetslös
@@ -57,6 +85,9 @@ def _become_unemployed(world, idx, t_now, free_job=True):
     ind = world.individuals
     if ar_extern(world, idx):
         tillbaka_till_omgivningen(world, idx, t_now)
+        return
+    if ar_studerande(world, idx):
+        tillbaka_till_studierna(world, idx, t_now)
         return
     if free_job and 'job_id' in ind.columns:
         held = world.get_ind(idx, 'job_id')
@@ -151,6 +182,11 @@ def handle_start_job(event, world):
             individuals.at[idx, 'accepted_job_id'] = None
         if ar_extern(world, idx):
             tillbaka_till_omgivningen(world, idx, float(event['time']))
+        elif ar_studerande(world, idx):
+            tillbaka_till_studierna(world, idx, float(event['time']))
+            world.event_logger.log_event(world, event, extra={
+                'event_detail': 'job_gone_before_start', 'job_id': job_id})
+            return
         else:
             individuals.at[idx, 'status'] = 'unemployed'
             individuals.at[idx, 'job_id'] = np.nan
@@ -887,7 +923,8 @@ def handle_close_vacancy(event, world):
         # gånger när annonserna stängs.
         if st == 'extern' and hasattr(world, 'inplats_ledig') and not world.inplats_ledig(k):
             return False
-        if st in ('unemployed', 'extern'):
+        # student: den studerande utan extrajobb söker och är behörig (6c).
+        if st in ('unemployed', 'extern', 'student'):
             return pd.isna(world.get_ind(k, 'job_id'))
         if st != 'employed':
             return False
@@ -1192,6 +1229,11 @@ def handle_career_break(event, world):
         tillbaka_till_omgivningen(world, idx, float(event['time']))
         world.event_logger.log_event(world, event, extra={'event_detail': 'career_break_extern'})
         return
+    if ar_studerande(world, idx):
+        # Studentens uppehåll är att sluta extrajobbet; studierna fortsätter.
+        tillbaka_till_studierna(world, idx, float(event['time']))
+        world.event_logger.log_event(world, event, extra={'event_detail': 'career_break_student'})
+        return
     individuals = world.individuals
     jobs = world.jobs
     # Nolla jobb-koppling om den finns
@@ -1231,6 +1273,10 @@ def handle_destroy_job(event, world):
         # Positionen är redan frigjord ovan; inpendlaren återgår till
         # omgivningen i stället för att bli arbetslös här.
         tillbaka_till_omgivningen(world, idx, float(event['time']))
+        idx = None
+    elif idx is not None and ar_studerande(world, idx):
+        # och studenten till studierna (6c)
+        tillbaka_till_studierna(world, idx, float(event['time']))
         idx = None
     if idx is not None:
         ind = world.individuals
@@ -1329,6 +1375,10 @@ def handle_new_month(event, world):
         # Randen (docs/omgivning.md): identiteten är U = L - J + V + In - Ut
         "in_commuters": stats['in_commuters'],
         "out_commuters": stats['out_commuters'],
+        # Studerande (docs/intradet.md): utan jobb utanför arbetskraften, med
+        # extrajobb sysselsatta.
+        "students": stats['students'],
+        "students_employed": stats['students_employed'],
     }
     # SCB:s definition (BAS) för månaden som just gått: arbetslös hela
     # månaden, 20-65 år. Jämförelsetalet mot labour_market_status; stockarna

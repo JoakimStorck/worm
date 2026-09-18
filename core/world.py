@@ -567,6 +567,29 @@ class World(IndividualViews):
             upptagen = upptagen | pd.notna(lofte[r])
         return bool(upptagen.sum() < kap[k])
 
+    def studentjobb(self, idx):
+        """Mask över jobben som en studerande söker (6c, docs/intradet.md):
+        kravintensitet i den nedre studerande_krav_kvantil av regionens jobb,
+        och högst studerande_max_km från hemmet. Kvällsjobb och helgjobb, inte
+        karriär. Kravgränsen räknas en gång, ur jobben vid första frågan."""
+        sim = self.cfg_reader.config.get("simulation", {})
+        for k in ("studerande_krav_kvantil", "studerande_max_km"):
+            if k not in sim:
+                raise ValueError(f"simulation.{k} saknas (docs/intradet.md, 6c).")
+        A = self.job_arrays()
+        if getattr(self, "_studentkrav", None) is None:
+            j = self.jobs
+            regional = ~(j["extern"].fillna(False).astype(bool).to_numpy()
+                         if "extern" in j.columns else np.zeros(len(j), dtype=bool))
+            aktiv = (j["active"].fillna(False).astype(bool).to_numpy()
+                     if "active" in j.columns else np.ones(len(j), dtype=bool))
+            self._studentkrav = float(np.quantile(A["r_req"][regional & aktiv],
+                                                  float(sim["studerande_krav_kvantil"])))
+        pos = self.individuals.index.get_loc(idx)
+        x = float(self.individuals["x"].iat[pos]); y = float(self.individuals["y"].iat[pos])
+        km = np.hypot(A["x"] - x, A["y"] - y) / 1000.0
+        return (A["r_req"] <= self._studentkrav) & (km <= float(sim["studerande_max_km"]))
+
     def skapa_externt_jobb(self, t_now, kommun, bransch, ssyk, onet_code, x, y, hemkommun):
         """Ett jobb utanför regionen, för en utpendlare (docs/omgivning.md, O4).
 
@@ -792,6 +815,13 @@ class World(IndividualViews):
                 if np.isfinite(pi_o) and pi_o > 0 and np.isfinite(w):
                     factor = factor / (1.0 + gamma * max(0.0, (pi_o - w) / pi_o))
             lead = float(sim.get('on_the_job_search_ramp_days', 180.0)) if first else 0.0
+        elif status == 'student':
+            # Den studerande utan extrajobb (6c, docs/intradet.md) söker med
+            # en egen, låg takt, kalibrerad mot andelen studerande som
+            # förvärvsarbetar (TAB3731).
+            if 'studerande_sokfaktor' not in sim:
+                raise ValueError("simulation.studerande_sokfaktor saknas (docs/intradet.md, 6c).")
+            factor, lead = float(sim['studerande_sokfaktor']), 0.0
         elif status == 'extern':
             # Inpendlingsreservoaren (docs/omgivning.md): arbetar i
             # omgivningen och söker regionens vakanser med en egen takt, som

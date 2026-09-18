@@ -318,6 +318,14 @@ simulation:
   # hennes relevansfördelning när hon går in utan tidigare lön. Därifrån
   # sänks det med arbetslöshetens längd som för alla.
   intrade_ansprak_percentil: 0.5
+  # STUDERANDE MED EXTRAJOBB (6c, docs/intradet.md). Kvällsjobb och helgjobb:
+  # låga krav (nedre kvartilen av regionens kravintensitet), nära hemmet, lågt
+  # anspråk, och en söktakt kalibrerad mot andelen studerande som
+  # förvärvsarbetar i TAB3731 (11 procent vid 16, 36 vid 18, 40-48 vid 19-24).
+  studerande_krav_kvantil: 0.25
+  studerande_max_km: 20
+  studerande_ansprak_percentil: 0.1
+  studerande_sokfaktor: 12.0
   hiring_decision_days: 10
   notice_period_days: 30
   min_surplus: 0.0          # acceptera om S > min_surplus

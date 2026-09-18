@@ -43,6 +43,12 @@ def analyze_world(world):
         "individuals_not_in_labour_force": int((boende & (status == 'not_in_labor_force')).sum()),
         "in_commuters": int((~boende & (status == 'employed')).sum()),
         "out_commuters": int((jobs['individual_id'].notna() & aktiv & ~regional).sum()),
+        # Studerande (6b/6c, docs/intradet.md): utan jobb utanför arbetskraften,
+        # med extrajobb sysselsatta.
+        "students": int((boende & (status == 'student')).sum()),
+        "students_employed": int((boende & (status == 'employed')
+                                  & (ind['studerande'].fillna(False).astype(bool)
+                                     if 'studerande' in ind.columns else False)).sum()),
     }
     # V MOT SCB:s VAKANSBEGREPP. unmatched_jobs räknar alla obesatta aktiva
     # positioner, också de som är UTLOVADE: någon har tackat ja men inte

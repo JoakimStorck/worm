@@ -195,7 +195,8 @@ def apply_once(world, idx, t_now):
     ind = world.individuals
     st = world.get_ind(idx, 'status') if 'status' in ind.columns else 'unemployed'
     # extern: inpendlingsreservoaren söker regionens vakanser (docs/omgivning.md)
-    if st not in ('employed', 'unemployed', 'extern'):
+    # student: den studerande utan extrajobb (6c, docs/intradet.md)
+    if st not in ('employed', 'unemployed', 'extern', 'student'):
         return (None,) * 5
     # Den som redan sagt upp sig för ett annat jobb söker inte vidare
     if st == 'employed' and 'notice_job_id' in ind.columns \
@@ -204,6 +205,10 @@ def apply_once(world, idx, t_now):
 
     cfg = search_config(world)
     kandidater = world.vacant_mask()
+    if st == 'student':
+        # EXTRAJOBBET (6c): nära hemmet och med låga krav. Studenten söker
+        # inte i hela rummet som en arbetslös, utan kvällsjobb och helgjobb.
+        kandidater = kandidater & world.studentjobb(idx)
     from core.event_handlers import ar_extern
     if ar_extern(world, idx):
         # PLATSERNA (C2b, docs/stockarna.md). Den som inte redan är inpendlare
@@ -280,8 +285,9 @@ def externt_erbjudande(world, idx, t_now, rng):
     ind = world.individuals
     if getattr(world, 'conn', None) is None:          # syntetisk värld utan databas
         return None
-    from core.event_handlers import ar_extern
-    if ar_extern(world, idx):
+    from core.event_handlers import ar_extern, ar_studerande
+    if ar_extern(world, idx) or ar_studerande(world, idx):
+        # Den studerandes extrajobb är nära hemmet (6c).
         return None
     st = world.get_ind(idx, 'status')
     if st not in ('employed', 'unemployed'):

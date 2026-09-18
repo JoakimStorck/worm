@@ -76,8 +76,14 @@ def test_planen_tar_kommunens_niva_och_villkoras_pa_aldern():
         p.nivafordelning("2034")
 
 
-def _varld(statusar, aldrar, q=1.0, **extra):
-    w = make_world(n_employers=10, size=1, simulation={"intrade_ansprak_percentil": 0.5})
+STUDIE_PARAM = {"intrade_ansprak_percentil": 0.5, "studerande_krav_kvantil": 0.25,
+                "studerande_max_km": 20, "studerande_ansprak_percentil": 0.1,
+                "studerande_sokfaktor": 6.0}
+
+
+def _varld(statusar, aldrar, q=1.0, sim=None, **extra):
+    sim = sim or {}
+    w = make_world(n_employers=10, size=1, simulation=dict(STUDIE_PARAM, **sim))
     w.jobs["wage"] = np.linspace(0.6, 1.4, len(w.jobs))
     n = len(statusar)
     w.individuals = pd.DataFrame({
@@ -201,7 +207,7 @@ def test_startens_unga_blir_studerande_med_en_plan_efter_sin_alder():
     ut = prima_unga(w, 0.0, np.random.default_rng(0))
     assert list(w.individuals.status) == ["student", "not_in_labor_force", "employed",
                                           "not_in_labor_force"]
-    assert ut == {"unga_studerande": 1, "unga_utanfor": 1}
+    assert (ut["unga_studerande"], ut["unga_utanfor"]) == (1, 1)
     assert w.individuals.at[0, "plan_level"] == "6" and int(w.individuals.at[0, "plan_entry_age"]) > 20
 
 
@@ -216,3 +222,147 @@ def test_primingen_gor_de_unga_till_studerande():
                                    if_exists="append")
     prima_startpopulationen(w, 0.0, np.random.default_rng(0))
     assert w.individuals.at[0, "status"] == "student"
+
+
+
+# ---------------------------------------------------------------------------
+# 6c: studerande med extrajobb
+# ---------------------------------------------------------------------------
+
+def _studievarld(statusar, aldrar, **extra):
+    """Jobben: fyra nära med låga krav, två nära med höga, två långt bort med
+    låga. Studenten bor i origo."""
+    w = _varld(statusar, aldrar, **extra)
+    n = len(w.jobs)
+    w.jobs["r_req"] = [0.0] * 4 + [0.9] * 2 + [0.0] * (n - 6)
+    w.jobs["x"] = [0.0] * 6 + [50_000.0] * (n - 6)
+    w.jobs["y"] = 0.0
+    w._ja_n = None
+    return w
+
+
+def test_studenten_soker_bara_extrajobb_nara_med_laga_krav():
+    """Kvantilen 0,25 av kraven ger gränsen 0; 20 km utesluter de bortre."""
+    w = _studievarld(["student"], [17.0], studerande=True)
+    tillat = np.flatnonzero(w.studentjobb(0))
+    assert list(tillat) == [0, 1, 2, 3]
+
+
+def test_studentens_anspråk_ar_lagt_och_hon_soker():
+    from core.intrade import tilldela_plan
+    w = _varld(["not_in_labor_force"], [16.0], w_res=5.0)
+    tilldela_plan(w, 0, 0.0, np.random.default_rng(1))
+    from core.matching_core import relevansfordelning
+    med, sd, _ = relevansfordelning(w, 0)
+    assert w.individuals.at[0, "studerande"] and w.individuals.at[0, "w_res"] < med
+    assert any(e["event_type"] == "start_job_search" for e in w._pushed)
+
+
+def test_studenten_soker_med_egen_takt():
+    w = _varld(["student", "unemployed"], [17.0, 30.0], sim={"studerande_sokfaktor": 6.0})
+    np.random.seed(0)
+    st = np.mean([w.search_interval(0, 0.0) for _ in range(3000)])
+    ar = np.mean([w.search_interval(1, 0.0) for _ in range(3000)])
+    assert st / ar == pytest.approx(6.0, rel=0.1)
+
+
+def test_den_studerande_som_mister_extrajobbet_blir_student_inte_arbetslos():
+    """Utan jobb är hon i BAS studerande, utanför arbetskraften."""
+    from core.event_handlers import _become_unemployed, handle_destroy_job
+    w = _varld(["employed", "employed"], [18.0, 18.0], studerande=True)
+    for i in (0, 1):
+        jid = w.jobs.at[i, "job_id"]
+        w.individuals.at[i, "job_id"] = jid
+        w.jobs.at[i, "individual_id"] = w.individuals.at[i, "individual_id"]
+        w.set_job_filled(jid, True)
+    _become_unemployed(w, 0, 10.0)
+    handle_destroy_job({"time": 11.0, "agent_id": None, "event_type": "destroy_job",
+                        "params": {"job_id": w.jobs.at[1, "job_id"]}}, w)
+    assert list(w.individuals.status) == ["student", "student"]
+    assert w.individuals.job_id.isna().all()
+
+
+def test_utpendlingens_erbjudanden_gar_inte_till_studerande():
+    from core.matching_core import externt_erbjudande
+    w = _varld(["employed"], [18.0], studerande=True, sim={"utpendling_erbjudande_andel": 1.0})
+    assert externt_erbjudande(w, 0, 1.0, np.random.default_rng(0)) is None
+
+
+def test_intradet_for_den_som_har_extrajobb():
+    """Den som går in behåller jobbet som vanlig anställning; den som aldrig
+    går in slutar."""
+    w = _varld(["employed", "employed"], [19.0, 19.0], studerande=True, plan_level="4",
+               plan_field="0", plan_entry_age=19, plan_enters=[True, False])
+    for i in (0, 1):
+        jid = w.jobs.at[i, "job_id"]
+        w.individuals.at[i, "job_id"] = jid
+        w.jobs.at[i, "individual_id"] = w.individuals.at[i, "individual_id"]
+        w.set_job_filled(jid, True)
+    _in(w, 0, 500.0)
+    _in(w, 1, 500.0)
+    ind = w.individuals
+    assert ind.at[0, "status"] == "employed" and not ind.at[0, "studerande"]
+    assert pd.notna(ind.at[0, "job_id"]) and ind.at[0, "education_level"] == 4
+    assert ind.at[1, "status"] == "not_in_labor_force" and pd.isna(ind.at[1, "job_id"])
+
+
+def test_startens_anstallda_unga_blir_studerande_med_extrajobb():
+    """Vid 17 studerar alla som förvärvsarbetar (raderna byggs här)."""
+    from core.intrade import prima_unga
+    w = _varld(["employed", "unemployed", "unemployed"], [17.0, 17.0, 25.0])
+    jid = w.jobs.at[0, "job_id"]
+    w.individuals.at[0, "job_id"] = jid
+    w.jobs.at[0, "individual_id"] = w.individuals.at[0, "individual_id"]
+    w.set_job_filled(jid, True)
+    w.conn.execute("DELETE FROM population_study_education")
+    rader = []
+    for a in range(16, 30):
+        n = 100 + 100 * (a % 2)
+        rader += [(str(a), "1" if a < 20 else "0", "4", "FÖRV", n),
+                  (str(a), "1" if a < 20 else "0", "4", "EJFÖRV", n)]
+    rader += [("30-34", "0", "4", "FÖRV", 200), ("30-34", "0", "4", "EJFÖRV", 200)]
+    pd.DataFrame(rader, columns=["age", "study", "level", "employment", "population"]).assign(
+        sex="1", year=2024).to_sql("population_study_education", w.conn, index=False,
+                                   if_exists="append")
+    w.__dict__.pop("_intradesplan", None)
+    ut = prima_unga(w, 0.0, np.random.default_rng(0))
+    ind = w.individuals
+    assert ind.at[0, "status"] == "employed" and ind.at[0, "studerande"]
+    assert ind.at[1, "status"] == "student", "den arbetslösa 17-åringen studerar"
+    assert ind.at[2, "status"] == "unemployed", "25-åringen är kvar i arbetskraften"
+    assert ut["unga_studerande_med_jobb"] == 1 and ut["unga_arbetslosa_till_studier"] == 1
+
+
+
+def test_studenten_ansoker_bara_till_extrajobb():
+    """De bortre jobben betalar mest; utan masken hade hon sökt dit."""
+    from core.matching_core import apply_once
+    w = _studievarld(["student"], [17.0], studerande=True, w_res=0.1)
+    w.jobs.loc[w.jobs.index[6:], "wage"] = 5.0
+    w._ja_n = None
+    np.random.seed(0)
+    valda = {apply_once(w, 0, 1.0)[0] for _ in range(30)} - {None}
+    assert valda and valda <= set(w.jobs.job_id[:4])
+
+
+def test_studenten_ar_behorig_i_urvalet():
+    from core.event_handlers import handle_close_vacancy
+    w = _varld(["student"], [17.0], studerande=True, w_res=0.1,
+               sim={"application_window_days": 20})
+    jid = w.jobs.at[0, "job_id"]
+    w.file_application(jid, 0, 0.0, q=0.9, w_neg=0.8, surplus=0.1, commute_km=1.0)
+    handle_close_vacancy({"time": 20.0, "agent_id": 0, "event_type": "close_vacancy",
+                          "params": {"job_id": jid}}, w)
+    assert [e["agent_id"] for e in w._pushed if e["event_type"] == "start_job"] == [0]
+
+
+def test_manadsraden_bar_studerande_med_och_utan_jobb():
+    """Utan fälten syntes studenterna inte i tidsserien: en körning med 788
+    studerande vid start visade noll hela vägen."""
+    from core.event_handlers import handle_new_month
+    w = _varld(["student", "student", "employed", "employed"], [17.0, 17.0, 18.0, 40.0],
+               studerande=[True, True, True, False])
+    handle_new_month({"time": 0.0, "agent_id": None, "event_type": "new_month",
+                      "params": {"year": 2024, "month": 1}}, w)
+    rad = [x for typ, x in w.event_logger.events if typ == "new_month"][-1]
+    assert (rad["students"], rad["students_employed"]) == (2, 1)

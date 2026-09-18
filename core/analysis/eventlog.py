@@ -176,6 +176,10 @@ def timeseries_table(events):
             "v_open": 100 * _f(r, "open_vacancies", vac) / J if J else np.nan,
             "tightness": vac / unemp if unemp else np.nan,
             "in_commuters": inp, "out_commuters": utp,
+            # Studerande (docs/intradet.md): utan jobb utanför arbetskraften,
+            # med extrajobb sysselsatta. Äldre loggar saknar fälten.
+            "students": _f(r, "students", 0.0),
+            "students_employed": _f(r, "students_employed", 0.0),
             # SCB:s definition (BAS): arbetslös hela månaden, 20-65 år. Det är
             # jämförelsetalet mot labour_market_status; u är ögonblicksbilden.
             "u_bas": (100 * _f(r, "unemployed_bas") / _f(r, "labour_force_bas")
