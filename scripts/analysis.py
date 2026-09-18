@@ -661,7 +661,9 @@ def arbetsloshetens_varaktighet(run_dir, t_slut=None):
     p = os.path.join(run_dir, "final_state_individuals.csv")
     if not os.path.isfile(p):
         return None
-    ind = pd.read_csv(p)
+    # low_memory=False: planens kolumner (6b) är tomma för de flesta och
+    # blandar typer, och läsning i bitar gav en DtypeWarning per körning.
+    ind = pd.read_csv(p, low_memory=False)
     if "unemployed_since" not in ind.columns or "status" not in ind.columns:
         return None
     if t_slut is None:
