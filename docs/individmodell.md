@@ -342,6 +342,34 @@ Bredden har tre källor, och de tas i ordningen:
   Två parametrar, bredden och stödandelen. Vad de kalibreras mot är öppet;
   data om yrkessammansättning per arbetsställe saknas.
 
+**Validering mot alla 290 kommuner** (`scripts/validera_yrken_per_kommun.py`,
+TAB4436, SSYK3-nivå). Mekanismens förväntade yrkesfördelning i en kommun är
+branschmixen gånger rikets P(yrke | bransch), alltså antagandet att yrke och
+kommun är betingat oberoende givet bransch. Gemensam massa med den faktiska
+fördelningen, p10 / median / p90:
+
+| | p10 | median | p90 |
+|---|---|---|---|
+| mekanismen | 0,70 | 0,78 | 0,87 |
+| rikets yrken utan bransch | 0,64 | 0,72 | 0,83 |
+| länet utan kommunen, per bransch | 0,72 | 0,79 | 0,86 |
+| brusgolv: urval av kommunens storlek ur den faktiska | 0,93 | 0,95 | 0,98 |
+
+Branschmixen förklarar en del (0,72 → 0,78), men avståndet till brusgolvet är
+stort, och det krymper med kommunens storlek (0,73 i den minsta kvartilen,
+0,86 i den största). Länets fördelning utan kommunen själv tillför nästan
+inget: avvikelsen är inte regional utan kommunens egen. De sämsta är bruks-
+och industriorter med en dominerande arbetsgivare -- Oxelösund 0,58 (stål),
+Olofström 0,63 (fordon), Karlsborg 0,64 (regemente), Gällivare 0,68 (gruva),
+Hofors 0,67 (stål) -- där ett enda arbetsställe med egen profil styr
+kommunens yrkesmix. Tyngdpunkten i uppgiftsrummet flyttar sig lite: 0,044 i
+median, mot yrkesradien 0,27. Ovansiljan: Mora 0,87, Orsa 0,77, Älvdalen 0,75.
+
+Det talar för b: avvikelsen är just arbetsställen med en specialistprofil
+inom branschen. Men b med kärnor dragna ur riket återger kommunernas
+KLUMPIGHET, inte deras faktiska profil -- Oxelösunds stålverk blir ett
+slumpmässigt tillverkningsarbetsställe.
+
 ---
 
 ## 4. Matchning: två frågor med olika ägare

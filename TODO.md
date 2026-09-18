@@ -33,8 +33,10 @@ Före 6a, i tur och ordning:
   - [ ] b. kärnyrke som sätter specialistprofilen, med stödyrken kvar
 - [x] Arbetsställenas branschandelar ur dagbefolkningen (TAB4436), inte ur
       invånarnas bransch.
-- [ ] Jobbens yrkesfördelning per kommun valideras mot TAB4436. P(yrke |
-      bransch) tas fortfarande ur riket; omprövas om avvikelsen är stor.
+- [x] Jobbens yrkesfördelning per kommun valideras mot TAB4436, alla 290
+      kommuner (individmodell.md avsnitt 3). Gemensam massa 0,78 i median mot
+      brusgolvet 0,95; störst avvikelse i bruksorter med en dominerande
+      arbetsgivare.
 - [ ] Kommunens jobbmål (jobbandelar) och TAB4436:s anställda skiljer sig:
       Mora 9 948 mot 10 223, Orsa 2 231 mot 2 049, Älvdalen 2 933 mot 2 822.
 - [ ] `employment_municipality_sni` pensioneras, eller hämtas riktigt.
