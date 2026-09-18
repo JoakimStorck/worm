@@ -681,6 +681,15 @@ jämförs mot en baslinje med fem frön.
    Skärpningen gäller alla cirklar i det yrke hon arbetar i, exponeringen
    bara den pågående anställningens (`individmodell.md`, avsnitt 2).
    Uppstartens anställning i det egna startyrket fortsätter startcirkeln.
+   Fem frön på 7654248, mot baslinjen: median u_R_occ 0,725 → 0,733, med
+   spann som inte överlappar (0,723–0,729 mot 0,730–0,736). Allt annat
+   ligger inom fröspannet: q vid anställning 0,950 → 0,953, andel q > 1
+   40 → 41 %, lönekvot p50, slutlägets arbetslösa och vakanser. Uppstarten
+   är identisk frö för frö (samma antal anställda vid start). Bland de
+   sysselsatta i slutläget är medianen 6 cirklar, p90 9 och max 19–21.
+   Omkring 55 individer har fler än tolv, och radens bredd blir 20–24.
+   Simuleringstiden är 214–217 s mot baslinjens 211, så tröskeln för
+   obetydliga cirklar behövs inte.
 4. **Läsare för TAB4359, TAB4360 och TAB655**, och rakingen till P(yrke |
    inriktning, nivå, ålder, kön), med kontrollerna ovan.
 5. **Massan:** `EDU_MASS` blir studietid × intensitet.
