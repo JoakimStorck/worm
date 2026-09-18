@@ -1107,15 +1107,27 @@ class ScenarioBuilder:
         arbetsställe i kommunen, alltså BESATTA jobb. Togs den som antalet
         positioner blev varje vakans en sysselsatt för lite, och arbetslösheten
         u = u_min + V/L låg V/L över SCB:s (docs/stockarna.md). Positionerna är
-        därför J_data · (1 + v), v ur vakansgrad().
+        därför J_data · (1 + v + p), v ur vakansgrad().
 
-        De utlovade positionerna, där någon tackat ja men inte tillträtt, läggs
-        medvetet inte till: andelen är modellens egen och kan inte läsas ur
-        SCB.
+        p är de UTLOVADE positionerna (C4c, docs/stockarna.md): någon har tackat
+        ja men inte tillträtt. Den som byter jobb räknas i J_data en gång, på
+        det gamla, och den väntande befattningen finns inte där; utan p blev
+        varje utlovad position en sysselsatt för lite, omkring 1,8 procent av
+        jobben. Andelen är modellens egen -- anställningstakten gånger beslut
+        och uppsägningstid -- och kan inte läsas ur SCB. Den är därför
+        parametern simulation.utlovad_andel, satt efter körningarnas uppmätta
+        andel, och analysen ställer körningens andel mot den så att en
+        glidning syns.
 
         sysselsatta är pendlingsmarginaler()["jobb"], kommun -> antal."""
+        sim = self.cfg_reader.config.get("simulation", {})
+        if "utlovad_andel" not in sim:
+            raise ValueError("simulation.utlovad_andel saknas: de utlovade "
+                             "positionernas andel av jobben (docs/stockarna.md, C4c). "
+                             "Den står i scenarios/_simulation_defaults.yml.")
+        p = float(sim["utlovad_andel"])
         v = self.vakansgrad(list(sysselsatta))
-        return {k: int(round(n * (1.0 + v[str(k).zfill(4)])))
+        return {k: int(round(n * (1.0 + v[str(k).zfill(4)] + p)))
                 for k, n in sysselsatta.items()}
 
     def generate_inpendlingsreservoar(self, year):

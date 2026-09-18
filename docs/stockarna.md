@@ -438,3 +438,27 @@ finns vore att kalibrera bort en frånvaro.
 
 Mätningen är en ögonblicksbild av stocken och brusig för små branscher (J har
 115 jobb). Mönstret i I är inte brus.
+
+## C4c: de utlovade positionerna i jobbmålet (2026-09-18)
+
+Positionerna är J_data · (1 + v\* + p\*), med p\* = `utlovad_andel` = 0,018,
+satt efter tioårssvepets uppmätta 1,5–2,1 procent. Sammanfattningen bär
+körningens andel (`pending_pct`, medel över sista året), och rapporten ställer
+den mot parametern. Ovansiljans 16 839 sysselsatta blir 17 484 positioner.
+
+Tio år utan demografi, frö 1, standardinställningar (fönstret 20)
+(`output/run_20260918_230105`), medel år 5–9 mot C4b:
+
+| | C4b | C4c |
+|---|---|---|
+| u_bas | ~4,9 % | ~4,4 % |
+| öppna vakanser | ~3,1 % | ~4,0 % |
+| utlovade | ~1,8 % | ~2,0 % (parametern 1,8) |
+| In / Ut | 1 664 / 1 702 | 1 668 / 1 705 |
+
+**Bokföringen stämmer, men arbetslösheten föll bara 0,5 procentenheter.** De
+tillagda positionerna blev till största delen öppna vakanser, samma mönster
+som i C1: fler jobb av samma sort som redan står tomma -- lågbetalda jobb som
+ingen av de befintliga arbetslösa tar -- fyller inte på sysselsättningen.
+Det bekräftar slutsatsen ovan: det som saknas är inte positioner utan de
+sökande som tar dem, inträdet.

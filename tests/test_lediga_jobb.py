@@ -54,9 +54,16 @@ def test_rubrik_utan_kvartal_kastar(tmp_path):
         las_lediga_jobb(_fil(tmp_path, ['"LJtotA - x","20 - Dalarna",2.0\n'], rubrik=fel))
 
 
+class _Konfig:
+    def __init__(self, simulation):
+        self.config = {"simulation": simulation}
+
+
 class _Byggare:
-    def __init__(self, conn):
+    def __init__(self, conn, utlovad_andel=0.0):
         self.conn = conn
+        sim = {} if utlovad_andel is None else {"utlovad_andel": utlovad_andel}
+        self.cfg_reader = _Konfig(sim)
 
     vakansgrad = ScenarioBuilder.vakansgrad
     positioner = ScenarioBuilder.positioner
@@ -93,6 +100,19 @@ def test_positionerna_ar_de_sysselsatta_plus_de_lediga():
     b = _Byggare(_db(DALARNA_OCH_STOCKHOLM))
     p = b.positioner({"2062": 10_000, "2034": 3_000, "0180": 1_000})
     assert p == {"2062": 10_200, "2034": 3_060, "0180": 1_033}
+
+
+def test_de_utlovade_positionerna_laggs_till():
+    """C4c: den som byter jobb räknas i J_data en gång, på det gamla, och den
+    väntande befattningen finns inte där. Utan andelen blev varje utlovad
+    position en sysselsatt för lite."""
+    b = _Byggare(_db(DALARNA_OCH_STOCKHOLM), utlovad_andel=0.018)
+    assert b.positioner({"2062": 10_000}) == {"2062": 10_380}
+
+
+def test_utan_utlovad_andel_ingen_tyst_nolla():
+    with pytest.raises(ValueError, match="utlovad_andel"):
+        _Byggare(_db(DALARNA_OCH_STOCKHOLM), utlovad_andel=None).positioner({"2062": 10})
 
 
 def test_utan_vakansgrad_ingen_tyst_reserv():

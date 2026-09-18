@@ -68,7 +68,8 @@ Före 6a, i tur och ordning:
         mekanism, efter inträdet och flyttningarna.
   - [x] Arbetslösheten mäts med SCB:s definition (BAS): hela månaden, 20–65 år.
   - [x] C4b ansökningsfönstret 40 → 20 dagar: öppna vakanser 4,6 → 3,1 %.
-  - [ ] C4c de utlovade positionerna (~1,8 %) i jobbmålet.
+  - [x] C4c de utlovade positionerna i jobbmålet (utlovad_andel 0,018; uppmätt 1,98).
+        u_bas ~4,9 → ~4,4 %: tillagda positioner blir mest öppna vakanser.
   - [ ] Golvet ~3,0 % öppna mot Dalarnas 2,03 sitter i lågbetalda jobb (hotell och
         restaurang: 121 dagar mot SCB:s 12) som ingen arbetslös med erfarenhet tar.
         Hör till inträdet (6b). Rekryteringstiden per bransch mot TAB4307 ska

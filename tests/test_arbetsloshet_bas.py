@@ -91,3 +91,16 @@ def test_analysens_tabell_per_kommun_anvander_samma_definition(tmp_path):
     t = arbetsloshet_per_kommun(str(d))
     assert list(t.index) == ["2062"]
     assert t.loc["2062", "u_rate"] == pytest.approx(100 * 1 / 4)
+
+
+def test_sammanfattningen_bar_de_utlovades_andel(tmp_path):
+    """C4c: körningens andel utlovade positioner, medel över sista året, ställs
+    mot parametern utlovad_andel. Andelen är v - v_open."""
+    from core.analysis.eventlog import summary_row
+    ts = pd.DataFrame({"time": np.arange(24) * 30.4, "year": np.arange(24) * 30.4 / 365.25,
+                       "employed": 900.0, "unemployed": 100.0, "vacancies": 30.0,
+                       "active_jobs": 1000.0, "labour_force": 1000.0, "u": 10.0,
+                       "v": [5.0] * 12 + [3.0] * 12, "v_open": [4.0] * 12 + [1.0] * 12,
+                       "tightness": 0.3, "identity_residual": 0.0, "u_bas": 8.0})
+    row = summary_row(str(tmp_path), events=[], tr=pd.DataFrame(), ts=ts)
+    assert row["pending_pct"] == pytest.approx(2.0)

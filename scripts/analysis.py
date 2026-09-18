@@ -477,6 +477,8 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
                           ("u_bas_pct", (round(u_ref, 2) if u_ref is not None else "saknas"),
                            "SCB BAS 20-65 år, scenariots kommuner"),
                           ("u_pct", "—", "ögonblicksbild, inget SCB-begrepp"),
+                          ("pending_pct", _utlovad_ref(df),
+                           "jobbmålets utlovad_andel; glider de isär är jobbmålet fel"),
                           ("v_pct", REF["v_pct"], "svensk vakansgrad")):
         if key not in df.columns:
             continue
@@ -587,6 +589,14 @@ def arbetsloshet_per_kommun(run_dir):
                                unemployed=("arbl_bas", "sum"), ak=("ak", "sum"))
     t["u_rate"] = 100 * t["unemployed"] / t["ak"].replace(0, np.nan)
     return t[["employed", "unemployed", "u_rate"]]
+
+
+def _utlovad_ref(df):
+    """Parametern utlovad_andel i procent, som referens för körningens
+    uppmätta andel utlovade positioner (C4c)."""
+    x = pd.to_numeric(df.get("p_utlovad_andel", pd.Series(dtype=float)),
+                      errors="coerce").dropna()
+    return round(100 * float(x.median()), 2) if len(x) else "saknas"
 
 
 def scb_arbetsloshet_region(koder, db_path="data/worm.sqlite3"):

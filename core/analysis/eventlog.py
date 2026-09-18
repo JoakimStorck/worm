@@ -315,7 +315,7 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
             })
             sim = meta.get("simulation") or {}
             for k in ("sigma_gamma", "commute_cost_per_km", "choice_scale",
-                      "job_destruction_rate", "rho_reservation"):
+                      "job_destruction_rate", "rho_reservation", "utlovad_andel"):
                 if k in sim:
                     row[f"p_{k}"] = sim[k]
         except Exception:
@@ -331,6 +331,10 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
             "u_pct": round(float(last["u"]), 3), "v_pct": round(float(last["v"]), 3),
             "u_bas_pct": round(float(last["u_bas"]), 3)
             if "u_bas" in ts.columns and pd.notna(last["u_bas"]) else np.nan,
+            # De utlovade positionerna, medel över sista året: ställs mot
+            # parametern utlovad_andel som jobbmålet bygger på (C4c).
+            "pending_pct": round(float((ts["v"] - ts["v_open"]).tail(12).mean()), 3)
+            if "v_open" in ts.columns else np.nan,
             "v_open_pct": round(float(last["v_open"]), 3)
             if "v_open" in ts.columns and pd.notna(last["v_open"]) else np.nan,
             "tightness": round(float(last["tightness"]), 4),
