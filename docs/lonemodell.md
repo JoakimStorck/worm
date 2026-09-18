@@ -15,10 +15,17 @@ tillståndsvariabel slutat bära information.
 
 ## 1. Kompetens
 
-Individen är en samling **cirklar** i skivan, en per erfarenhet:
-grundskola i origo (radie 1), utbildning på yrkets riktning, och en
-arbetscirkel per jobb hon haft. Varje cirkel har centrum, spridning ρ² och
-massa m.
+Individen är en samling **cirklar** i skivan, en per händelse i karriären:
+grundskola i origo (radie 1), en cirkel per avslutat utbildningssteg, och en
+per anställning, fortbildning och omskolning. Varje cirkel har centrum,
+spridning ρ² och massa m. Den fullständiga beskrivningen — vad varje slags
+händelse ger, dynamiken och varför antalet cirklar saknar tak — står i
+`individmodell.md`, avsnitt 2; utbildningens cirklar i `utbildningsmodell.md`.
+
+*Läget i koden.* Cirklar med samma nyckel slås ihop, så två anställningar i
+samma yrke delar cirkel, och utbildningen är en enda cirkel för den högsta
+nivån, placerad på individens nuvarande yrke. Antalet cirklar är taket
+`max_circles: 12`.
 
 Dynamiken har fyra tidsskalor, alla i `core/occupations/competence.py`:
 
@@ -26,12 +33,13 @@ Dynamiken har fyra tidsskalor, alla i `core/occupations/competence.py`:
 |---|---|---|
 | exponering | a | massan i den aktiva cirkeln växer |
 | läckage | λ, halveringstid 15 år | all massa gallras |
-| diffusion | D | inaktiva cirklar breddas, spetsen förloras |
+| diffusion | D = 0,004, tak 4·ρ_home² | inaktiva cirklar breddas, spetsen förloras |
 | skärpning | τ_s, 6 månader | den aktiva cirkeln återfår sin spets |
 
 **Massan är bunden.** Jämvikten mellan exponering och läckage är
-m\* = a/λ ≈ 13. Det är balansen mellan tillväxt och glömska, och den finns
-redan: en ensam cirkel kan inte växa obegränsat.
+m\* = a/λ ≈ 21,6. Det är balansen mellan tillväxt och glömska, och den finns
+redan: en ensam cirkel kan inte växa obegränsat. Efter tjugo år i samma yrke är
+massan 13,1, alltså sex tiondelar av mättnaden.
 
 ### 1.1 Konkurrenskraft q
 
@@ -63,6 +71,15 @@ och bättre position vid nästa byte. Att flytta till en helt ny trakt är att
 börja om; avståndskärnan släcker de gamla cirklarna och grundskolan i origo
 är enda stödet.
 
+Unionen är också det som gör en cirkel per händelse möjlig: två identiska
+anställningar i samma yrke ger samma täckning som en, så att dela upp en
+karriär i fler händelser ger ingen premie.
+
+*Läget i koden.* `_union` genomför inte formeln ovan. Varje cirkel dras av
+bara mot den närmast ovanför i ordningen, och avdraget förs vidare i en
+kedja. Med dagens tre cirklar per startindivid är felet högst 0,009; med en
+cirkel per händelse växer det (`individmodell.md`, avsnitt 2).
+
 Före 0078 var q summan, och summan hade ingen gräns. Över tio år gav det en
 premie på fragmentering: median q vid anställning 1,21, 67 procent över ett,
 andelen av beståndet över Π stigande till 80 procent, vakansstocken
@@ -86,6 +103,9 @@ q och p är olika storheter med olika roller. q avgör om mötet leder någonsta
   (Lazear & Shaw) medan lärare når full produktivitet först efter flera år.
   m_ref ska vara en funktion av r_j. Modellen har r_j på varje jobb, så det
   kostar ingen ny data; det kräver kalibrering mot två ändar.
+- **`_union` ska följa formeln** i 1.1, med avdrag mot alla starkare cirklar
+  och inte bara mot den närmast ovanför. Första steget i byggordningen i
+  `utbildningsmodell.md`.
 - **Överlappet mäts mellan cirklarna, inte via jobbet.** Rätt storhet är hur
   mycket av *det här jobbet* cirkel k täcker som l inte täckte -- en
   trippelprodukt. Nuvarande approximation är pairwise Bhattacharyya.

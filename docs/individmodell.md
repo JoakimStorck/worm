@@ -141,7 +141,7 @@ jobb:
 | q | 0,79 | 0,65 | 0,46 | 0,32 |
 | skärpa | 0,80 | 0,66 | 0,49 | 0,40 |
 
-Massan efter tjugo år är 13,1, långt från mättnaden; diffusionen når taket
+Massan efter tjugo år är 13,1, sex tiondelar av mättnaden; diffusionen når taket
 efter knappt trettio år.
 
 ### Glömskan är läckaget — inget tak på antalet cirklar
