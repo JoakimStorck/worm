@@ -257,8 +257,9 @@ def externt_erbjudande(world, idx, t_now, rng):
     None.
 
     Vid en andel utpendling_erbjudande_andel av invånarnas sökningar kommer
-    också ett erbjudande utifrån. Destinationen dras ur invånarens kommuns
-    utpendling i pendlingsmatrisen, bransch och yrke ur destinationens
+    också ett erbjudande utifrån, om någon av omgivningens platser för
+    invånarens kommun är ledig (C2). Destinationen dras bland de lediga
+    platserna, som är pendlingsmatrisens utpendling, bransch och yrke ur destinationens
     jobbfördelning i TAB4436, platsen är en DeSO i destinationen dragen med
     befolkningen. Erbjudandet värderas som ett lokalt i search_once, men utan
     avstånd: mötet med sannolikheten min(1, q), produktiviteten
@@ -286,9 +287,12 @@ def externt_erbjudande(world, idx, t_now, rng):
         return None
     om = world.omgivning()
     hem = str(ind.at[idx, 'municipal_code']).zfill(4)
-    if om.andel_utpendling(hem) <= 0:
+    # PLATSERNA (C2, docs/stockarna.md). Erbjudandet kommer från en ledig
+    # plats; när alla hemkommunens platser är tagna kommer inget. Andelen
+    # ovan är därmed takten en ledig plats fylls med, inte stockens nivå.
+    dest = world.dra_ledig_utplats(hem, rng)
+    if dest is None:
         return None
-    dest = om.dra_destination(hem, rng)
     profil = world.kommunprofil()
     bransch, ssyk = profil.dra_jobb(dest, rng)
     onet = profil.onet(ssyk, rng)
@@ -335,7 +339,7 @@ def externt_erbjudande(world, idx, t_now, rng):
     S = w_off - w_res
     if S <= cfg['min_surplus']:
         return None
-    return {"kommun": dest, "bransch": bransch, "ssyk": ssyk, "onet": onet,
+    return {"kommun": dest, "hemkommun": hem, "bransch": bransch, "ssyk": ssyk, "onet": onet,
             "x": x, "y": y, "q": q, "w_neg": w_off, "surplus": S, "km": km}
 
 
@@ -347,7 +351,7 @@ def anta_externt(world, idx, t_now, erbj, omedelbart=False):
     anställningar. Returnerar jobbets id."""
     from core import event_handlers as eh
     jid = world.skapa_externt_jobb(t_now, erbj["kommun"], erbj["bransch"], erbj["ssyk"],
-                                   erbj["onet"], erbj["x"], erbj["y"])
+                                   erbj["onet"], erbj["x"], erbj["y"], erbj["hemkommun"])
     ind = world.individuals
     params = {"job_id": jid, "w_neg": erbj["w_neg"], "q_hire": erbj["q"],
               "commute_km": erbj["km"], "n_applicants": 0, "extern": True}

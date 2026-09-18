@@ -58,7 +58,9 @@ Före 6a, i tur och ordning:
       Det är tre fel, inte relaxation. I ordning:
   - [x] C1 jobbmålet räknar in vakanserna: J_data · (1 + v*), v* ur TAB6605.
         Verkan syns först efter C2.
-  - [ ] C2 utpendlingen som ett bestånd av platser, inte en ström av erbjudanden.
+  - [x] C2 utpendlingen som ett bestånd av platser, inte en ström av erbjudanden.
+  - [ ] Uppstarten fyller 1 041 av 1 767 utpendlingsplatser; stocken når målet
+        år 2. Primingen ska börja med pendlarna på plats.
   - [ ] C3 inpendlarnas utträde oberoende av `simulation.demografi`.
   - [ ] C4 modellens vakansnivå (4,75 % öppna mot Dalarnas 2,03 %), och
         därefter uppvärmningens längd.

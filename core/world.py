@@ -414,13 +414,90 @@ class World(IndividualViews):
             self._profil = Kommunprofil(self.conn)
         return self._profil
 
-    def skapa_externt_jobb(self, t_now, kommun, bransch, ssyk, onet_code, x, y):
+    # ---- omgivningens platser för utpendlarna (docs/stockarna.md, C2) -------
+    def _utplatser(self, hem):
+        """(destinationer, kapacitet, upptagna) för utpendlingen från hem, eller
+        None. Byggs vid första frågan per kommun; upptagna räknas då ur de
+        aktiva externa jobb som redan finns, så att en värld som återupptas
+        inte får platserna fria på nytt."""
+        if not hasattr(self, "_utplats"):
+            self._utplats = {}
+        hem = str(hem).zfill(4)
+        if hem not in self._utplats:
+            fl = self.omgivning().utpendling_fran(hem)
+            if fl is None:
+                self._utplats[hem] = None
+            else:
+                koder = np.array([str(k).zfill(4) for k in fl[0]])
+                upptagna = np.zeros(len(koder), dtype=int)
+                j = self.jobs
+                if "hemkommun" in j.columns and "extern" in j.columns:
+                    akt = (j["extern"].fillna(False).astype(bool)
+                           & j["active"].fillna(False).astype(bool)
+                           & (j["hemkommun"] == hem))
+                    for dest in j.loc[akt, "municipal_code"].astype(str):
+                        upptagna[np.flatnonzero(koder == dest.zfill(4))] += 1
+                self._utplats[hem] = (koder, fl[1].astype(float), upptagna)
+        return self._utplats[hem]
+
+    def dra_ledig_utplats(self, hem, rng):
+        """Destination för ett erbjudande utifrån till en invånare i hem, dragen
+        bland de LEDIGA platserna med antalet lediga som vikt, eller None när
+        alla är tagna.
+
+        Tidigare drogs destinationen ur matrisens flöden vid en fast andel av
+        sökningarna, oavsett hur många som redan pendlade ut. Erbjudandena
+        förbrukades aldrig, och stocken sattes av inflöde mot avgång: jämvikten
+        låg kring 2 400 mot matrisens 1 767 och växte fortfarande efter fem år.
+        Platserna gör utpendlingen till ett bestånd som omsätts, som regionens
+        egna jobb, och matrisens sammansättning på destinationer bevaras."""
+        up = self._utplatser(hem)
+        if up is None:
+            return None
+        koder, kap, upptagna = up
+        ledig = np.maximum(kap - upptagna, 0.0)
+        if ledig.sum() <= 0:
+            return None
+        return str(koder[int(rng.choice(len(koder), p=ledig / ledig.sum()))])
+
+    def _ta_utplats(self, hem, dest):
+        up = self._utplatser(hem)
+        if up is None:
+            raise ValueError(f"Ingen utpendling från {hem} i matrisen; "
+                             f"ett externt jobb i {dest} saknar plats.")
+        i = np.flatnonzero(up[0] == str(dest).zfill(4))
+        if i.size == 0:
+            raise ValueError(f"{dest} är ingen destination för utpendlingen från {hem}.")
+        up[2][i[0]] += 1
+
+    def _frigor_utplats(self, pos):
+        """Platsen för det externa jobbet på rad pos blir ledig. Anropas av båda
+        vägarna där ett externt jobb blir inaktivt: när det lämnas
+        (set_job_filled) och när det förstörs (handle_destroy_job), före
+        active sätts till False."""
+        j = self.jobs
+        if "hemkommun" not in j.columns or not bool(j["extern"].iat[pos]) \
+                or not bool(j["active"].iat[pos]):
+            return
+        hem = j["hemkommun"].iat[pos]
+        if hem is None or (isinstance(hem, float) and np.isnan(hem)):
+            return
+        up = self._utplatser(hem)
+        if up is None:
+            return
+        i = np.flatnonzero(up[0] == str(j["municipal_code"].iat[pos]).zfill(4))
+        if i.size:
+            up[2][i[0]] = max(up[2][i[0]] - 1, 0)
+
+    def skapa_externt_jobb(self, t_now, kommun, bransch, ssyk, onet_code, x, y, hemkommun):
         """Ett jobb utanför regionen, för en utpendlare (docs/omgivning.md, O4).
 
         Ingen arbetsgivare och ingen vakans: raden är utlovad (pending) från
         start och upphör när den lämnas (set_job_filled). Den förstörs i samma
         takt som regionens jobb. Lönen är yrkets pris i fältet, utan
-        arbetsgivareffekt."""
+        arbetsgivareffekt. Jobbet tar en av omgivningens platser för
+        utpendlare från hemkommun (C2), och hemkommun står på raden så att
+        platsen kan frigöras."""
         geom = self._geom_lookup(onet_code) or {}
         if not hasattr(self, "_next_ext_seq"):
             self._next_ext_seq = 0
@@ -433,7 +510,9 @@ class World(IndividualViews):
                     "ssyk_code": ssyk, "onet_code": onet_code, "core_ssyk": None,
                     "x": float(x), "y": float(y), "active": True, "pending": True,
                     "extern": True, "vacant_since": float(t_now),
-                    "employer_size": np.nan, "wage_eta": 0.0})
+                    "employer_size": np.nan, "wage_eta": 0.0,
+                    "hemkommun": str(hemkommun).zfill(4)})
+        self._ta_utplats(hemkommun, kommun)
         self.jobs = pd.concat([self.jobs, pd.DataFrame([rad])], ignore_index=True)
         self._schedule_destruction([jid], t_now)
         return jid
@@ -872,6 +951,7 @@ class World(IndividualViews):
             # som kan annonsera det igen, och en ledig position utanför regionen
             # är ingen vakans här (docs/omgivning.md, O4). Alla vägar som
             # lämnar ett jobb går hit.
+            self._frigor_utplats(pos)
             self.jobs.iat[pos, self.jobs.columns.get_loc("active")] = False
             if "destroyed_time" in self.jobs.columns:
                 self.jobs.iat[pos, self.jobs.columns.get_loc("destroyed_time")] = float(t_now)

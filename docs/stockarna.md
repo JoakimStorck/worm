@@ -160,3 +160,34 @@ positionerna blir vid start nästan helt vakanser (medel 2 188 mot 1 794).
 körningen. Baslinjens fem frön delar en genererad värld och underskattar
 spridningen. Ett beslut om genereringsfröet ska följa `WORM_SEED` hör till
 nästa baslinje, inte till C1.
+
+## C2 prövad (2026-09-18)
+
+Omgivningen har platser per par av hemkommun och destination, lika många som
+pendlingsmatrisen anger (1 767 för Ovansiljan). Ett erbjudande utifrån kommer
+bara från en ledig plats, destinationen dras bland de lediga med antalet
+lediga som vikt, och platsen frigörs när jobbet lämnas eller förstörs.
+`utpendling_erbjudande_andel` är nu takten en ledig plats fylls med, inte
+stockens nivå. Fem år utan demografi, frö 1 (`output/run_20260918_214539`):
+
+| år | U | V | In | Ut | antagna utifrån |
+|---|---|---|---|---|---|
+| 0 | 2 687 | 2 306 | 1 247 | 1 041 | 1 033 |
+| 1 | 2 215 | 1 773 | 1 804 | 1 518 | 973 |
+| 2 | 1 789 | 1 222 | 2 118 | 1 701 | 775 |
+| 3 | 1 734 | 1 021 | 2 268 | 1 712 | 689 |
+| 4 | 1 732 | 925 | 2 370 | 1 722 | 700 |
+| 5 | 1 659 | 812 | 2 410 | 1 718 | |
+
+Utpendlingen står still vid 97 procent av matrisen från år 2, och
+inflödet har sjunkit till avgången, omkring 700 om året. Arbetslösheten är
+platt år 2–4.
+
+**Kvar är fel 3.** Vakanserna faller fortfarande, och det är inpendlarna som
+tar dem: 2 410 mot matrisens 1 727, utan avmattning. Med demografin avstängd
+lämnar de bara när jobbet förstörs eller sägs upp.
+
+**Uppstarten fyller inte platserna.** Den når 1 041 av 1 767; taket på tre
+försök utifrån per person och andelen 0,2 räcker inte. Stocken når målet
+först år 2. Det hör till primingen (`omgivning.md`: "Primingen börjar med de
+observerade pendlarna på plats") och är inte C2.

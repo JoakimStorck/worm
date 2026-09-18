@@ -98,6 +98,13 @@ class Omgivning:
         return float(self.inpendling.loc[self.inpendling.arb == k, "n"].sum()
                      / max(self.jobb(k), 1))
 
+    def utpendling_fran(self, hemkommun):
+        """(destinationer, antal) för utpendlingen från hemkommun, eller None.
+        Omgivningens platser för regionens utpendlare byggs ur detta
+        (World.dra_ledig_utplats, docs/stockarna.md C2)."""
+        ut = self._ut.get(_kod(hemkommun))
+        return None if ut is None else (ut[0].copy(), ut[1].copy())
+
     # ---- dragningar --------------------------------------------------------
     def dra_destination(self, hemkommun, rng) -> str:
         """Kommun utanför regionen dit en invånare i hemkommun pendlar."""

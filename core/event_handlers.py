@@ -1209,6 +1209,8 @@ def handle_destroy_job(event, world):
     if pos is None or not bool(jobs.iat[pos, jobs.columns.get_loc('active')]):
         return
     holder = jobs.iat[pos, jobs.columns.get_loc('individual_id')]
+    if hasattr(world, '_frigor_utplats'):
+        world._frigor_utplats(pos)          # ett externt jobb lämnar sin plats (C2)
     jobs.iat[pos, jobs.columns.get_loc('active')] = False
     world.set_job_inactive(job_id)
     jobs.iat[pos, jobs.columns.get_loc('destroyed_time')] = float(event['time'])

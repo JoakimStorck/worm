@@ -554,3 +554,70 @@ def test_inpendlarens_erbjudande_provas_utan_pendlingskostnad_vid_stangningen():
     # w_res 0.3, erbjudandet 0.8, 60 km: 0.8 - 0.6 - 0.3 < 0 med kostnad
     assert current_surplus(w, 0, 0.8, 60.0) == pytest.approx(0.5)
     assert current_surplus(w, 1, 0.8, 60.0) == pytest.approx(-0.1)
+
+
+# ---------------------------------------------------------------------------
+# C2: utpendlingen som ett bestånd av platser (docs/stockarna.md)
+# ---------------------------------------------------------------------------
+
+def _upptagna_ur_tabellen(w, hem):
+    j = w.jobs
+    akt = j["extern"].astype(bool) & j["active"].astype(bool) & (j["hemkommun"] == hem)
+    return j.loc[akt, "municipal_code"].value_counts().to_dict()
+
+
+def _upptagna_i_platserna(w, hem):
+    koder, _, upptagna = w._utplatser(hem)
+    return {k: int(n) for k, n in zip(koder, upptagna) if n}
+
+
+def test_utpendlingen_ar_ett_bestand_av_platser():
+    """Mora har i _db 30 platser i Falun och 10 i Rättvik. Tidigare kom
+    erbjudandena vid en fast andel av sökningarna oavsett hur många som redan
+    pendlade ut, och stocken växte förbi matrisen: 2 960 mot 1 767 efter fem
+    år. Nu kommer ett erbjudande bara från en ledig plats, och platsen blir
+    ledig igen när jobbet lämnas eller förstörs."""
+    from core.matching_core import externt_erbjudande
+    from core.event_handlers import handle_destroy_job
+    w = _utvarld()
+    w.individuals = _personer(["unemployed"], [False], municipal_code="2062")
+    w.prepare()
+    rng = np.random.default_rng(0)
+
+    def destinationer(n=200):
+        return {e["kommun"] for e in (externt_erbjudande(w, 0, 1.0, rng) for _ in range(n)) if e}
+
+    falun = [w.skapa_externt_jobb(0.0, "2080", "N", "911", "B", 0.0, 0.0, "2062")
+             for _ in range(30)]
+    assert destinationer() == {"2031"}, "erbjudanden från en fylld destination"
+    rattvik = [w.skapa_externt_jobb(0.0, "2031", "N", "912", "C", 0.0, 0.0, "2062")
+               for _ in range(10)]
+    assert destinationer() == set(), "erbjudanden fast alla platser är tagna"
+    assert _upptagna_i_platserna(w, "2062") == _upptagna_ur_tabellen(w, "2062")
+
+    # lämnas: samma väg som uppsägning, pension och arbetslöshet
+    w.set_job_filled(falun[0], False, t_now=5.0)
+    w.set_job_filled(falun[0], False, t_now=6.0)   # två gånger frigör en plats, inte två
+    assert destinationer() == {"2080"}
+    assert _upptagna_i_platserna(w, "2062") == {"2080": 29, "2031": 10}
+
+    # förstörs
+    handle_destroy_job({"time": 7.0, "event_type": "destroy_job", "agent_id": None,
+                        "params": {"job_id": rattvik[0]}}, w)
+    assert destinationer() == {"2080", "2031"}
+    assert _upptagna_i_platserna(w, "2062") == _upptagna_ur_tabellen(w, "2062") \
+        == {"2080": 29, "2031": 9}
+
+
+def test_platserna_raknas_ur_de_externa_jobb_som_redan_finns():
+    """Platserna byggs vid första frågan. Finns det redan aktiva externa jobb
+    -- en värld som återupptas -- är deras platser tagna, inte fria på nytt."""
+    w = _utvarld()
+    w.individuals = _personer(["unemployed"], [False], municipal_code="2062")
+    w.prepare()
+    for _ in range(10):
+        w.skapa_externt_jobb(0.0, "2031", "N", "912", "C", 0.0, 0.0, "2062")
+    del w._utplats
+    assert _upptagna_i_platserna(w, "2062") == {"2031": 10}
+    rng = np.random.default_rng(0)
+    assert {w.dra_ledig_utplats("2062", rng) for _ in range(100)} == {"2080"}
