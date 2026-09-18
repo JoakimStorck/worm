@@ -394,8 +394,15 @@ blir därmed en validering, inte indata.
    troligen med utländsk utbildning som inte registrerats. Får de bara
    grundskola underskattas de systematiskt.
 
-5. **Startpopulationens utbildningsposition**, enligt ovan: vid nuvarande yrke
-   som stationaritetsantagande, eller dragen.
+5. ~~**Startpopulationens utbildningsposition**~~ -- avgjort 2026-09-18:
+   **dragen** ur P(yrke | nivå, inriktning) för 25–29-åringar, samma dragning
+   som inträdaren, oberoende av det nuvarande yrket. Uppmätt före beslutet:
+   dragen på det sättet hamnar utbildningens yrke på det nuvarande i 9–10
+   procent av fallen, i median 0,27 bort (ett yrkes radie), och hälften inom
+   r_o. Det överskattar mismatchen något, eftersom sambandet mellan
+   utbildningens yrke och dagens är starkare än oberoendet och inte
+   publiceras; för startpopulationen väger det lätt, eftersom arbetscirkeln
+   bär tjänstetidens massa.
 
 ---
 
@@ -769,6 +776,37 @@ jämförs mot en baslinje med fem frön.
      Utbildningen dras givet yrket. De arbetslösa får ett senaste yrke och
      en arbetslöshetstid. Uppstartens fortsättningsregel från steg 3 blir
      då överflödig.
+     **6a-ii gjort** (`core/priming.py`, `prima_utbildningen`). Nivå och
+     inriktning dras ur den rakade fördelningen givet yrke och ålder -- för
+     den anställda jobbets SSYK, för den arbetslösa och reservoaren
+     startyrkets, översatt ur O*NET med P(ssyk | onet) ∝ crosswalkens andel
+     × yrkets anställda. Könet summeras bort; individerna bär inget kön.
+     Okänd nivå eller inriktning dras inte (beslut 4 för
+     startpopulationen): de fördelas på de kända i proportion.
+     Utbildningscirkeln ersätter genereringens; allmän utbildning och
+     förgymnasial nivå läggs i origo, annars på utbildningens yrke (beslut
+     5). De militära yrkena och okänt yrke saknar plats i rummet och dras
+     inte som utbildningens yrke.
+
+     **Lutningen mot kommunen.** Rikets fördelning givet yrket överskattade
+     utbildningen i glesbygden: Ovansiljans sysselsatta 20–65 år fick 27,4
+     procent eftergymnasial utbildning om minst tre år mot 20,5 i TAB6666
+     (BAS, november 2024, per kommun och nivågrupp). En faktor per kommun
+     och nivågrupp anpassas därför, så att kommunens sysselsatta får
+     TAB6666:s fördelning; reservoaren får sin ursprungskommuns. **De
+     arbetslösa får en egen**: i Ovansiljan har 31 procent av dem
+     förgymnasial utbildning mot 10 av de sysselsatta, och utan den fick de
+     de sysselsattas fördelning. Resultat, Ovansiljan:
+
+     | | förgymn. | gymn. ≤ 2 | gymn. 3 | eftergymn. < 3 | eftergymn. ≥ 3 |
+     |---|---|---|---|---|---|
+     | sysselsatta, modellen | 10,5 | 21,2 | 35,1 | 13,2 | 20,0 |
+     | sysselsatta, TAB6666 | 9,7 | 20,9 | 35,7 | 13,2 | 20,5 |
+     | arbetslösa, modellen | 25,9 | 24,9 | 30,5 | 9,5 | 9,3 |
+     | arbetslösa, TAB6666 | 31,0 | 25,4 | 27,4 | 9,1 | 7,1 |
+
+     De arbetslösa når inte ända fram: lutningen flyttar massa inom varje
+     yrkes fördelning, och vissa yrken har ingen låg nivå att flytta till.
    - **6b. Inträdet.** Utbildningshistorik ur kohortandelarna, och det
      första yrket som ett utfall av matchningen.
    - **6c. Studerande med extrajobb** (avgjort 2026-09-18). Gymnasieelever

@@ -97,6 +97,15 @@ else:
         "Hämta dem med: python scripts/fetch_data.py --only \"Anstallda yrke utbildning\" "
         "och --only \"Befolkning utbildning\".")
 
+# Sysselsatta per kommun och utbildningsnivå (TAB6666): kommunens egen
+# nivåfördelning för startpopulationens utbildning (6a-ii).
+from core.database.load_utbildning import KOMMUN_FIL, load_arbetsmarknad_utbildning
+if file_exists(KOMMUN_FIL):
+    load_arbetsmarknad_utbildning(db_path=DB_PATH)
+else:
+    log("OBS: Laddar inte sysselsatta per kommun och utbildningsnivå, filen saknas. "
+        "Hämta den med: python scripts/fetch_data.py --only \"Arbetsmarknadsstatus kommun utbildning\"")
+
 # Lediga jobb per 100 anställningar och län (TAB6605): skillnaden mellan
 # pendlingsmatrisens sysselsatta och modellens positioner (docs/stockarna.md).
 lediga_csv = "data/Lediga jobb per anstallning lan.csv"

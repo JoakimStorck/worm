@@ -214,6 +214,12 @@ def create_schema(db_path="data/worm.sqlite3"):
             year INTEGER, population INTEGER
         )
     """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS employment_education_municipality (
+            municipal_code TEXT, level_group TEXT, employed INTEGER,
+            unemployed INTEGER, period TEXT
+        )
+    """)
     # Lediga jobb per 100 anställningar och län (TAB6605, core/database/load_lediga_jobb.py)
     c.execute("""
         CREATE TABLE IF NOT EXISTS vacancy_rate_county (

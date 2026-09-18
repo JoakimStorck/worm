@@ -53,6 +53,10 @@ Före 6a, i tur och ordning:
 - [ ] Reservoarens generering tar omkring 70 s (98 ursprungskommuner genom
       generate_individuals); många ursprung bidrar med ett fåtal personer.
 - [x] 6a-i: primingen flyttar erfarenheten till jobben (`core/priming.py`).
+- [x] Steg 4: läsare för TAB4359, TAB4360, TAB655 och rakingen (`core/utbildningsfordelning.py`).
+- [x] 6a-ii: utbildningen givet yrket, lutad mot kommunens nivåer (TAB6666), med egen
+      lutning för de arbetslösa.
+- [ ] 6b: inträdet. 6c: studerande med extrajobb (utbildningsmodell.md).
 - [ ] Inkörningen i arbetsmarknadens stockar (spår C, `docs/stockarna.md`):
       utan åldrande och inträde faller arbetslösheten omkring 40 % på fyra år.
       Det är tre fel, inte relaxation. I ordning:

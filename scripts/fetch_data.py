@@ -134,6 +134,16 @@ MANIFEST = [
         "query_args": {"ar": "2024"},
     },
 
+    # Sysselsatta och arbetslösa 20-65 år per kommun och utbildningsnivå (BAS,
+    # TAB6666, november): kommunens egen nivåfördelning för startpopulationen.
+    {
+        "type": "scb_px",
+        "dest": os.path.join(DATA_DIR, "Arbetsmarknadsstatus kommun utbildningsniva.csv"),
+        "table_id": "TAB6666",
+        "query_fn": "arbetsmarknad_per_utbildning",
+        "query_args": {"ar": "2024"},
+    },
+
     # Anställda med arbetsplats i kommunen (DAGBEFOLKNING) efter yrke (SSYK3),
     # näringsgren (SNI 2007, grov nivå) och kön. Arbetsställenas bransch per
     # kommun, som i dag tas ur invånarnas bransch (employment_deso_sni,
@@ -647,13 +657,50 @@ def bygg_befolkning_utbildning_uttag(meta, ar=None):
                                         "UtbildningsNiva", "UtbinriktnSUN2020"])
 
 
+
+def bygg_arbetsmarknad_utbildning_uttag(meta, ar=None):
+    """Sysselsatta och arbetslösa 20-65 år per kommun och utbildningsnivå, BAS
+    (TAB6666, preliminär månadsstatistik), november.
+
+    Den fjärde marginalen i startpopulationens utbildning (6a-ii): rikets
+    nivåfördelning givet yrke och ålder överskattar utbildningen i
+    glesbygden -- Ovansiljans sysselsatta har 20,5 procent eftergymnasial
+    utbildning om minst tre år mot 27,4 i modellen före rättelsen. NOVEMBER,
+    som resten av BAS-underlaget. ar anger året; månaden är 11. Nivåerna är
+    grupperade (21 förgymnasial, 61 eftergymnasial minst tre år inklusive
+    forskarutbildning). Kommunerna väljs; län och riket tas inte med."""
+    dim = meta.get("dimension", {})
+
+    def kategorier(namn):
+        return list(dim.get(namn, {}).get("category", {}).get("index", {}).keys())
+
+    kommuner = [k for k in kategorier("Region") if re.fullmatch(r"\d{4}", k)]
+    tid = f"{ar}M11"
+    if tid not in kategorier("Tid"):
+        raise ValueError(f"{tid} finns inte i tabellen")
+    innehall = {"0000088H", "0000088A"}
+    if not innehall <= set(kategorier("ContentsCode")):
+        raise ValueError("sysselsatta eller arbetslösa saknas bland innehållen")
+    val = [{"variableCode": "Region", "valueCodes": kommuner},
+           {"variableCode": "Kon", "valueCodes": ["1+2"]},
+           {"variableCode": "Alder", "valueCodes": ["20-65"]},
+           {"variableCode": "UtbildningsNiva", "valueCodes": kategorier("UtbildningsNiva")},
+           {"variableCode": "Fodelseregion", "valueCodes": ["tot"]},
+           {"variableCode": "ContentsCode", "valueCodes": sorted(innehall)},
+           {"variableCode": "Tid", "valueCodes": [tid]}]
+    return {"params": {"lang": "sv", "outputFormat": "csv",
+                       "outputFormatParams": "UseCodesAndTexts"},
+            "selection": {"selection": val}}
+
+
 QUERY_BUILDERS = {"befolkning_per_alder": bygg_befolkningsuttag,
                   "arbetskraft_per_alder": bygg_arbetskraftsuttag,
                   "yrke_per_utbildningsinriktning": bygg_yrkesutfallsuttag,
                   "dagbef_yrke_bransch": bygg_dagbef_yrke_bransch_uttag,
                   "lediga_jobb_per_lan": bygg_lediga_jobb_uttag,
                   "yrke_per_utbildningsniva": bygg_yrke_utbildningsniva_uttag,
-                  "befolkning_per_utbildning": bygg_befolkning_utbildning_uttag}
+                  "befolkning_per_utbildning": bygg_befolkning_utbildning_uttag,
+                  "arbetsmarknad_per_utbildning": bygg_arbetsmarknad_utbildning_uttag}
 
 
 def fetch_scb_px(item):
