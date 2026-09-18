@@ -431,6 +431,10 @@ class ScenarioBuilder:
         # Dubbletter fick update_after_matching att falla med InvalidIndexError.
         if not hasattr(self, "_job_seq"):
             self._job_seq = 0
+        if not hasattr(self, "_yrken"):
+            from core.bransch import YrkeGivetBransch
+            self._yrken = YrkeGivetBransch(self.conn)
+        yrken = self._yrken
 
         # ARBETSGIVAREFFEKTEN. Pi_j = Pi_o * exp(eta_j). Utan den betalar varje
         # arbetsgivare i ett yrke exakt samma lön, och i jobb med r_j ~ 0 är
@@ -471,20 +475,9 @@ class ScenarioBuilder:
             for _ in range(int(row['size'])):
                 sni = row['sni_code']
 
-                if self.occupation_source() == "register":
-                    prof = self._register_profile(row['municipal_code'])
-                    onet_code = self.rng.choice(prof["onet_code"].to_numpy(),
-                                                 p=prof["prob"].to_numpy())
-                else:
-                    # SNI-vägen: arbetsställets bransch ger yrkesfördelningen
-                    occ_freq = self.get_onet_codes_with_freq_for_sni(sni)
-                    if not occ_freq:
-                        raise ValueError(
-                            f"sni_onet_link saknar bransch {sni}. Arbetsställena "
-                            "bär registrets branschgrupper (core/bransch.py), som "
-                            "länktabellen inte har; använd occupation_source: register.")
-                    onet_codes, freqs = zip(*occ_freq)
-                    onet_code = self.rng.choice(onet_codes, p=np.array(freqs)/np.sum(freqs))
+                # Yrket följer arbetsställets bransch och storlek, oavsett
+                # occupation_source, som bara gäller invånarna (core/bransch.py).
+                onet_code = yrken.dra(sni, row['size'], self.rng)
 
                 x_occ, y_occ, r_o, chi, xi, geom_source, wage, r_req = self.get_geom_for_onet_code(onet_code)
                 eta = float(eta_by_employer.get(row.get('employer_id', idx), 0.0))

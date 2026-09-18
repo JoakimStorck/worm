@@ -23,9 +23,12 @@ ett yrke. Parkerat: studieorten, och val som svarar på arbetsmarknaden.
 Före 6a, i tur och ordning:
 - [x] Startens yrkeskälla: registret föll tyst tillbaka på SNI (aa5cdff).
 - [x] Arbetsställenas bransch och storlek ur data (`core/bransch.py`).
-- [ ] Jobbets yrke givet arbetsställets bransch och storlek, samma funktion
+- [x] Jobbets yrke givet arbetsställets bransch och storlek, samma funktion
       vid start och under körningen. Läkare ska inte kunna anställas på en
       bilverkstad. `sni_onet_link` slutar användas för jobb.
+- [ ] Yrkesbredden inom ett arbetsställe: jobben dras oberoende ur
+      branschens fördelning, så arbetsställena i en bransch är identiska i
+      väntevärde och nästan lika breda som kommunen (RMS 0,33 mot 0,39).
 - [ ] `employment_municipality_sni` pensioneras, eller hämtas riktigt.
 - [ ] Ny baslinje.
 

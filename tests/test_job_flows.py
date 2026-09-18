@@ -196,7 +196,12 @@ def test_job_ids_unique_across_municipalities():
         {"chi": [0.3], "xi": [0.3], "x_occ": [0.29], "y_occ": [0.09],
          "r_o": [0.27], "geom_source": ["occupation"], "w_rel": [1.0],
          "pi_rel": [1.0]}, index=pd.Index(["11-1011.00"], name="onet_code"))
-    sb.get_onet_codes_with_freq_for_sni = lambda sni: [("11-1011.00", 1.0)]
+    # Testet gäller id:n, inte yrket; yrkesdragningen prövas i test_bransch.py
+    class _EttYrke:
+        @staticmethod
+        def dra(bransch, storlek, rng):
+            return "11-1011.00"
+    sb._yrken = _EttYrke()
 
     orig = sbmod.assign_deso_code
     sbmod.assign_deso_code = lambda df, zones, x_col, y_col: "Z"
@@ -588,10 +593,11 @@ def _world_with_geometry():
     diskjobb ett kirurgjobb.
     """
     import sqlite3
-    w = make_world(n_employers=1, size=4, simulation={
-        "vacancy_fill_rate": 1.0, "occupation_source": "register"})
+    w = make_world(n_employers=1, size=4, simulation={"vacancy_fill_rate": 1.0})
     w.jobs["onet_code"] = "A"
     w.jobs["r_req"] = 0.84
+    w.jobs["sni_code"] = "I"
+    w.jobs["employer_size"] = 4
     w.conn = sqlite3.connect(":memory:")
     pd.DataFrame({
         "onet_code": ["A", "B"],
@@ -600,9 +606,12 @@ def _world_with_geometry():
         "r_o": [0.27, 0.31], "w_rel": [1.80, 0.49],
         "r_req": [0.84, 0.00], "geom_source": ["occupation", "occupation"],
     }).to_sql("onet_occupation_space", w.conn, index=False)
-    pd.DataFrame({"municipal_code": ["2062"], "onet_code": ["B"],
-                  "weight": [1.0]}).to_sql(
-        "occupation_weights_by_municipality", w.conn, index=False)
+    # Arbetsställets bransch har bara yrke B (core/bransch.py)
+    pd.DataFrame({"ssyk_code": ["941"], "sni_code": ["I"],
+                  "size_class": ["1-4 anställda"], "employed": [10]}).to_sql(
+        "occupation_by_industry", w.conn, index=False)
+    pd.DataFrame({"occupation_code": ["941"], "onet_code": ["B"],
+                  "share": [1.0]}).to_sql("ssyk3_onet_crosswalk", w.conn, index=False)
     return w
 
 
@@ -710,76 +719,78 @@ def test_dirty_flag_ignores_untracked_files(tmp_path):
 # Yrkesdragningen för nypostade jobb (0053)
 # ---------------------------------------------------------------------------
 
-def _world_with_sni_source(source="sni"):
-    """Värld med SNI-struktur och SNI→O*NET-koppling i minnet.
+def _world_with_industry_occupations(utan=()):
+    """Värld med yrkesregistrets yrke x bransch x storlek och crosswalken i
+    minnet (core/bransch.py). Mallen är ett jobb hos en vårdarbetsgivare
+    (Q) med 30 anställda. I vården är två tredjedelar SSYK 532, som delas
+    lika på två O*NET-koder, och en tredjedel läkare (221). I G, bilverkstaden,
+    finns bara mekaniker (723).
 
-    Kommunen har två SNI-sektioner, Q (75 % av sysselsättningen) och F (25 %).
-    Q leder till två yrken med frekvens 3 och 1, F till ett. Väntad
-    yrkesfördelning: Q1 0.5625, Q2 0.1875, F1 0.25.
-    """
+    Väntat för mallens arbetsställe: Q1 1/3, Q2 1/3, LAK 1/3, aldrig MEK."""
     import sqlite3
-    w = make_world(n_employers=1, size=4, simulation={
-        "vacancy_fill_rate": 1.0, "occupation_source": source})
+    w = make_world(n_employers=1, size=4, simulation={"vacancy_fill_rate": 1.0})
     w.jobs["onet_code"] = "MALL"
     w.jobs["r_req"] = 0.5
+    w.jobs["sni_code"] = "Q"
+    w.jobs["employer_size"] = 30
     w.conn = sqlite3.connect(":memory:")
+    if "occupation_by_industry" not in utan:
+        pd.DataFrame({
+            "ssyk_code": ["532", "221", "723", "532"],
+            "sni_code": ["Q", "Q", "G", "Q"],
+            "size_class": ["20-49 anställda"] * 3 + ["1-4 anställda"],
+            "employed": [200, 100, 50, 7],
+        }).to_sql("occupation_by_industry", w.conn, index=False)
     pd.DataFrame({
-        "municipal_code": ["2062"] * 2, "year": [2020, 2020],
-        "sni_code": ["Q", "F"], "employed": [750, 250], "workplaces": [10, 5],
-    }).to_sql("employment_municipality_sni", w.conn, index=False)
+        "occupation_code": ["532", "532", "221", "723"],
+        "onet_code": ["Q1", "Q2", "LAK", "MEK"], "share": [0.5, 0.5, 1.0, 1.0],
+    }).to_sql("ssyk3_onet_crosswalk", w.conn, index=False)
     pd.DataFrame({
-        "sni_code": ["Q", "Q", "F"],
-        "onet_code": ["Q1", "Q2", "F1"], "freq": [3.0, 1.0, 9.0],
-    }).to_sql("sni_onet_link", w.conn, index=False)
-    pd.DataFrame({
-        "onet_code": ["Q1", "Q2", "F1", "MALL"],
-        "chi": [0.3, 0.4, 0.5, 0.2], "xi": [0.1, 1.0, 2.0, 3.0],
-        "x_occ": [0.3, -0.2, 0.1, 0.0], "y_occ": [0.1, 0.4, -0.3, 0.0],
-        "r_o": [0.27, 0.31, 0.22, 0.30], "w_rel": [1.5, 0.9, 0.7, 1.0],
-        "r_req": [0.84, 0.40, 0.15, 0.50],
-        "geom_source": ["occupation"] * 4,
+        "onet_code": ["Q1", "Q2", "LAK", "MEK", "MALL"],
+        "chi": [0.3, 0.4, 0.5, 0.2, 0.2], "xi": [0.1, 1.0, 2.0, 3.0, 3.0],
+        "x_occ": [0.3, -0.2, 0.1, 0.0, 0.0], "y_occ": [0.1, 0.4, -0.3, 0.2, 0.0],
+        "r_o": [0.27, 0.31, 0.22, 0.30, 0.30], "w_rel": [1.5, 0.9, 0.7, 1.0, 1.0],
+        "r_req": [0.84, 0.40, 0.15, 0.50, 0.50],
+        "geom_source": ["occupation"] * 5,
     }).to_sql("onet_occupation_space", w.conn, index=False)
     return w
 
 
-def test_new_jobs_draw_occupations_from_the_sni_source():
-    """REGRESSION: _draw_occupation_for_employer frågade alltid registret,
-    oavsett occupation_source. Med förvalet 'sni' saknas den tabellen, felet
-    svaldes av except Exception, och varje nytt jobb ärvde mallens yrke."""
-    w = _world_with_sni_source("sni")
-    codes, p = w._occupation_profile("2062")
-    got = dict(zip(codes, p))
-    assert got["Q1"] == pytest.approx(0.5625)
-    assert got["Q2"] == pytest.approx(0.1875)
-    assert got["F1"] == pytest.approx(0.2500)
-    assert "MALL" not in got, "mallens yrke ska inte komma ur fördelningen"
-
+def test_new_jobs_follow_the_employers_industry():
+    """Nya jobb dras ur arbetsställets bransch och storlek, inte ur kommunen
+    och inte ur mallen: läkare på vårdcentralen, aldrig på bilverkstaden."""
+    w = _world_with_industry_occupations()
     np.random.seed(0)
-    w.jobs["active"] = False
-    assert w.post_vacancies_batch(30.0) == 4
+    for m in range(1, 31):
+        w.jobs["active"] = False
+        w.post_vacancies_batch(30.0 * m)
     new = w.jobs[w.jobs["job_id"].str.startswith("N")]
-    assert set(new["onet_code"]) <= {"Q1", "Q2", "F1"}
-    assert (new["onet_code"] != "MALL").all()
+    assert len(new) >= 100
+    assert "MEK" not in set(new["onet_code"]), "en mekaniker postades i vården"
+    assert (new["onet_code"] != "MALL").all(), "mallens yrke ärvdes"
+    andel = new["onet_code"].value_counts(normalize=True)
+    assert andel.to_dict() == pytest.approx({"Q1": 1 / 3, "Q2": 1 / 3, "LAK": 1 / 3}, abs=0.1)
 
 
 def test_employer_does_not_drift_to_monoculture():
     """Mallen är sist tillagda raden, så en ärvd yrkeskod ärvs vidare och
     arbetsgivaren driver mot ett enda yrke."""
-    w = _world_with_sni_source("sni")
+    w = _world_with_industry_occupations()
     np.random.seed(3)
     for m in range(1, 16):
         w.jobs["active"] = False
         w.post_vacancies_batch(30.0 * m)
     born = w.jobs[w.jobs["job_id"].str.startswith("N")]
     assert len(born) >= 40
-    assert born["onet_code"].nunique() >= 2, "alla new_events jobb fick samma yrke"
+    assert born["onet_code"].nunique() >= 2, "alla nya jobb fick samma yrke"
 
 
-def test_missing_occupation_source_is_a_hard_error():
+def test_missing_occupation_register_is_a_hard_error():
     """En tom yrkeskälla gav tyst mallens yrke. Nu stannar den."""
-    w = _world_with_sni_source("register")      # registertabellen finns inte
-    with pytest.raises(ValueError, match="occupation_source='register'"):
-        w._occupation_profile("2062")
+    w = _world_with_industry_occupations(utan=("occupation_by_industry",))
+    w.jobs["active"] = False
+    with pytest.raises(ValueError, match="occupation_by_industry saknas"):
+        w.post_vacancies_batch(30.0)
 
 
 # ---------------------------------------------------------------------------

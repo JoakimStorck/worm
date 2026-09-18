@@ -107,3 +107,46 @@ def test_de_gamla_storleksklasserna_avvisas():
     with pytest.raises(ValueError, match="workplace_max_size"):
         sb.generate_employers_with_target_jobs(
             2024, "2062", 100, {"employer_size_distribution": {}, "allocation_order": []})
+
+
+# ---------------------------------------------------------------------------
+# Jobbets yrke givet bransch och storlek
+# ---------------------------------------------------------------------------
+
+def _yrkesdb(utan=()):
+    """Vården (Q) på små arbetsställen: bara undersköterskor (532). På stora:
+    hälften undersköterskor, hälften läkare (221). SSYK 000 (okänt) saknar
+    O*NET-koppling, och 532 delas på en kod med geometri och en utan."""
+    conn = sqlite3.connect(":memory:")
+    if "occupation_by_industry" not in utan:
+        pd.DataFrame([("532", "Q", "1-4 anställda", 40), ("532", "Q", "100+ anställda", 500),
+                      ("221", "Q", "100+ anställda", 500), ("000", "Q", "100+ anställda", 999)],
+                     columns=["ssyk_code", "sni_code", "size_class", "employed"]).to_sql(
+            "occupation_by_industry", conn, index=False)
+    pd.DataFrame([("532", "USK", 0.5), ("532", "UTAN_GEOMETRI", 0.5), ("221", "LAK", 1.0)],
+                 columns=["occupation_code", "onet_code", "share"]).to_sql(
+        "ssyk3_onet_crosswalk", conn, index=False)
+    pd.DataFrame({"onet_code": ["USK", "LAK"], "x_occ": [0.1, 0.2]}).to_sql(
+        "onet_occupation_space", conn, index=False)
+    return conn
+
+
+def test_yrket_foljer_bransch_och_storlek():
+    from core.bransch import YrkeGivetBransch
+    y = YrkeGivetBransch(_yrkesdb())
+    koder, p = y.fordelning("Q", 3)
+    assert dict(zip(koder, p)) == pytest.approx({"USK": 1.0})
+    koder, p = y.fordelning("Q", 300)
+    # 532 bär 500 * 0.5 till USK (halvan utan geometri faller), 221 bär 500
+    assert dict(zip(koder, p)) == pytest.approx({"USK": 1 / 3, "LAK": 2 / 3})
+
+
+def test_yrke_utan_underlag_kastar():
+    from core.bransch import YrkeGivetBransch
+    y = YrkeGivetBransch(_yrkesdb())
+    with pytest.raises(ValueError, match="bransch G"):
+        y.fordelning("G", 3)
+    with pytest.raises(ValueError, match="20-49"):
+        y.fordelning("Q", 30)
+    with pytest.raises(ValueError, match="occupation_by_industry saknas"):
+        YrkeGivetBransch(_yrkesdb(utan=("occupation_by_industry",)))

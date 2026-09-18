@@ -87,7 +87,10 @@ geografiskt efter zonlager och får en yrkesposition som medelvärdet av sina
 jobbs `(x_occ, y_occ)` – alltså centroiden, i linje med geometrimodellens
 definition.
 
-**Jobb** ärver sitt yrkes position och task-radie r_o.
+**Jobb** får sitt yrke ur arbetsställets bransch och storleksklass
+(`YrkeGivetBransch` i `core/bransch.py`: yrkesregistret gånger
+SSYK-O*NET-crosswalken), samma funktion vid start och för nya jobb under
+körningen, och ärver yrkets position och task-radie r_o.
 
 ---
 

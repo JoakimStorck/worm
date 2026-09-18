@@ -135,3 +135,59 @@ class Branschstruktur:
                 ut.append((bransch, storlek))
                 n += storlek
         return ut
+
+
+class YrkeGivetBransch:
+    """Jobbets yrke givet arbetsställets bransch och storleksklass.
+
+    P(O*NET | bransch, klass) = sum_ssyk P(ssyk | bransch, klass) *
+    crosswalk(ssyk -> O*NET), med P(ssyk | bransch, klass) ur rikets
+    yrkesregister (occupation_by_industry) och crosswalken ur SSYK-ISCO-
+    nyckeln och ESCO (ssyk3_onet_crosswalk). Samma register och crosswalk
+    som invånarnas yrken byggs av, så de två sidorna delar yrkesstruktur.
+
+    EN FUNKTION FÖR START OCH KÖRNING. Startens jobb drogs tidigare ur
+    sni_onet_link eller ur kommunens yrkesprofil, nya jobb under körningen
+    ur kommunens profil, och ingen av vägarna tog hänsyn till
+    arbetsställets bransch: en läkare kunde anställas på en bilverkstad.
+    Scenariobyggaren och World anropar nu båda dra().
+
+    SSYK-grupper utan O*NET-koppling -- okänt yrke (000) och de militära
+    (011, 021) -- och O*NET-koder utan geometri räknas bort och resten
+    normeras om. Saknad tabell, eller en bransch och klass utan vikt, kastar.
+    """
+
+    def __init__(self, conn):
+        for tabell in ("occupation_by_industry", "ssyk3_onet_crosswalk",
+                       "onet_occupation_space"):
+            finns = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                                 "AND name=?", (tabell,)).fetchone()
+            if finns is None:
+                raise ValueError(f"Tabellen {tabell} saknas. Jobbens yrke dras ur "
+                                 "yrkesregistret och SSYK-O*NET-crosswalken, som "
+                                 "scripts/create_database.py bygger; geometrin ur "
+                                 "scripts/load_task_geometry.py --write.")
+        df = pd.read_sql(
+            "SELECT o.sni_code, o.size_class, c.onet_code, "
+            "       SUM(o.employed * c.share) AS vikt "
+            "  FROM occupation_by_industry o "
+            "  JOIN ssyk3_onet_crosswalk c ON c.occupation_code = o.ssyk_code "
+            "  JOIN onet_occupation_space g ON g.onet_code = c.onet_code "
+            " GROUP BY 1, 2, 3", conn)
+        df = df[df["vikt"] > 0]
+        self._fordelning = {}
+        for (bransch, klass), g in df.groupby(["sni_code", "size_class"]):
+            p = g["vikt"].to_numpy(dtype=float)
+            self._fordelning[(bransch, klass)] = (g["onet_code"].to_numpy(), p / p.sum())
+
+    def fordelning(self, bransch, storlek):
+        klass = storleksklass(int(storlek))
+        try:
+            return self._fordelning[(str(bransch), klass)]
+        except KeyError:
+            raise ValueError(f"Yrkesregistret har inga anställda med O*NET-koppling "
+                             f"i bransch {bransch}, {klass}.") from None
+
+    def dra(self, bransch, storlek, rng):
+        koder, p = self.fordelning(bransch, storlek)
+        return str(koder[int(rng.choice(len(koder), p=p))])

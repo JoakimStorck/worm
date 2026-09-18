@@ -62,15 +62,25 @@ def test_saknad_kommun_kastar_med_besked():
         sb.municipality_occupational_profile("2062", 2024)
 
 
-def test_jobben_dras_ur_registret():
-    """Startens jobb ska dras ur samma profil som körningens nya jobb."""
+def test_jobben_dras_ur_branschen_inte_ur_kommunens_profil():
+    """Registret beskriver invånarna. Jobben följer arbetsställets bransch
+    och storlek (core/bransch.py) -- inte kommunens profil, som gav läkare
+    på bilverkstaden, och inte SNI-länken."""
     import geopandas as gpd
     from shapely.geometry import Point
     import core.scenariobuilder as sbmod
 
     sb = _byggare()
+    # Bilverkstaden (G) har bara 53-7062.04 i registret, fast kommunens
+    # invånare mest är 31-1131.00.
+    pd.DataFrame({"ssyk_code": ["723"], "sni_code": ["G"],
+                  "size_class": ["100+ anställda"], "employed": [10]}).to_sql(
+        "occupation_by_industry", sb.conn, index=False)
+    pd.DataFrame({"occupation_code": ["723"], "onet_code": ["53-7062.04"],
+                  "share": [1.0]}).to_sql("ssyk3_onet_crosswalk", sb.conn, index=False)
     sb.onet_space_df = sb.onet_space_df.assign(
         chi=0.3, xi=0.3, r_o=0.27, geom_source="occupation", w_rel=1.0, pi_rel=1.0)
+    sb.onet_space_df.reset_index().to_sql("onet_occupation_space", sb.conn, index=False)
 
     class _GW:
         deso_zones = None
@@ -79,12 +89,10 @@ def test_jobben_dras_ur_registret():
     sbmod.assign_deso_code = lambda df, zones, x_col, y_col: "Z"
     try:
         emp = gpd.GeoDataFrame({
-            "employer_id": ["e0"], "municipal_code": "2062", "size": [2000],
-            "sni_code": "A", "layer": "deso", "zone_code": "A",
+            "employer_id": ["e0"], "municipal_code": "2062", "size": [200],
+            "sni_code": "G", "layer": "deso", "zone_code": "A",
             "geometry": [Point(0, 0)]})
         jobs, _ = sb.generate_jobs_from_employers(emp)
     finally:
         sbmod.assign_deso_code = orig
-    andel = jobs["onet_code"].value_counts(normalize=True)
-    assert andel["31-1131.00"] == pytest.approx(0.7, abs=0.04)
-    assert andel["53-7062.04"] == pytest.approx(0.1, abs=0.03)
+    assert (jobs["onet_code"] == "53-7062.04").all()
