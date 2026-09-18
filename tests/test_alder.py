@@ -370,7 +370,7 @@ def _varld_med_individer(aldrar, statusar, simulation=None, profil=None):
             pos = w.job_index().get(jid)
             w.jobs.iat[pos, w.jobs.columns.get_loc("individual_id")] = k
             w.set_job_filled(jid, True)
-    w._active_key = np.full(n, -1, dtype=np.int64)
+    w._active_slot = np.full(n, -1, dtype=np.int64)
     w.refresh_ind()
     return w
 

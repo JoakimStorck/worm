@@ -72,7 +72,7 @@ def test_skarpningen_ar_orord():
     p = CompetenceParams(D=0.05, tau_months=6.0)
     c = _cirklar()
     c.rho2[0, 0] = 0.3
-    aktiv = np.array([c.key[0, 0]], dtype=c.key.dtype)  # cirkelns egen nyckel
+    aktiv = np.array([0])                                # cirkelns plats
     for _ in range(10):
         c.evolve(0.5, aktiv, p)
     assert c.rho2[0, 0] == pytest.approx(0.073, abs=0.01)

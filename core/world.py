@@ -756,12 +756,12 @@ class World(IndividualViews):
             except (TypeError, ValueError):
                 e = 0
             seed_circles(self.circles, i, codes[i], xs[i], ys[i], ro[i], ten[i], e, p)
-        self._active_key = np.full(len(ind), -1, dtype=np.int64)
+        self._active_slot = np.full(len(ind), -1, dtype=np.int64)
         st = ind["status"].to_numpy() if "status" in ind.columns else None
         if st is not None:
             for i in np.flatnonzero(st == "employed"):
                 if codes[i] is not None and not (isinstance(codes[i], float) and np.isnan(codes[i])):
-                    self._active_key[i] = self.circles.code(str(codes[i]))
+                    self._active_slot[i] = self.circles.latest(i, str(codes[i]))
         self._write_competence_summary()
 
     def _write_competence_summary(self):
@@ -782,26 +782,35 @@ class World(IndividualViews):
         ind["n_circles"] = self.circles.counts()
         self.refresh_ind()
 
-    def set_active_occupation(self, idx, onet_code, x, y, r_o):
-        """Anropas vid tillträde: individen arbetar nu i onet_code, och den
-        cirkeln får exponering och skärpning i kommande månadssteg."""
+    def set_active_occupation(self, idx, onet_code, x, y, r_o, continuation=False):
+        """Anropas vid tillträde. Varje anställning är en händelse och får en
+        egen cirkel utan massa; den får exponering i kommande månadssteg, och
+        alla cirklar i yrket skärps.
+
+        UNDANTAGET ÄR UPPSTARTEN (continuation). Startpopulationens
+        arbetscirkel är redan den pågående anställningen, med massa ur
+        tjänstetiden. Placeras hon vid uppstarten i samma yrke fortsätter hon
+        den, i stället för att börja om med en tom cirkel bredvid. 797 av 12 962
+        uppstartsanställningar i baslinjen (frö 1) var sådana; de övriga
+        hamnade i ett annat yrke och får en ny cirkel även här."""
         if not hasattr(self, "circles"):
             return
+        from core.occupations.competence import EMPTY
         c = self.circles
-        k = c.code(str(onet_code))
-        if not (c.key[idx] == k).any():
-            c.add(idx, str(onet_code), float(x), float(y), float(r_o) ** 2, 0.0,
-                  rho2_home=float(r_o) ** 2)
-        self._active_key[idx] = k
+        j = c.latest(idx, str(onet_code)) if continuation else EMPTY
+        if j == EMPTY:
+            j = c.add(idx, str(onet_code), float(x), float(y), float(r_o) ** 2, 0.0,
+                      rho2_home=float(r_o) ** 2)
+        self._active_slot[idx] = j
 
     def clear_active_occupation(self, idx):
-        if hasattr(self, "_active_key"):
-            self._active_key[idx] = -1
+        if hasattr(self, "_active_slot"):
+            self._active_slot[idx] = -1
 
     def evolve_competence(self, dt_years):
         if not hasattr(self, "circles"):
             return
-        self.circles.evolve(dt_years, self._active_key, self.competence_params())
+        self.circles.evolve(dt_years, self._active_slot, self.competence_params())
         self._write_competence_summary()
 
     def job_index(self):

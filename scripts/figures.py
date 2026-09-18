@@ -314,9 +314,10 @@ def fig_tenure(out):
         c = Circles(1, 12)
         seed_circles(c, 0, "A", cx, cy, ro, 0.01, 3, p)
         k = c.code("A")
+        plats = c.latest(0, "A")
         qs, ms, rs = [], [], []
         for m in range(months):
-            active = np.array([k if m < years_work * 12 else EMPTY])
+            active = np.array([plats if m < years_work * 12 else EMPTY])
             c.evolve(1 / 12, active, p)
             qs.append(float(c.competitiveness(0, [cx], [cy], [ro], p)[0]))
             j = np.flatnonzero(c.key[0] == k)

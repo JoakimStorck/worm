@@ -623,10 +623,11 @@ jämförs mot en baslinje med fem frön.
    platser när en rad blir full, och `max_circles` avvisas med besked.
    Antalet cirklar och radens bredd står på årsraden (`circles_*`) och i
    slutlägets `n_circles`.
-3. **En cirkel per händelse.** `Circles.add` slutar slå ihop på nyckel; varje
-   tillträde och varje fortbildning ger en ny cirkel. Beslutat: skärpningen
-   gäller alla cirklar i det yrke hon arbetar i, exponeringen bara den
-   pågående anställningens (`individmodell.md`, avsnitt 2).
+3. ~~**En cirkel per händelse.**~~ — gjort. `Circles.add` slår inte längre
+   ihop på nyckel; varje tillträde och varje fortbildning ger en ny cirkel.
+   Skärpningen gäller alla cirklar i det yrke hon arbetar i, exponeringen
+   bara den pågående anställningens (`individmodell.md`, avsnitt 2).
+   Uppstartens anställning i det egna startyrket fortsätter startcirkeln.
 4. **Läsare för TAB4359, TAB4360 och TAB655**, och rakingen till P(yrke |
    inriktning, nivå, ålder, kön), med kontrollerna ovan.
 5. **Massan:** `EDU_MASS` blir studietid × intensitet.

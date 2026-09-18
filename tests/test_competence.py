@@ -85,7 +85,7 @@ def test_activity_sharpens_and_accumulates():
     for _ in range(10 * 12):
         c.evolve(1 / 12, np.array([EMPTY]), p)          # tio år borta
     q_rusty = q_at(c, p)
-    k = c.code("A")
+    k = c.latest(0, "A")
     for _ in range(12):
         c.evolve(1 / 12, np.array([k]), p)              # ett år tillbaka
     assert q_at(c, p) > q_rusty + 0.2, "återupptagen aktivitet skärper inte"
@@ -106,7 +106,7 @@ def test_two_occupations_both_contribute_and_old_one_fades():
     c.add(0, "B", -0.4, 0.2, RO ** 2, 3.0, rho2_home=RO ** 2)
     qa0, qb0 = q_at(c, p), q_at(c, p, x=-0.4, y=0.2)
     assert qa0 > 0.5 and qb0 > 0.5
-    kb = c.code("B")
+    kb = c.latest(0, "B")
     for _ in range(10 * 12):
         c.evolve(1 / 12, np.array([kb]), p)             # arbetar i B
     assert q_at(c, p, x=-0.4, y=0.2) > qb0
@@ -144,11 +144,11 @@ def test_growth_leaves_everyone_else_unchanged():
         seed_circles(c, 1, "B", -0.2, 0.3, RO, 6.0, 5, p)
     b.add(0, "extra", 0.5, -0.1, 0.1, 1.0)          # bara b växer
     assert b.K > a.K
-    active = np.array([a.code("A"), a.code("B")])
-    assert b.code("A") == active[0] and b.code("B") == active[1]
+    plats_b = a.latest(1, "B")
+    assert b.latest(1, "B") == plats_b
     for _ in range(24):
-        a.evolve(1 / 12, np.array([EMPTY, active[1]]), p)
-        b.evolve(1 / 12, np.array([EMPTY, active[1]]), p)
+        a.evolve(1 / 12, np.array([EMPTY, plats_b]), p)
+        b.evolve(1 / 12, np.array([EMPTY, plats_b]), p)
     jx, jy, jro = [-0.2, 0.1, 0.4], [0.3, 0.0, -0.2], [RO, 0.3, 0.2]
     assert np.array_equal(a.competitiveness(1, jx, jy, jro, p),
                           b.competitiveness(1, jx, jy, jro, p))
@@ -165,13 +165,54 @@ def test_the_old_cap_key_is_refused():
     assert CompetenceParams.from_config({"competence": {"circle_slots": 5}}).K == 5
 
 
-def test_same_key_merges_mass_weighted():
+def test_same_key_gives_a_new_circle():
+    """En cirkel per händelse: två anställningar i samma yrke är två
+    cirklar, inte en som vuxit. Nyckeln är kategorin, platsen identiteten."""
     c = Circles(1, 12)
-    c.add(0, "A", 0.3, 0.1, 0.10, 1.0)
-    c.add(0, "A", 0.3, 0.1, 0.30, 3.0)
-    assert int((c.key[0] != EMPTY).sum()) == 1
-    assert c.mass[0, 0] == pytest.approx(4.0)
-    assert c.rho2[0, 0] == pytest.approx(0.25)
+    j1 = c.add(0, "A", 0.3, 0.1, 0.10, 1.0)
+    j2 = c.add(0, "A", 0.3, 0.1, 0.30, 3.0)
+    assert j1 != j2
+    assert int((c.key[0] != EMPTY).sum()) == 2
+    assert (c.mass[0, j1], c.rho2[0, j1]) == (1.0, 0.10)
+    assert (c.mass[0, j2], c.rho2[0, j2]) == (3.0, 0.30)
+    assert c.latest(0, "A") == j2
+    assert c.latest(0, "B") == EMPTY
+
+
+def test_exposure_goes_to_the_employment_sharpening_to_the_occupation():
+    """Återkomsten (individmodell.md, avsnitt 2): den nya anställningens
+    cirkel får massan, den gamla i samma yrke skärps utan att få massa, och
+    en cirkel i ett annat yrke diffunderar."""
+    p = CompetenceParams()
+    c = Circles(1, 12)
+    gammal = c.add(0, "A", 0.3, 0.1, 3 * RO ** 2, 8.0, rho2_home=RO ** 2)
+    annan = c.add(0, "B", -0.4, 0.2, RO ** 2, 4.0, rho2_home=RO ** 2)
+    ny = c.add(0, "A", 0.3, 0.1, RO ** 2, 0.0, rho2_home=RO ** 2)
+    m_gammal, m_annan = c.mass[0, gammal], c.mass[0, annan]
+    for _ in range(12):
+        c.evolve(1 / 12, np.array([ny]), p)
+    assert c.mass[0, ny] > 0.9, "den pågående anställningen fick ingen massa"
+    assert c.mass[0, gammal] < m_gammal, "den gamla fick massa"
+    assert c.mass[0, gammal] == pytest.approx(m_gammal * np.exp(-p.lam), rel=1e-9)
+    # skärpning mot vilaradien med tidskonstanten tau: e^-2 kvar efter ett år
+    assert c.rho2[0, gammal] == pytest.approx(
+        RO ** 2 + 2 * RO ** 2 * np.exp(-12.0 / p.tau_months), rel=1e-9), \
+        "den gamla i yrket skärptes inte"
+    assert c.rho2[0, annan] == pytest.approx(RO ** 2 + 2 * p.D, rel=1e-9), \
+        "cirkeln i ett annat yrke diffunderade inte"
+
+
+def test_return_after_years_away_restores_competence_quickly():
+    """Utan skärpning av den gamla cirkeln vore erfarenhet ingen fördel vid
+    återkomst: den nya cirkeln har efter ett halvår bara halvårets massa."""
+    c, p = _one(tenure=20)
+    for _ in range(10 * 12):
+        c.evolve(1 / 12, np.array([EMPTY]), p)          # tio år borta
+    q_rusty = q_at(c, p)
+    ny = c.add(0, "A", 0.3, 0.1, RO ** 2, 0.0, rho2_home=RO ** 2)
+    for _ in range(6):
+        c.evolve(1 / 12, np.array([ny]), p)             # ett halvår tillbaka
+    assert q_at(c, p) > q_rusty + 0.15
 
 
 def test_summary_is_sane():
@@ -207,7 +248,7 @@ def test_world_integration_circles_follow_career():
         "propensity_internal_job_change": 0.0}]).astype({"job_id": object})
     w.init_competence()
     assert hasattr(w, "circles")
-    assert w._active_key[0] == EMPTY
+    assert w._active_slot[0] == EMPTY
 
     # Ett jobb i ett ANNAT yrke, långt bort i planet
     w.jobs.loc[w.jobs.index[3], ["onet_code", "x_occ", "y_occ", "r_o"]] = ["49-9999.00", -0.5, 0.2, 0.3]
@@ -218,7 +259,7 @@ def test_world_integration_circles_follow_career():
                           "params": {"job_id": jid}}, w)
     except KeyError:
         pass                       # senare steg kräver full scenariokonfiguration
-    assert w._active_key[0] >= 0, "tillträdet aktiverade ingen cirkel"
+    assert w._active_slot[0] >= 0, "tillträdet aktiverade ingen cirkel"
     assert w.individuals.at[0, "last_onet_code"] == "49-9999.00"
 
     p = w.competence_params()
@@ -232,7 +273,7 @@ def test_world_integration_circles_follow_career():
     assert w.individuals.at[0, "x_occ"] < 0.3
 
     _become_unemployed(w, 0, 100.0)
-    assert w._active_key[0] == EMPTY
+    assert w._active_slot[0] == EMPTY
     for _ in range(120):
         w.evolve_competence(1 / 12)
     q_faded = float(w.circles.competitiveness(0, [-0.5], [0.2], [0.3], p)[0])
@@ -476,3 +517,68 @@ def test_circle_counts_reach_the_log_and_the_run_table(tmp_path):
 
     w._write_competence_summary()
     assert w.individuals["n_circles"].tolist() == [15, 3]
+
+
+def test_hires_and_training_through_the_engine():
+    """Genom motorn: uppstarten i eget yrke fortsätter startens arbetscirkel,
+    en senare anställning i samma yrke får en egen cirkel, och en
+    fortbildning lägger en cirkel på anställningens position utan att röra
+    anställningens massa."""
+    import os, sys
+    import pandas as pd
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from conftest import make_world
+    from core.event_handlers import (handle_start_job, _become_unemployed,
+                                     handle_start_internal_training)
+
+    w = make_world(n_employers=4, size=2)
+    w.individuals = pd.DataFrame([{
+        "individual_id": "i0", "status": "unemployed", "job_id": None,
+        "w_res": 0.5, "chi": 0.3, "xi": 0.3, "r_i": 0.0,
+        "x_occ": 0.3, "y_occ": 0.1, "x": 0.0, "y": 0.0,
+        "onet_code": "11-1011.00", "last_onet_code": "11-1011.00",
+        "r_o_home": 0.27, "tenure_years": 3.0, "education_level": 3,
+        "municipal_code": "2062", "propensity_start_education": 0.0,
+        "propensity_internal_training": 0.0, "propensity_quit_job": 0.0,
+        "propensity_internal_job_change": 0.0}]).astype({"job_id": object})
+    w.init_competence()
+    c = w.circles
+    start = c.latest(0, "11-1011.00")
+    assert start != EMPTY and c.counts()[0] == 3
+
+    def anstall(jobbrad, t, **params):
+        jid = w.jobs.at[jobbrad, "job_id"]
+        try:
+            handle_start_job({"time": t, "agent_id": 0, "event_type": "start_job",
+                              "params": {"job_id": jid, **params}}, w)
+        except KeyError:
+            pass                   # senare steg kräver full scenariokonfiguration
+
+    # Uppstarten i samma yrke: ingen ny cirkel, startcirkeln är aktiv
+    anstall(0, 0.0, bootstrap=True)
+    assert c.counts()[0] == 3
+    assert w._active_slot[0] == start
+
+    # Arbetslös, sedan anställd igen i samma yrke: en ny cirkel
+    _become_unemployed(w, 0, 100.0)
+    assert w._active_slot[0] == EMPTY
+    anstall(1, 200.0)
+    assert c.counts()[0] == 4
+    ny = w._active_slot[0]
+    assert ny not in (EMPTY, start) and c.latest(0, "11-1011.00") == ny
+    assert c.mass[0, ny] == 0.0
+
+    # Fortbildning: en femte cirkel på anställningens plats, samma yrke
+    for _ in range(3):
+        w.evolve_competence(1 / 12)
+    m_ny = c.mass[0, ny]
+    handle_start_internal_training({"time": 300.0, "agent_id": 0,
+                                    "event_type": "start_internal_training",
+                                    "params": {"training_years": 0.5}}, w)
+    assert c.counts()[0] == 5
+    kurs = c.latest(0, "11-1011.00")
+    assert kurs not in (ny, start)
+    assert (c.x[0, kurs], c.y[0, kurs]) == (c.x[0, ny], c.y[0, ny])
+    assert c.mass[0, kurs] == pytest.approx(0.5 * w.competence_params().a)
+    assert c.mass[0, ny] == m_ny, "fortbildningen lade massa på anställningen"
+    assert w._active_slot[0] == ny, "fortbildningen bytte aktiv cirkel"

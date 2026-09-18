@@ -90,11 +90,19 @@ Den personliga avvikelsen vid en anställning är r_o/√k, där k är antalet
 uppgifter i yrket: individen utför en delmängd av dem, och hennes centroid
 avviker därefter.
 
-*Läget i koden.* `Circles.add` slår ihop cirklar med samma nyckel, så två
-anställningar i samma yrke delar cirkel. Utbildningen är en enda cirkel
-`EDU:ℓ` för den högsta nivån, placerad på individens nuvarande yrke — en
-position som per konstruktion inte kan förklara varför hon hamnade där. Båda
-ska ändras.
+*Läget i koden.* En cirkel per händelse är infört: `Circles.add` skapar
+alltid en ny cirkel, nyckeln är kategorin (yrket, utbildningsnivån) och
+platsen i raden är cirkelns identitet. Varje tillträde och varje fortbildning
+ger en ny cirkel; fortbildningen läggs på den pågående anställningens
+position och vilaradie. Ett undantag: **uppstartens anställning i det egna
+startyrket fortsätter startcirkeln**, eftersom den redan är den pågående
+anställningen med massa ur tjänstetiden. Det gällde 797 av 12 962
+uppstartsanställningar i baslinjen. De övriga 12 165 hamnade i ett annat yrke
+än startyrket, vilket i sig är värt att förstå.
+
+Utbildningen är fortfarande en enda cirkel `EDU:ℓ` för den högsta nivån,
+placerad på individens nuvarande yrke — en position som per konstruktion
+inte kan förklara varför hon hamnade där. Det ändras i utbildningsstapeln.
 
 ### Dynamiken
 

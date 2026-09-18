@@ -90,20 +90,20 @@ class Circles:
     # ---- exponering --------------------------------------------------------
     def add(self, i: int, key, x: float, y: float, rho2: float, mass: float,
             rho2_home: float | None = None):
-        """Lägg massa på cirkeln med nyckeln key, eller skapa den. Finns den
-        redan sammanvägs radien massviktat. Är alla platser upptagna växer
-        arrayerna; ingen cirkel faller bort."""
+        """Lägg till en ny cirkel och returnera dess plats. Är alla platser
+        upptagna växer arrayerna; ingen cirkel faller bort.
+
+        EN CIRKEL PER HÄNDELSE (individmodell.md, avsnitt 2). Tidigare slogs
+        en ny cirkel ihop med en befintlig med samma nyckel: två anställningar
+        i samma yrke blev en cirkel med sammanvägd radie, och den som kom
+        tillbaka efter tio år fick den gamla massan och en radie som var ett
+        massviktat medel av den suddiga och den skarpa. Historiken ska bevaras
+        som den skedde, och att uppdelningen inte blir en premie sköter
+        unionen. Nyckeln är nu en KATEGORI -- yrket, utbildningsnivån -- och
+        platsen är cirkelns identitet. Platser fylls från vänster och töms
+        aldrig, så en högre plats är en senare händelse."""
         k = self.code(key)
         row = self.key[i]
-        hit = np.flatnonzero(row == k)
-        if hit.size:
-            j = int(hit[0])
-            m0 = self.mass[i, j]
-            tot = m0 + mass
-            if tot > 0:
-                self.rho2[i, j] = (m0 * self.rho2[i, j] + mass * rho2) / tot
-            self.mass[i, j] = tot
-            return j
         free = np.flatnonzero(row == EMPTY)
         if free.size:
             j = int(free[0])
@@ -143,21 +143,38 @@ class Circles:
         self.K += extra
 
     # ---- dynamik -----------------------------------------------------------
-    def evolve(self, dt_years: float, active_key: np.ndarray, p: CompetenceParams):
-        """En tidsstegning för hela populationen. active_key[i] är nyckelkoden
-        för individens aktiva yrke, eller EMPTY om hon inte arbetar."""
+    def evolve(self, dt_years: float, active_slot: np.ndarray, p: CompetenceParams):
+        """En tidsstegning för hela populationen. active_slot[i] är platsen för
+        den pågående anställningens cirkel, eller EMPTY om hon inte arbetar.
+
+        EXPONERING OCH SKÄRPNING SKILJS ÅT. Med en cirkel per händelse finns
+        flera cirklar i samma yrke. Ny massa går bara till den pågående
+        anställningens cirkel; skärpningen gäller ALLA cirklar i det yrke hon
+        arbetar i. Annars vore erfarenhet ingen fördel vid återkomst: den som
+        kommer tillbaka får en ny cirkel utan massa, och den gamla, som bär
+        massan, skulle fortsätta diffundera. Så länge cirklar slogs ihop på
+        nyckel skärptes den gamla på sex månader, och det beteendet behålls
+        (individmodell.md, avsnitt 2, "Återkomsten till ett tidigare yrke")."""
         occupied = self.key != EMPTY
-        active = occupied & (self.key == active_key[:, None])
+        n = self.n
+        arbetar = active_slot >= 0
+        rad = np.flatnonzero(arbetar)
+        plats = active_slot[arbetar]
+        exposed = np.zeros_like(occupied)
+        exposed[rad, plats] = True
+        active_key = np.full(n, EMPTY, dtype=self.key.dtype)
+        active_key[rad] = self.key[rad, plats]
+        sharpened = occupied & arbetar[:, None] & (self.key == active_key[:, None])
         # läckage på allt
         self.mass *= np.exp(-p.lam * dt_years)
-        # exponering på den aktiva
-        self.mass[active] += p.a * dt_years
-        # diffusion på inaktiva, skärpning på aktiva
-        inactive = occupied & ~active
+        # exponering på den pågående anställningens cirkel
+        self.mass[exposed] += p.a * dt_years
+        # diffusion på det som inte skärps, skärpning på yrkets alla cirklar
+        inactive = occupied & ~sharpened
         self.rho2[inactive] += 2.0 * p.D * dt_years
-        if active.any():
+        if sharpened.any():
             f = 1.0 - np.exp(-12.0 * dt_years / p.tau_months)
-            self.rho2[active] += f * (self.rho2_home[active] - self.rho2[active])
+            self.rho2[sharpened] += f * (self.rho2_home[sharpened] - self.rho2[sharpened])
 
         # TAK RELATIVT VILARADIEN. Diffusionen var obegränsad uppåt, och det
         # gjorde arbetslöshet till ett ABSORBERANDE tillstånd: cirkeln suddas,
@@ -314,6 +331,14 @@ class Circles:
         return (c_s * ny).sum(axis=0)
 
     # ---- sammanfattning --------------------------------------------------------
+    def latest(self, i: int, key) -> int:
+        """Platsen för den senaste cirkeln med nyckeln key, eller EMPTY."""
+        k = self.key_index.get(key)
+        if k is None:
+            return EMPTY
+        hit = np.flatnonzero(self.key[i] == k)
+        return int(hit[-1]) if hit.size else EMPTY
+
     def counts(self) -> np.ndarray:
         """Antal upptagna cirklar per individ."""
         return (self.key != EMPTY).sum(axis=1)

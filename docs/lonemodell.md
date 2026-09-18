@@ -22,9 +22,9 @@ spridning ρ² och massa m. Den fullständiga beskrivningen — vad varje slags
 händelse ger, dynamiken och varför antalet cirklar saknar tak — står i
 `individmodell.md`, avsnitt 2; utbildningens cirklar i `utbildningsmodell.md`.
 
-*Läget i koden.* Cirklar med samma nyckel slås ihop, så två anställningar i
-samma yrke delar cirkel, och utbildningen är en enda cirkel för den högsta
-nivån, placerad på individens nuvarande yrke. Antalet cirklar har inget tak;
+*Läget i koden.* Varje tillträde och fortbildning ger en egen cirkel.
+Utbildningen är en enda cirkel för den högsta nivån, placerad på individens
+nuvarande yrke. Antalet cirklar har inget tak;
 raden växer när den blir full.
 
 Dynamiken har fyra tidsskalor, alla i `core/occupations/competence.py`:

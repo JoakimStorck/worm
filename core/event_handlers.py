@@ -147,7 +147,8 @@ def handle_start_job(event, world):
     _jr = jobs.iloc[pos] if pos is not None else None
     if _jr is not None and 'onet_code' in jobs.columns:
         world.set_active_occupation(idx, _jr['onet_code'], _jr['x_occ'], _jr['y_occ'],
-                                    _jr.get('r_o', 0.27))
+                                    _jr.get('r_o', 0.27),
+                                    continuation=bool(event.get('params', {}).get('bootstrap')))
         if 'last_onet_code' in individuals.columns:
             individuals.at[idx, 'last_onet_code'] = _jr['onet_code']
     # Positionen är känd; ingen boolesk skanning behövs. Skriv kolumnvärdet,
@@ -1068,15 +1069,19 @@ def handle_end_education(event, world):
         'move': round(float(event['params'].get('move', 0.0)), 4)})
 
 def handle_start_internal_training(event, world):
-    """Intern träning = extra exponering på den aktiva cirkeln. Ett halvårs
-    massa läggs till direkt; skärpningen sköter månadssteget."""
+    """Fortbildning är en händelse och får en egen cirkel: den pågående
+    anställningens position och vilaradie, med kursens massa. Tidigare lades
+    massan på anställningens cirkel, vilket blandade ihop två händelser.
+    Cirkeln bär yrkets nyckel och skärps därför så länge hon arbetar i
+    yrket, men får ingen exponering (individmodell.md, avsnitt 2)."""
     idx = event['agent_id']
-    if hasattr(world, 'circles') and world._active_key[idx] >= 0:
-        k = int(world._active_key[idx])
-        j = np.flatnonzero(world.circles.key[idx] == k)
-        if j.size:
-            extra_years = float(event['params'].get('training_years', 0.5))
-            world.circles.mass[idx, j[0]] += world.competence_params().a * extra_years
+    j = world._active_slot[idx] if hasattr(world, 'circles') else -1
+    if j >= 0:
+        c = world.circles
+        extra_years = float(event['params'].get('training_years', 0.5))
+        c.add(idx, c.key_names[c.key[idx, j]], float(c.x[idx, j]), float(c.y[idx, j]),
+              float(c.rho2_home[idx, j]), world.competence_params().a * extra_years,
+              rho2_home=float(c.rho2_home[idx, j]))
     world.event_logger.log_event(world, event, extra={'event_detail': 'start_internal_training'})
 
     if world.get_ind(idx, 'status') == 'employed' and np.random.rand() < 0.15:

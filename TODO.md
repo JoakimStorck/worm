@@ -13,7 +13,7 @@ beroenden. Steg 1 (`_union`) är gjort i f4d2c03. Nästa:
 - [x] Steg 0: baslinjen, fem frön på Ovansiljan (0b23237). Avläsningen står i
       byggordningen.
 - [x] Steg 2: inget tak på antalet cirklar.
-- [ ] Steg 3: en cirkel per händelse, med skärpning av alla cirklar i yrket.
+- [x] Steg 3: en cirkel per händelse, med skärpning av alla cirklar i yrket.
 
 Inträdet på arbetsmarknaden (arbetskraften krymper tre procent per år) byggs
 som steg 6b, efter utbildningsstapeln: inträdarens cirkel är utbildningens.
