@@ -1,8 +1,9 @@
-> **Observera.** Avsnitten om matchning och lön nedan beskriver formler från
-> före 0049 och 0061. Den gällande beskrivningen av kompetens, matchning och
+> **Observera.** Avsnitten om matchning och lön (4–5) beskriver formler från
+> före 0049 och 0061. Den gällande beskrivningen av matchning och
 > lönebildning — hur de fungerar, vad som är prövat, och ordningen på det som
-> återstår — finns i [`lonemodell.md`](lonemodell.md). Avsnitt 10 här bär
-> arbetsreglerna.
+> återstår — finns i [`lonemodell.md`](lonemodell.md). Avsnitt 2 (kompetensen)
+> och 7 (utbildningen) är aktuella; där koden ännu inte följer dem står det
+> under *Läget i koden*. Avsnitt 10 bär arbetsreglerna.
 
 # Individmodellen — arbetarens representation i uppgiftsrummet
 
@@ -48,89 +49,187 @@ geometrisk storhet.
 ## 2. Individen som överlagrade cirklar
 
 Individen är inte en punkt med radie. Hon är en **samling cirklar**, en per
-erfarenhet, och summan av dem är ett fält över uppgiftsskivan. Cirkeln är
-samma primitiv som papper 1 bygger yrken av — centroid plus radie — så
-individen är gjord av samma delar som rummet hon rör sig i. Papper 2:s mått
+händelse i karriären, och tillsammans bildar de ett fält över uppgiftsskivan.
+Cirkeln är samma primitiv som papper 1 bygger yrken av — centroid plus radie —
+så individen är gjord av samma delar som rummet hon rör sig i. Papper 2:s mått
 på överlapp mellan yrken, R_a + R_b − d_ab, är cirkelöverlappet; individens
 konkurrenskraft i ett jobb är dess mjuka form.
 
 ### Cirkeln
 
-Varje cirkel k har centrum (x_k, y_k), radie ρ_k, massa m_k och en nyckel:
-det yrke eller den utbildning den kommer från. En individ har högst ett tiotal
-cirklar; tolv är taket, och den med minst massa faller bort om det nås.
+Varje cirkel k har centrum (x_k, y_k), radie ρ_k, massa m_k och en vilaradie
+ρ_home som den skärps mot när den används. Storheterna definieras av vad de
+gör i konkurrenskraften nedan: **centrum** är var toppen ligger, **radien**
+avväger topp mot räckvidd, **massan** avgör hur mycket cirkeln räknas alls.
 
-| Ursprung | Centrum | Radie | Massa |
+### En cirkel per händelse
+
+**Varje händelse i en individs karriär, från grundskola till pension, ger en
+egen cirkel.** Två anställningar i samma yrke är två cirklar, inte en som
+vuxit. Historiken bevaras som den skedde. Att uppdelningen i sig inte blir en
+premie är unionens sak (nedan), inte lagringens.
+
+| Händelse | Centrum | Radie | Massa |
 |---|---|---|---|
 | Grundskola | origo | 1 (hela skivan) | låg, lika för alla |
-| Gymnasium | programmets riktning | bred | måttlig |
-| Högskola | programmets riktning | smalare | högre |
-| Arbete i yrke o | yrkets centroid + personlig avvikelse | r_o | växer med tid i yrket |
+| Allmän utbildning | origo | 1 | studietid × intensitet |
+| Utbildning med inriktning | dragen yrkesposition | efter nivå: bred gymnasial, nära r_o eftergymnasial | studietid × intensitet |
+| Anställning i yrke o | yrkets centroid + personlig avvikelse | r_o | växer under anställningen |
+| Fortbildning | den pågående anställningens position | r_o | kursens tid × intensitet |
+| Omskolning | dragen målposition | som utbildning | studietid × intensitet |
+
+Hur utbildningarnas cirklar placeras, och varför, står i
+`utbildningsmodell.md`. Kort: inriktningen ger positionen, nivån ger radie och
+massa, och positionen **dras** ur det observerade yrkesutfallet i stället för
+att tas som dess medelpunkt. Djup är radie och massa, inte χ (avsnitt 1).
 
 Grundskolan är ett golv: ingen riktning, låg massa överallt. Den som föds kan
-bli vad som helst och är ingenting än. Programriktningar för gymnasium och
-högskola kräver att utbildningar positioneras i skivan, vilket är samma
-projektionsproblem som för yrken; tills det är gjort används yrkets riktning
-som proxy.
+bli vad som helst och är ingenting än.
 
-Den personliga avvikelsen vid inträde i ett yrke är r_o/√k, där k är antalet
+Den personliga avvikelsen vid en anställning är r_o/√k, där k är antalet
 uppgifter i yrket: individen utför en delmängd av dem, och hennes centroid
-avviker därefter. Det ersätter den hårdkodade jitterparametern med en
-härledning som skalar med yrket.
+avviker därefter.
+
+*Läget i koden.* `Circles.add` slår ihop cirklar med samma nyckel, så två
+anställningar i samma yrke delar cirkel. Utbildningen är en enda cirkel
+`EDU:ℓ` för den högsta nivån, placerad på individens nuvarande yrke — en
+position som per konstruktion inte kan förklara varför hon hamnade där. Båda
+ska ändras.
 
 ### Dynamiken
 
-Tre processer, med tre parametrar som var och en har en tidsskala.
+Fyra processer, samma för alla cirklar oavsett ursprung.
 
-**Exponering.** Arbete i yrke o lägger massa på o:s cirkel med takten a per
-år; finns ingen sådan cirkel skapas den. Avslutad utbildning lägger till en
-cirkel med programmets position och massa lika med studietiden gånger a.
+**Exponering.** Den aktiva cirkeln — den pågående anställningens — får massa
+med takten a per år.
 
-**Läckage.** All massa avtar med takten λ: dm/dt = −λm. Halveringstiden är
-decennier. Läckaget gör två saker med en parameter: det gallrar det gamla, och
-det **mättar** massan under aktivitet, eftersom dm/dt = a − λm går mot a/λ.
-Utan läckage skulle en stor massa göra diffusionen verkningslös — en snickare
-med fyrtio år bakom sig skulle vara fullt konkurrenskraftig efter trettio års
-uppehåll, eftersom massan äter upp utspridningen.
+**Läckage.** All massa avtar: dm/dt = −λm. Läckaget gör två saker med en
+parameter: det gallrar det gamla, och det **mättar** massan under aktivitet,
+eftersom dm/dt = a − λm går mot m\* = a/λ. Utan läckage skulle en stor massa
+göra diffusionen verkningslös — en snickare med fyrtio år bakom sig skulle
+vara fullt konkurrenskraftig efter trettio års uppehåll.
 
-**Diffusion.** En cirkel som inte används sprids: dρ²/dt = 2D. Toppen faller
-som 1/(ρ₀² + 2Dt) — brant först, sedan flackt, aldrig noll. Det är glömska
-som du beskrev den: spetsen förloras där man inte verkar, men allt finns kvar,
-alltmer diffust. Med D ≈ 0,015 per år är en cirkel som börjat vid r_o ≈ 0,27
-halvt så skarp efter fem år och utspridd över hela skivan efter trettio.
+**Diffusion.** En cirkel som inte används sprids: dρ²/dt = 2D, upp till ett
+tak på fyra gånger dess egen vilaradie i kvadrat. Det är glömska: spetsen
+förloras där man inte verkar, men allt finns kvar, alltmer diffust. Taket
+infördes när diffusionen gjorde arbetslöshet absorberande — cirkeln suddas, q
+faller, hon blir inte anställd, och skärpning kräver just den anställning hon
+inte får. Det är relativt och inte absolut, så att den som har en bred profil
+från början inte straffas av samma gräns som den med en smal.
 
-**Skärpning.** En cirkel som används dras tillbaka mot sin egen radie med
-tidskonstanten τ_s, i månader: dρ²/dt = (r_o² − ρ²)/τ_s. Den som återvänder
-till sitt gamla yrke har massan kvar men behöver några månader för att återfå
-skärpan.
+**Skärpning.** Den aktiva cirkeln dras mot sin vilaradie med tidskonstanten
+τ_s: dρ²/dt = (ρ_home² − ρ²)/τ_s. Vad som händer med en tidigare cirkel i samma
+yrke när hon återvänder dit är öppet (avsnitt 11).
 
-Samma D och λ för alla cirklar, oavsett ursprung.
-
-| Parameter | Betydelse | Skala |
+| Parameter | Betydelse | Värde |
 |---|---|---|
 | a | exponeringstakt | 1 per år (enhet) |
-| λ | läckage; ger mättnad a/λ | halveringstid ~15 år |
-| D | diffusion | spets halverad efter ~5 år |
-| τ_s | skärpning vid återupptagen aktivitet | ~6 månader |
-| m_ref | massa som ger nästan full konkurrenskraft | ~2 år |
+| λ | läckage | halveringstid 15 år; m\* = a/λ ≈ 21,6 |
+| D | diffusion | 0,004 per år; tak 4·ρ_home² |
+| τ_s | skärpning | 6 månader |
+| m_ref | massa som ger nästan full konkurrenskraft | 2 år |
+
+Vad det ger för en arbetare i ett yrke med r_o = 0,28, mätt vid hennes eget
+jobb:
+
+| Inlärning | 0,5 år | 1 år | 2 år | 5 år | 10 år | 20 år |
+|---|---|---|---|---|---|---|
+| q | 0,22 | 0,39 | 0,62 | 0,89 | 0,98 | 1,00 |
+
+| Uppehåll efter 20 år | 5 år | 10 år | 20 år | 30 år |
+|---|---|---|---|---|
+| q | 0,79 | 0,65 | 0,46 | 0,32 |
+| skärpa | 0,80 | 0,66 | 0,49 | 0,40 |
+
+Massan efter tjugo år är 13,1, långt från mättnaden; diffusionen når taket
+efter knappt trettio år.
+
+### Glömskan är läckaget — inget tak på antalet cirklar
+
+Det finns ingen gräns för hur många cirklar en individ bär. Glömska är läckage
+och diffusion, och det räcker: en cirkel som inte används förlorar massa och
+skärpa, och dess bidrag krymper utan att den behöver tas bort.
+
+Taket K = 12 som stod här kom från representationen, inte från modellen.
+Cirklarna ligger i fyllda arrayer N × K, så att månadssteget blir några
+vektoroperationer över hela populationen, och K måste då ha ett värde
+(42aeb2a). Talet var inte härlett. Så länge cirklar med samma nyckel slogs
+ihop slog det sällan till: ett tiotal är en rimlig övre gräns för hur många
+*olika* saker en människa gör. Med en cirkel per händelse räknar det i stället
+händelser och slår till mitt i karriären, och regeln "minst massa faller bort"
+blir ett modellantagande gömt i lagringen. Det första som föll vore
+grundskolan. Dess massa läcker från 1,0 till 0,63, 0,40 och 0,25 efter 10, 20
+och 30 år, och den är den enda cirkel som ger något stöd i de delar av skivan
+individen aldrig varit i.
+
+Arrayerna växer därför när en rad blir full. Blir beräkningen dyr hoppas
+cirklar vars största möjliga bidrag, (1 − e^{−m/m_ref})·skärpan, ligger under
+en tröskel över i konkurrenskraften — de tas inte bort. Tröskeln bestäms av
+vad som är mätbart i q, inte av hur många platser som råkar finnas.
+Beräkningskostnad är ett verkligt skäl, men det ska inte bestämma vad
+individen minns.
+
+*Läget i koden.* `max_circles: 12` gäller fortfarande.
 
 ### Konkurrenskraften
 
-Individens konkurrenskraft i jobb j är summan av cirklarnas bidrag:
+Varje cirkel bidrar vid jobb j med radie r_o:
 
-    q_ij = min(1, Σ_k  (1 − e^{−m_k/m_ref}) · [2r_o² / (ρ_k² + r_o²)] · exp(−d_kj² / 2γ²(ρ_k² + r_o²)))
+    c_k = (1 − e^{−m_k/m_ref}) · [2r_o²/(ρ_k² + r_o²)] · exp(−d_kj²/2γ²(ρ_k² + r_o²))
 
-Tre faktorer per cirkel. **Massan**, mättande: skillnaden mellan noll och två
-års erfarenhet är stor, mellan tio och tjugo liten. **Skärpan**: ett när
-cirkeln är lika skarp som jobbets egen radie, mot noll när den diffunderat.
-**Avståndet**: samma kärna som förut, med cirkelns radie i stället för r_i.
+Tre faktorer, var och en i [0, 1]. **Massan**, mättande: skillnaden mellan noll
+och två års erfarenhet är stor, mellan tio och tjugo liten. **Skärpan**: ett när
+cirkeln är lika bred som jobbet, lägre när den är bredare. **Avståndet**: samma
+kärna som för yrken, med cirkelns radie i bredden. Smal cirkel ger hög topp och
+kort räckvidd, bred ger låg topp och lång.
+
+Konkurrenskraften är **unionen av täckningen, inte summan** (0078). Cirklarna
+tas i fallande bidragsordning, och var och en räknas bara till den del den
+täcker något som de starkare inte redan täckte:
+
+    q_ij = Σ_k c_k · Π_{l<k} (1 − O_lk · c_l)
+
+där O_lk är Bhattacharyya-överlappet mellan cirklarna k och l, i sluten form ur
+centrum och bredder. Det finns ingen min(1, ·). En mogen cirkel på jobbet ger
+c ≈ 1, och det är en normering, inte ett tak (`lonemodell.md` 1.1).
+
+**Unionen är det som bär en cirkel per händelse.** Som summa var uppdelningen
+en premie: tjugo år delade på tre närliggande jobb gav 2,66, mot 1,00 för samma
+tjugo år i ett, och modellen divergerade. Under unionen ger två identiska mogna
+cirklar 1,00. Bredd lönar sig när en andra erfarenhet täcker uppgifter som den
+första inte täckte, och bara då — i rörligheten, inte som en stapel på ett jobb
+man redan behärskar.
+
+**Platta cirklar staplas nästan som en summa.** Unionen drar av i proportion
+till överlapp *gånger täckning*, och en cirkel med radie 1 täcker lite, så
+nästan ingenting dras av trots att överlappet är fullständigt. Allmänna
+cirklar i origo, massa 1 vardera, vid ett typiskt jobb:
+
+| Antal | 1 | 2 | 3 | 5 | 10 | *en med massa 2* |
+|---|---|---|---|---|---|---|
+| q | 0,054 | 0,105 | 0,154 | 0,243 | 0,427 | *0,087* |
+
+Varje allmän händelse höjer alltså golvet. Staplade cirklar når förbi vad en
+enda cirkel med radie 1 kan nå oavsett massa, skärpan 2r_o²/(1 + r_o²) ≈ 0,145.
+Det är avsett. Unionen läser två platta cirklar som täckning av olika
+uppgifter, och gymnasiet lär ut annat än grundskolan även om geometrin inte kan
+placera skillnaden. Två till tre allmänna steg per liv håller effekten liten.
+
+*Läget i koden.* `_union` genomför inte formeln ovan. Varje cirkel dras av bara
+mot den närmast ovanför i ordningen, och avdraget förs vidare i en kedja. Med
+dagens tre cirklar per startindivid (grundskola, `EDU:ℓ`, yrket) är felet högst
+0,009. Med en cirkel per händelse växer det: två identiska anställningar och en
+cirkel i en annan riktning gav 0,858 mot formelns 0,978, eftersom cirkeln i den
+andra riktningen drogs av för täckning den inte delar. Det ska rättas innan en
+cirkel per händelse införs. Samma docstring anger m\* = 13; med gällande
+parametrar är den 21,6.
 
 Den mogna arbetaren vid sitt eget jobb: massa över referens, ρ = r_o, d = 0,
-q = 1. **Kalibreringen mot 1,03 task-radier står**, eftersom den handlar om
-erfarna som byter. Samma person efter tjugo år borta: skärpan ≈ 0,15 — hon
-känns igen men är inte den hon var. Nybörjaren med grundskola: q ≈ 0,05
-överallt. Advokaten vid diskbänken: lite från juridikcirkeln, lite från
-golvet, och en diskcirkel som växer från första månaden.
+q ≈ 1. **Kalibreringen mot 1,03 task-radier står**, eftersom den handlar om
+erfarna som byter. Samma person efter tjugo år borta: skärpan 0,49 och q 0,46 —
+hon känns igen men är inte den hon var. Nybörjaren med enbart grundskola:
+q ≈ 0,05 överallt. Advokaten vid diskbänken: lite från juridikcirkeln, lite
+från golvet, och en diskcirkel som växer från första månaden.
 
 ### Vad detta ersätter
 
@@ -173,8 +272,8 @@ För varje par (individ, jobb) ställs två frågor.
     affär:      p_ij·Π_j ≥ max(w_res, φΠ_j)                    (deltagande)
     nivåspärr:  p_nivå(ℓ − zon, tryck)                         (steg 4)
 
-**Passformen** är konkurrenskraften q_ij ur avsnitt 2: summan av hennes
-cirklars bidrag vid jobbet. För en mogen arbetare med en cirkel reduceras
+**Passformen** är konkurrenskraften q_ij ur avsnitt 2: unionen av hennes
+cirklars täckning vid jobbet. För en mogen arbetare med en cirkel reduceras
 den till exp(−d²/2γ²(r_o² + ρ²)), och γ = 0,875 ger Rayleigh-median 1,03
 task-radier, papper 2:s observerade värde.
 
@@ -341,17 +440,36 @@ lönetillväxt över karriären (Burdett–Mortensen).
 
 ## 7. Utbildning
 
-Två former, specificerade i `utbildningsmodell.md`.
+Specificerad i `utbildningsmodell.md`. Det väsentliga:
 
-**Formell utbildning** höjer nivån ℓ stegvis, med förkunskapskrav, och öppnar
-jobb. Den rör inte geometrin.
+**Varje avslutad utbildning är en händelse och ger en cirkel**, även den
+allmänna. Utbildningen gör två saker som modellen håller isär: exponering för
+uppgiftsinnehåll, alltså cirkeln, och formell kvalifikation, alltså nivån ℓ,
+som stegvis och med förkunskapskrav öppnar jobb genom den mjuka spärren i
+avsnitt 4. En yrkesutbildning gör båda. En högskoleförberedande gör mest det
+andra.
 
-**Omskolning** flyttar positionen mot där välbetalda nåbara jobb finns, med
-varaktighet efter sträckan. Målet är en överskottsviktad tyngdpunkt av
-tillgängliga vakanser; finns inget som lönar sig sker ingen omskolning.
+**SUN klassar utbildning på två dimensioner, och de blir cirkelns storheter.**
+Inriktningen ger positionen. Nivån ger radien och massan. Djup är radie och
+massa, inte χ.
 
-Båda uppdaterar historiken vid *slutet*, genom exponering. Båda utesluter
-anställning under tiden: den som börjar studera släpper sitt utlovade jobb.
+**Trappan.** Grundskolan saknar inriktning. Gymnasiets yrkesprogram har
+inriktning, medan de högskoleförberedande klassas som allmänna. Eftergymnasial
+utbildning har nästan alltid inriktning. Allmän utbildning, på vilken nivå som
+helst, blir en cirkel i origo med radie 1, ovanpå grundskolans.
+
+**Positionen dras.** En inriktning är en fördelning över yrken, inte en plats.
+Dess medelpunkt hamnar mellan yrkena och ger en cirkel utan topp. Individen
+drar i stället ett yrke ur P(yrke | inriktning, nivå, ålder, kön) och får sin
+cirkel där. Spridningen ligger i populationen, inte i individens cirkel.
+
+**Omskolning** flyttar mot där välbetalda, nåbara jobb finns, med varaktighet
+efter sträckan. Målet ska dras bland de nåbara vakanserna. I dag är det deras
+överskottsviktade tyngdpunkt, vilket har samma fel som inriktningens
+medelpunkt.
+
+Utbildning och omskolning uppdaterar historiken vid *slutet*, genom en ny
+cirkel. Båda utesluter anställning under tiden: den som börjar studera släpper sitt utlovade jobb.
 
 ---
 
@@ -510,13 +628,25 @@ en vägg, är ett besked om att en tillståndsvariabel slutat bära information.
   om den är samma sak som k_vakans sett från andra hållet.
 - Nyckeln SUN ↔ Job Zone.
 - Form och skala för α(zon).
-- Programriktningar för gymnasium och högskola: kräver att utbildningar
-  positioneras i skivan. Yrkets riktning är proxy tills dess.
+- Utbildningscirklarna. Positionen dras ur P(yrke | inriktning, nivå), radien
+  per nivå kalibreras mot rörligheten, massan är studietid × intensitet
+  (`utbildningsmodell.md`). Inget av det är byggt; byggordningen står där.
 - Inträdet på arbetsmarknaden. Åldern finns sedan 0155 och utträdet med den,
   men ingen kommer in. Befolkningsbanan per kommun (historik plus
   framskrivning) och kohortinträdet är nästa demografiska steg, och med det
   blir arbetskraftsdeltagandet ett utfall i stället för en parameter.
-- Startpopulationens tidigare yrkescirklar. Massan ur hela arbetslivet
-  kräver dem; i dag bär individen bara sitt nuvarande yrke.
+  Inträdarens cirkel *är* utbildningens: hon kommer in med sin
+  utbildningsstapel och utan anställning. Därför byggs inträdet efter
+  utbildningscirklarna.
+- Återkomsten till ett tidigare yrke. Med en cirkel per händelse får den som
+  återvänder en ny cirkel med liten massa, medan den gamla — massan kvar,
+  spetsen borta — ligger inaktiv och skärps inte. Så länge cirklar slogs ihop
+  på nyckel skärptes den gamla på sex månader. Om skärpningen ska gälla alla
+  cirklar i det yrke hon nu arbetar i, eller bara den nya, avgör om erfarenhet
+  är en fördel vid återkomst.
+- Startpopulationens tidigare cirklar. Massan ur hela arbetslivet kräver
+  tidigare yrken; i dag bär individen bara sitt nuvarande. De lägre
+  utbildningsstegen saknas av samma skäl: SCB registrerar bara den högsta
+  utbildningen.
 - Om en spretig karriär är ett signalproblem i sig, utöver vad cirklarnas
   överlapp ger. Parkerad.
