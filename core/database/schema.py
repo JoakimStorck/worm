@@ -188,6 +188,13 @@ def create_schema(db_path="data/worm.sqlite3"):
     # kommunernas branschmix. Koderna är SSYK3 och inte O*NET: tabellen byter
     # namn till occupation_weights_by_municipality först när crosswalken
     # SSYK -> ISCO-08 -> SOC -> O*NET finns.
+    # Dagbefolkning per kommun, yrke och bransch (TAB4436, core/database/load_dagbef.py)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS employment_workplace_occupation_sni (
+            municipal_code TEXT, ssyk_code TEXT, sni_code TEXT, sex TEXT,
+            year INTEGER, employed INTEGER
+        )
+    """)
     c.execute("""
         CREATE TABLE IF NOT EXISTS occupation_by_industry (
             ssyk_code TEXT, sni_code TEXT, size_class TEXT, employed INTEGER

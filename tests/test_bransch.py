@@ -16,7 +16,8 @@ def _db(riket=None, deso=None, utan=()):
 
     Riket: Q har alla anställda på stora arbetsställen, G alla på de minsta,
     så att storleken givet branschen syns direkt. Kommunen 2062 har tre
-    gånger så många i Q som i G, plus en post med okänd bransch."""
+    gånger så många jobb i Q som i G det senaste året, plus en post med okänd
+    verksamhet (00). Ett äldre år med omvänd fördelning ska inte läsas."""
     conn = sqlite3.connect(":memory:")
     if "occupation_by_industry" not in utan:
         rader = riket or ([("221", "Q", "100+ anställda", 900)]
@@ -24,12 +25,15 @@ def _db(riket=None, deso=None, utan=()):
                              for k in KLASSER])
         pd.DataFrame(rader, columns=["ssyk_code", "sni_code", "size_class", "employed"]).to_sql(
             "occupation_by_industry", conn, index=False)
-    if "employment_deso_sni" not in utan:
-        rader = deso or [("2062A0010", "Q", 600), ("2062A0020", "Q", 300),
-                         ("2062A0010", "G", 300), ("2062A0010", "US", 500),
-                         ("2062A0010", "TOTAL", 1700), ("2034A0010", "G", 50)]
-        pd.DataFrame(rader, columns=["deso_code", "sni_code", "employed"]).to_sql(
-            "employment_deso_sni", conn, index=False)
+    if "employment_workplace_occupation_sni" not in utan:
+        rader = deso or [("2062", "Q", "1", 2024, 600), ("2062", "Q", "2", 2024, 300),
+                         ("2062", "G", "2", 2024, 300), ("2062", "00", "1", 2024, 500),
+                         ("2062", "Q", "1", 2023, 100), ("2062", "G", "1", 2023, 900),
+                         ("2034", "G", "1", 2024, 50)]
+        pd.DataFrame([(k, "522", s, kon, ar, n) for k, s, kon, ar, n in rader],
+                     columns=["municipal_code", "ssyk_code", "sni_code", "sex", "year",
+                              "employed"]).to_sql(
+            "employment_workplace_occupation_sni", conn, index=False)
     return conn
 
 
@@ -40,7 +44,7 @@ def test_storleksklasserna_har_registrets_granser():
         "100+ anställda", "100+ anställda"]
 
 
-def test_jobben_foljer_kommunens_branscher_och_okant_raknas_bort():
+def test_jobben_foljer_kommunens_branscher_senaste_aret_och_okant_raknas_bort():
     s = Branschstruktur(_db(), max_storlek=1000)
     andel = s.branschandelar("2062")
     assert andel.to_dict() == pytest.approx({"Q": 0.75, "G": 0.25})
@@ -73,7 +77,7 @@ def test_andelen_jobb_per_klass_foljer_riket():
     """Klassen dras med P(klass | bransch) / medelstorlek, så att JOBBEN och
     inte arbetsställena fördelas som i registret."""
     riket = [("111", "C", k, e) for k, e in zip(KLASSER, (100, 100, 100, 100, 100, 500))]
-    s = Branschstruktur(_db(riket=riket, deso=[("2062A0010", "C", 1)]), max_storlek=1000)
+    s = Branschstruktur(_db(riket=riket, deso=[("2062", "C", "1", 2024, 1)]), max_storlek=1000)
     df = pd.DataFrame(s.dra_arbetsstallen("2062", 400000, np.random.default_rng(7)),
                       columns=["sni", "storlek"])
     andel = df.groupby(df.storlek.map(storleksklass)).storlek.sum() / df.storlek.sum()
@@ -81,7 +85,8 @@ def test_andelen_jobb_per_klass_foljer_riket():
         [0.1, 0.1, 0.1, 0.1, 0.1, 0.5], abs=0.02)
 
 
-@pytest.mark.parametrize("tabell", ["occupation_by_industry", "employment_deso_sni"])
+@pytest.mark.parametrize("tabell", ["occupation_by_industry",
+                                    "employment_workplace_occupation_sni"])
 def test_saknad_tabell_kastar_med_besked(tabell):
     with pytest.raises(ValueError, match="create_database"):
         Branschstruktur(_db(utan=(tabell,)), max_storlek=1000)
@@ -91,7 +96,7 @@ def test_saknad_kommun_och_okand_bransch_kastar():
     s = Branschstruktur(_db(), max_storlek=1000)
     with pytest.raises(ValueError, match="saknar kommun 2039"):
         s.branschandelar("2039")
-    s2 = Branschstruktur(_db(deso=[("2062A0010", "X", 10)]), max_storlek=1000)
+    s2 = Branschstruktur(_db(deso=[("2062", "X", "1", 2024, 10)]), max_storlek=1000)
     with pytest.raises(ValueError, match="X"):
         s2.branschandelar("2062")
 

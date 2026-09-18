@@ -11,10 +11,11 @@ och inga i vård och omsorg, mot 10 och 23 procent bland invånarna.
 Nu följer JOBBEN kommunens branschfördelning, och storleken dras givet
 branschen:
 
-- Kommunens branschfördelning är employment_deso_sni summerad över
-  kommunens DeSO-områden: sysselsatta invånare per bransch
-  (nattbefolkning). Arbetsställena ligger i dagbefolkningen, så det är en
-  approximation, men den enda källan i databasen som är hel.
+- Kommunens branschfördelning är dagbefolkningen: anställda med arbetsplats
+  i kommunen per bransch (TAB4436, employment_workplace_occupation_sni).
+  Tidigare togs den ur invånarnas bransch (employment_deso_sni,
+  nattbefolkning), vilket för en utpendlingskommun lade jobben där
+  invånarna bor: Orsa fick 9,7 procent tillverkningsjobb i stället för 5,5.
 - P(storleksklass | bransch) är rikets fördelning av anställda över
   arbetsställets storleksklass, ur yrkesregistret (occupation_by_industry).
   Branschgrupperna är desamma i båda tabellerna (B+C, D+E, M+N, R+S+T+U).
@@ -44,13 +45,14 @@ STORLEKSKLASSER = (
     ("100+ anställda", 100, None),
 )
 
-# "Uppgift saknas" bär ingen information om bransch. Ett arbetsställe måste
+# "Okänd verksamhet" bär ingen information om bransch. Ett arbetsställe måste
 # ha en bransch, så andelen fördelas om över de kända.
-OKANDA = {"US", "TOTAL"}
+OKANDA = {"00"}
 
-HAMTA = ("Tabellerna byggs av scripts/create_database.py: employment_deso_sni "
-         "ur data/scb_sysselsatta_deso.csv och occupation_by_industry ur "
-         "yrkesregistret (data/TAB4347_sv.csv).")
+HAMTA = ("Tabellerna byggs av scripts/create_database.py: "
+         "employment_workplace_occupation_sni ur TAB4436 (hämtas med "
+         "python scripts/fetch_data.py --only \"dagbef yrke bransch\") och "
+         "occupation_by_industry ur yrkesregistret (data/TAB4347_sv.csv).")
 
 
 def storleksklass(n: int) -> str:
@@ -67,7 +69,7 @@ class Branschstruktur:
                              "den stänger storleksklassen 100+.")
         self.conn = conn
         self.max_storlek = int(max_storlek)
-        for tabell in ("occupation_by_industry", "employment_deso_sni"):
+        for tabell in ("occupation_by_industry", "employment_workplace_occupation_sni"):
             finns = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
                                  "AND name=?", (tabell,)).fetchone()
             if finns is None:
@@ -90,18 +92,24 @@ class Branschstruktur:
         return (self.max_storlek - lo) / np.log(self.max_storlek / lo)
 
     def branschandelar(self, municipal_code) -> pd.Series:
-        """Kommunens andel sysselsatta per bransch, okända borträknade."""
-        df = pd.read_sql("SELECT sni_code, SUM(employed) AS e FROM employment_deso_sni "
-                         "WHERE substr(deso_code, 1, 4) = ? GROUP BY 1",
+        """Kommunens andel av jobben per bransch (dagbefolkning, senaste
+        året), okänd verksamhet borträknad."""
+        df = pd.read_sql("SELECT sni_code, SUM(employed) AS e "
+                         "  FROM employment_workplace_occupation_sni "
+                         " WHERE municipal_code = ? AND year = "
+                         "       (SELECT MAX(year) FROM employment_workplace_occupation_sni) "
+                         " GROUP BY 1",
                          self.conn, params=(str(municipal_code).zfill(4),))
-        df = df[~df["sni_code"].astype(str).str.upper().isin(OKANDA)]
+        df = df[~df["sni_code"].astype(str).isin(OKANDA)]
         df = df[df["e"] > 0]
         if df.empty:
-            raise ValueError(f"employment_deso_sni saknar kommun {municipal_code}. " + HAMTA)
+            raise ValueError(f"employment_workplace_occupation_sni saknar kommun "
+                             f"{municipal_code}. " + HAMTA)
         saknas = sorted(set(df["sni_code"]) - set(self.p_klass.index))
         if saknas:
-            raise ValueError(f"Branscherna {saknas} i employment_deso_sni saknas i "
-                             "occupation_by_industry; branschgrupperna ska vara desamma.")
+            raise ValueError(f"Branscherna {saknas} i employment_workplace_occupation_sni "
+                             "saknas i occupation_by_industry; branschgrupperna ska vara "
+                             "desamma.")
         s = df.set_index("sni_code")["e"].astype(float)
         return s / s.sum()
 

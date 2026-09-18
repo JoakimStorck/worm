@@ -76,6 +76,16 @@ if file_exists(deso_emp_csv):
 else:
     log("OBS: Laddar inte sysselsatta per DeSO, filen saknas.")
 
+# Dagbefolkning per kommun, yrke och bransch (TAB4436): arbetsställenas
+# branschandelar (core/bransch.py).
+dagbef_csv = "data/Anstallda dagbef yrke bransch kommun.csv"
+if file_exists(dagbef_csv):
+    from core.database.load_dagbef import load_dagbef_yrke_bransch
+    load_dagbef_yrke_bransch(dagbef_csv, db_path=DB_PATH)
+else:
+    log("OBS: Laddar inte dagbefolkning per yrke och bransch, filen saknas. "
+        "Hämta den med: python scripts/fetch_data.py --only \"dagbef yrke bransch\"")
+
 # Ladda O*NET-data (yrken och skills)
 # O*NET:s råtabeller laddas inte längre. onet_occupations, onet_skills och
 # occupation_skill_link lästes bara av skill-PCA:n, som var uppgiftsrummet

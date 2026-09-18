@@ -31,6 +31,12 @@ Före 6a, i tur och ordning:
   - [x] a. ett svenskt yrke realiseras som en O*NET-kod per arbetsställe
   - [ ] c. yrke gånger tvåsiffrig SNI, om SCB publicerar den
   - [ ] b. kärnyrke som sätter specialistprofilen, med stödyrken kvar
+- [x] Arbetsställenas branschandelar ur dagbefolkningen (TAB4436), inte ur
+      invånarnas bransch.
+- [ ] Jobbens yrkesfördelning per kommun valideras mot TAB4436. P(yrke |
+      bransch) tas fortfarande ur riket; omprövas om avvikelsen är stor.
+- [ ] Kommunens jobbmål (jobbandelar) och TAB4436:s anställda skiljer sig:
+      Mora 9 948 mot 10 223, Orsa 2 231 mot 2 049, Älvdalen 2 933 mot 2 822.
 - [ ] `employment_municipality_sni` pensioneras, eller hämtas riktigt.
 - [ ] Ny baslinje.
 

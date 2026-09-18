@@ -79,7 +79,8 @@ undviker den förvrängning som uppstår nära origo.
 
 **Arbetsgivare** (arbetsställen) får bransch och storlek ur data
 (`core/bransch.py`). Kommunens jobbmål fördelas på branscherna efter
-invånarnas bransch (`employment_deso_sni`), och inom varje bransch dras
+dagbefolkningen, anställda med arbetsplats i kommunen (TAB4436,
+`employment_workplace_occupation_sni`), och inom varje bransch dras
 arbetsställen tills branschens mål är fyllt. Storleksklassen dras givet
 branschen ur rikets fördelning av anställda (`occupation_by_industry`), och
 `workplace_max_size` stänger den öppna klassen 100+. Arbetsgivarna placeras
