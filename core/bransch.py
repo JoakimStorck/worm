@@ -145,96 +145,168 @@ class Branschstruktur:
         return ut
 
 
-class YrkeGivetBransch:
-    """Jobbets yrke givet arbetsställets bransch och storleksklass.
+# Stödyrken: chefer (SSYK 1), administration och kundtjänst (4), städ och
+# liknande (91). De finns på alla slags arbetsställen och fördelas därför
+# utan avståndsvikt; 16,9 procent i riket, 7-35 procent per bransch.
+def ar_stodyrke(ssyk) -> bool:
+    s_ = str(ssyk)
+    return s_.startswith(("1", "4")) or s_.startswith("91")
 
-    P(O*NET | bransch, klass) = sum_ssyk P(ssyk | bransch, klass) *
-    crosswalk(ssyk -> O*NET), med P(ssyk | bransch, klass) ur rikets
-    yrkesregister (occupation_by_industry) och crosswalken ur SSYK-ISCO-
-    nyckeln och ESCO (ssyk3_onet_crosswalk). Samma register och crosswalk
-    som invånarnas yrken byggs av, så de två sidorna delar yrkesstruktur.
 
-    EN FUNKTION FÖR START OCH KÖRNING. Startens jobb drogs tidigare ur
-    sni_onet_link eller ur kommunens yrkesprofil, nya jobb under körningen
-    ur kommunens profil, och ingen av vägarna tog hänsyn till
-    arbetsställets bransch: en läkare kunde anställas på en bilverkstad.
-    Scenariobyggaren och World anropar nu båda dra().
+class Kommunprofil:
+    """Jobbens yrken ur kommunens egen profil (individmodell.md avsnitt 3,
+    "Kommunens profil i arbetsställena").
 
-    SSYK-grupper utan O*NET-koppling -- okänt yrke (000) och de militära
-    (011, 021) -- och O*NET-koder utan geometri räknas bort och resten
-    normeras om. Saknad tabell, eller en bransch och klass utan vikt, kastar.
+    VARFÖR. Rikets P(yrke | bransch) gav kommunens yrkesfördelning en gemensam
+    massa på 0,78 i median mot den faktiska, mot 0,95 för ett slumpurval av
+    samma storlek. Värst i bruksorter: Oxelösund 0,58. Modellen bygger på
+    befintliga kommuner, så de ska ha sin faktiska profil från start: en
+    kommun som domineras av en industri gör det i modellen också.
+
+    VID START, EN POOL. Kommunens jobb i bransch s får yrken ur kommunens
+    P_k(ssyk | s) (TAB4436, dagbefolkning) i heltal, så att summan över
+    arbetsställena är kommunens profil exakt. Arbetsställena tas i fallande
+    storlek; vart och ett tar först ett kärnyrke ur poolen med antalet som
+    vikt -- stålverket får troligast metallarbetarna -- och fylls sedan jobb
+    för jobb ur det som återstår, med vikten
+
+        antal * exp(-d^2 / 2 r_c^2)   för profilyrken
+        antal                          för stödyrken
+
+    där d är avståndet mellan SSYK-gruppernas tyngdpunkter i uppgiftsrummet
+    och r_c kärnans task-radie. Bredden är kärnyrkets egen radie, ingen fri
+    parameter. Spetsigheten följer av poolen: finns bara närliggande yrken i
+    kommunens bransch blir arbetsställena smala av sig själva.
+
+    UNDER KÖRNING, EN DRAGNING. Ett nytt jobb dras ur P_k(ssyk | s) med samma
+    vikt mot arbetsställets kärna. Aggregatet bevaras då i väntevärde, inte
+    exakt.
+
+    Yrken som inte kan placeras i uppgiftsrummet -- okänt yrke (0002) och
+    SSYK utan crosswalk till en O*NET-kod med geometri, som de militära --
+    räknas bort och resten normeras om. Saknad tabell, eller en kommun och
+    bransch utan yrken, kastar. Storleksklassen påverkar inte yrket: TAB4436
+    saknar den.
     """
 
-    def __init__(self, conn):
-        for tabell in ("occupation_by_industry", "ssyk3_onet_crosswalk",
+    def __init__(self, conn, ar=None):
+        for tabell in ("employment_workplace_occupation_sni", "ssyk3_onet_crosswalk",
                        "onet_occupation_space"):
             finns = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
                                  "AND name=?", (tabell,)).fetchone()
             if finns is None:
                 raise ValueError(f"Tabellen {tabell} saknas. Jobbens yrke dras ur "
-                                 "yrkesregistret och SSYK-O*NET-crosswalken, som "
-                                 "scripts/create_database.py bygger; geometrin ur "
-                                 "scripts/load_task_geometry.py --write.")
-        # Två led: P(ssyk | bransch, klass) och P(O*NET | ssyk). Produkten är
-        # samma fördelning som förut; att leden hålls isär är det som låter
-        # ett arbetsställe realisera ett svenskt yrke som EN O*NET-kod.
-        # O*NET-koder utan geometri faller i andra ledet, och ssyk-vikten
-        # skalas med den andel av crosswalken som finns kvar, så att
-        # produkten är oförändrad.
+                                 "kommunens profil i TAB4436 och SSYK-O*NET-crosswalken, "
+                                 "som scripts/create_database.py bygger; geometrin ur "
+                                 "scripts/load_task_geometry.py --write. " + HAMTA)
         cw = pd.read_sql(
-            "SELECT c.occupation_code AS ssyk, c.onet_code, c.share "
+            "SELECT c.occupation_code AS ssyk, c.onet_code, c.share, "
+            "       g.x_occ, g.y_occ, g.r_o "
             "  FROM ssyk3_onet_crosswalk c "
             "  JOIN onet_occupation_space g ON g.onet_code = c.onet_code "
             " WHERE c.share > 0", conn)
-        self._onet = {}
+        self._onet, lage = {}, {}
         for ssyk, g in cw.groupby("ssyk"):
-            p = g["share"].to_numpy(dtype=float)
-            self._onet[str(ssyk)] = (g["onet_code"].to_numpy(), p / p.sum())
-        kvar = cw.groupby("ssyk")["share"].sum()
-        reg = pd.read_sql("SELECT sni_code, size_class, ssyk_code, SUM(employed) AS e "
-                          "FROM occupation_by_industry GROUP BY 1, 2, 3", conn)
-        reg["vikt"] = reg["e"] * reg["ssyk_code"].map(kvar).fillna(0.0)
-        reg = reg[reg["vikt"] > 0]
-        self._ssyk = {}
-        for (bransch, klass), g in reg.groupby(["sni_code", "size_class"]):
-            p = g["vikt"].to_numpy(dtype=float)
-            self._ssyk[(bransch, klass)] = (g["ssyk_code"].astype(str).to_numpy(), p / p.sum())
+            w = g["share"].to_numpy(dtype=float)
+            w = w / w.sum()
+            self._onet[str(ssyk)] = (g["onet_code"].to_numpy(), w)
+            r_o = g["r_o"].to_numpy(dtype=float)
+            lage[str(ssyk)] = (float(w @ g["x_occ"].to_numpy(dtype=float)),
+                               float(w @ g["y_occ"].to_numpy(dtype=float)),
+                               float(w @ np.where(np.isfinite(r_o), r_o, 0.27)))
+        self._lage = lage
+        if ar is None:
+            ar = conn.execute("SELECT MAX(year) FROM "
+                              "employment_workplace_occupation_sni").fetchone()[0]
+        df = pd.read_sql("SELECT municipal_code, sni_code, ssyk_code, SUM(employed) AS n "
+                         "  FROM employment_workplace_occupation_sni WHERE year = ? "
+                         " GROUP BY 1, 2, 3", conn, params=(int(ar),))
+        df = df[df["ssyk_code"].astype(str).isin(lage) & (df["n"] > 0)]
+        self._p = {}
+        for (k, s_), g in df.groupby(["municipal_code", "sni_code"]):
+            n = g["n"].to_numpy(dtype=float)
+            self._p[(str(k), str(s_))] = (g["ssyk_code"].astype(str).to_numpy(), n / n.sum())
 
-    def _ssyk_fordelning(self, bransch, storlek):
-        klass = storleksklass(int(storlek))
+    # ---- underlag ----------------------------------------------------------
+    def profil(self, kommun, bransch):
         try:
-            return self._ssyk[(str(bransch), klass)]
+            return self._p[(str(kommun).zfill(4), str(bransch))]
         except KeyError:
-            raise ValueError(f"Yrkesregistret har inga anställda med O*NET-koppling "
-                             f"i bransch {bransch}, {klass}.") from None
+            raise ValueError(f"TAB4436 har inga anställda med placerbart yrke i kommun "
+                             f"{kommun}, bransch {bransch}. " + HAMTA) from None
 
-    def fordelning(self, bransch, storlek):
-        """O*NET-fördelningen för ett jobb i branschen och klassen, sett
-        över alla arbetsställen: summan över ssyk av de två leden."""
-        ssyk, ps = self._ssyk_fordelning(bransch, storlek)
-        vikt = {}
-        for s_, p_s in zip(ssyk, ps):
-            for kod, p_o in zip(*self._onet[s_]):
-                vikt[kod] = vikt.get(kod, 0.0) + p_s * p_o
-        koder = np.array(list(vikt))
-        return koder, np.array([vikt[k] for k in koder])
+    def pool(self, kommun, bransch, n: int) -> pd.Series:
+        """Heltal per yrke som summerar till n (största rest)."""
+        koder, p = self.profil(kommun, bransch)
+        exakt = p * int(n)
+        heltal = np.floor(exakt).astype(int)
+        rest = int(n) - int(heltal.sum())
+        if rest > 0:
+            heltal[np.argsort(-(exakt - heltal), kind="stable")[:rest]] += 1
+        return pd.Series(heltal, index=koder)
 
-    def dra(self, bransch, storlek, rng, realiserade=None):
-        """(ssyk, O*NET) för ett nytt jobb.
+    def _logvikt(self, koder, karna):
+        """log(avståndsvikt) mot kärnan: 0 för stödyrken och utan kärna."""
+        if karna is None:
+            return np.zeros(len(koder))
+        kx, ky, kr = self._lage[str(karna)]
+        xy = np.array([self._lage[k][:2] for k in koder])
+        d2 = (xy[:, 0] - kx) ** 2 + (xy[:, 1] - ky) ** 2
+        lv = -d2 / (2.0 * kr ** 2)
+        lv[np.array([ar_stodyrke(k) for k in koder])] = 0.0
+        return lv
 
-        realiserade är arbetsställets egna svenska yrken, ssyk -> O*NET. Har
-        arbetsstället redan yrket återanvänds dess O*NET-kod: en SSYK3-grupp
-        sprids av crosswalken på i median 19 koder med RMS 0,19 inom gruppen,
-        och utan detta blev bilverkstadens mekaniker 21 olika yrken och ett
-        arbetsställe nästan lika brett som kommunen. Över många arbetsställen
-        är fördelningen densamma som om varje jobb dragits för sig. Ett nytt
-        yrke dras ur crosswalken och läggs till i realiserade."""
-        ssyk, ps = self._ssyk_fordelning(bransch, storlek)
-        s_ = str(ssyk[int(rng.choice(len(ssyk), p=ps))])
-        if realiserade is not None and s_ in realiserade:
-            return s_, realiserade[s_]
-        koder, po = self._onet[s_]
-        kod = str(koder[int(rng.choice(len(koder), p=po))])
+    # ---- vid start: poolen fördelas ------------------------------------------
+    def fordela(self, kommun, bransch, storlekar, rng):
+        """Fördelar branschens pool på arbetsställena. Returnerar, i samma
+        ordning som storlekar, (kärna, [ssyk per jobb])."""
+        storlekar = [int(m) for m in storlekar]
+        pool = self.pool(kommun, bransch, sum(storlekar))
+        koder = pool.index.to_numpy()
+        kvar = pool.to_numpy().astype(float)
+        profil_mask = np.array([not ar_stodyrke(k) for k in koder])
+        ut = [None] * len(storlekar)
+        for i in sorted(range(len(storlekar)), key=lambda j: -storlekar[j]):
+            m = storlekar[i]
+            # kärnan är ett profilyrke; finns inga kvar har arbetsstället ingen
+            val = kvar * profil_mask
+            karna = None
+            if val.sum() > 0:
+                karna = str(koder[int(rng.choice(len(koder), p=val / val.sum()))])
+            lv = self._logvikt(koder, karna)
+            jobb = []
+            if karna is not None and m > 0:
+                j = int(np.flatnonzero(koder == karna)[0])
+                kvar[j] -= 1
+                jobb.append(karna)
+            while len(jobb) < m:
+                ok = kvar > 0
+                lw = np.where(ok, np.log(np.where(ok, kvar, 1.0)) + lv, -np.inf)
+                w = np.exp(lw - lw[ok].max())
+                j = int(rng.choice(len(koder), p=w / w.sum()))
+                kvar[j] -= 1
+                jobb.append(str(koder[j]))
+            ut[i] = (karna, jobb)
+        return ut
+
+    # ---- under körning: dragning ---------------------------------------------
+    def dra_nytt(self, kommun, bransch, karna, rng) -> str:
+        """Yrke för ett nytt jobb på ett arbetsställe med kärnan karna."""
+        koder, p = self.profil(kommun, bransch)
+        lw = np.log(p) + self._logvikt(koder, karna if karna in self._lage else None)
+        w = np.exp(lw - lw.max())
+        return str(koder[int(rng.choice(len(koder), p=w / w.sum()))])
+
+    # ---- O*NET: ett svenskt yrke är en kod per arbetsställe ------------------
+    def onet(self, ssyk, rng, realiserade=None) -> str:
+        """O*NET-koden för ssyk på ett arbetsställe. realiserade är
+        arbetsställets egna yrken, ssyk -> O*NET; har arbetsstället redan
+        yrket återanvänds koden (steg a: en SSYK3-grupp sprids av crosswalken
+        på i median 19 koder)."""
+        if realiserade is not None and ssyk in realiserade:
+            return realiserade[ssyk]
+        koder, w = self._onet[str(ssyk)]
+        kod = str(koder[int(rng.choice(len(koder), p=w))])
         if realiserade is not None:
-            realiserade[s_] = kod
-        return s_, kod
+            realiserade[ssyk] = kod
+        return kod

@@ -431,10 +431,10 @@ class ScenarioBuilder:
         # Dubbletter fick update_after_matching att falla med InvalidIndexError.
         if not hasattr(self, "_job_seq"):
             self._job_seq = 0
-        if not hasattr(self, "_yrken"):
-            from core.bransch import YrkeGivetBransch
-            self._yrken = YrkeGivetBransch(self.conn)
-        yrken = self._yrken
+        if not hasattr(self, "_profil"):
+            from core.bransch import Kommunprofil
+            self._profil = Kommunprofil(self.conn)
+        profil = self._profil
 
         # ARBETSGIVAREFFEKTEN. Pi_j = Pi_o * exp(eta_j). Utan den betalar varje
         # arbetsgivare i ett yrke exakt samma lön, och i jobb med r_j ~ 0 är
@@ -469,16 +469,24 @@ class ScenarioBuilder:
                 e += float(self.rng.normal(0.0, eta_sd))
             eta_by_employer[eid] = e
 
+        # KOMMUNENS PROFIL, EN POOL PER KOMMUN OCH BRANSCH (core/bransch.py).
+        # Branschens arbetsställen delar på kommunens yrken ur TAB4436, så att
+        # summan är kommunens profil exakt; kärnyrket sätter varje
+        # arbetsställes riktning. occupation_source gäller bara invånarna.
+        fordelat = {}
+        for (kommun, sni), grupp in employers_df.groupby(['municipal_code', 'sni_code'], sort=False):
+            for idx, (karna, ssyk_lista) in zip(
+                    grupp.index, profil.fordela(kommun, sni, grupp['size'].tolist(), self.rng)):
+                fordelat[idx] = (karna, ssyk_lista)
+
         for idx, row in employers_df.iterrows():
             geom = row['geometry']
             x, y = geom.x, geom.y
             realiserade = {}            # arbetsställets svenska yrken -> O*NET
-            for _ in range(int(row['size'])):
+            karna, ssyk_lista = fordelat[idx]
+            for ssyk_code in ssyk_lista:
                 sni = row['sni_code']
-
-                # Yrket följer arbetsställets bransch och storlek, oavsett
-                # occupation_source, som bara gäller invånarna (core/bransch.py).
-                ssyk_code, onet_code = yrken.dra(sni, row['size'], self.rng, realiserade)
+                onet_code = profil.onet(ssyk_code, self.rng, realiserade)
 
                 x_occ, y_occ, r_o, chi, xi, geom_source, wage, r_req = self.get_geom_for_onet_code(onet_code)
                 eta = float(eta_by_employer.get(row.get('employer_id', idx), 0.0))
@@ -494,6 +502,7 @@ class ScenarioBuilder:
                     "employer_size": row['size'],
                     "sni_code": sni,
                     "ssyk_code": ssyk_code,
+                    "core_ssyk": karna,
                     "onet_code": onet_code,
                     "geometry": geom,
                     "x": x,

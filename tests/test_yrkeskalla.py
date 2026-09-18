@@ -71,18 +71,19 @@ def test_jobben_dras_ur_branschen_inte_ur_kommunens_profil():
     import core.scenariobuilder as sbmod
 
     sb = _byggare()
-    # Bilverkstaden (G) har bara 53-7062.04 i registret, fast kommunens
+    # Kommunens bilverkstäder (G) har bara mekaniker (723), fast kommunens
     # invånare mest är 31-1131.00.
-    pd.DataFrame({"ssyk_code": ["723"], "sni_code": ["G"],
-                  "size_class": ["100+ anställda"], "employed": [10]}).to_sql(
-        "occupation_by_industry", sb.conn, index=False)
+    pd.DataFrame({"municipal_code": ["2062"], "ssyk_code": ["723"], "sni_code": ["G"],
+                  "sex": ["1"], "year": [2024], "employed": [10]}).to_sql(
+        "employment_workplace_occupation_sni", sb.conn, index=False)
     # Två O*NET-koder för mekanikern: arbetsstället ska välja EN av dem
     pd.DataFrame({"occupation_code": ["723", "723"],
                   "onet_code": ["53-7062.04", "11-1011.00"],
                   "share": [0.5, 0.5]}).to_sql("ssyk3_onet_crosswalk", sb.conn, index=False)
     sb.onet_space_df = sb.onet_space_df.assign(
         chi=0.3, xi=0.3, r_o=0.27, geom_source="occupation", w_rel=1.0, pi_rel=1.0)
-    sb.onet_space_df.reset_index().to_sql("onet_occupation_space", sb.conn, index=False)
+    sb.onet_space_df.reset_index().assign(r_o=0.27).to_sql(
+        "onet_occupation_space", sb.conn, index=False)
 
     class _GW:
         deso_zones = None
@@ -111,15 +112,16 @@ def test_varje_arbetsstalle_realiserar_for_sig():
     import core.scenariobuilder as sbmod
 
     sb = _byggare()
-    pd.DataFrame({"ssyk_code": ["723"], "sni_code": ["G"],
-                  "size_class": ["5-9 anställda"], "employed": [10]}).to_sql(
-        "occupation_by_industry", sb.conn, index=False)
+    pd.DataFrame({"municipal_code": ["2062"], "ssyk_code": ["723"], "sni_code": ["G"],
+                  "sex": ["1"], "year": [2024], "employed": [10]}).to_sql(
+        "employment_workplace_occupation_sni", sb.conn, index=False)
     pd.DataFrame({"occupation_code": ["723", "723"],
                   "onet_code": ["53-7062.04", "11-1011.00"],
                   "share": [0.5, 0.5]}).to_sql("ssyk3_onet_crosswalk", sb.conn, index=False)
     sb.onet_space_df = sb.onet_space_df.assign(
         chi=0.3, xi=0.3, r_o=0.27, geom_source="occupation", w_rel=1.0, pi_rel=1.0)
-    sb.onet_space_df.reset_index().to_sql("onet_occupation_space", sb.conn, index=False)
+    sb.onet_space_df.reset_index().assign(r_o=0.27).to_sql(
+        "onet_occupation_space", sb.conn, index=False)
 
     class _GW:
         deso_zones = None

@@ -30,15 +30,16 @@ Före 6a, i tur och ordning:
       "Arbetsställets yrken"), i ordningen:
   - [x] a. ett svenskt yrke realiseras som en O*NET-kod per arbetsställe
   - [ ] c. yrke gånger tvåsiffrig SNI, om SCB publicerar den
-  - [ ] b. kärnyrke som sätter specialistprofilen, med stödyrken kvar
+  - [x] b. kärnyrke som sätter specialistprofilen, med stödyrken kvar, ur
+        kommunens egen profil (individmodell.md avsnitt 3)
+- [ ] Jobbmålet per kommun ur TAB4436 i stället för jobbandelar.
+- [ ] Oberoende prövning: poolen ur 2020 mot 2024.
 - [x] Arbetsställenas branschandelar ur dagbefolkningen (TAB4436), inte ur
       invånarnas bransch.
 - [x] Jobbens yrkesfördelning per kommun valideras mot TAB4436, alla 290
       kommuner (individmodell.md avsnitt 3). Gemensam massa 0,78 i median mot
       brusgolvet 0,95; störst avvikelse i bruksorter med en dominerande
       arbetsgivare.
-- [ ] Kommunens jobbmål (jobbandelar) och TAB4436:s anställda skiljer sig:
-      Mora 9 948 mot 10 223, Orsa 2 231 mot 2 049, Älvdalen 2 933 mot 2 822.
 - [ ] `employment_municipality_sni` pensioneras, eller hämtas riktigt.
 - [ ] Ny baslinje.
 

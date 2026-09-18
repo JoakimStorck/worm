@@ -5,7 +5,12 @@ Jobbens yrkesfördelning per kommun, som mekanismen ger den, mot den faktiska
 i TAB4436 (dagbefolkning per kommun, yrke och bransch). Alla 290 kommuner:
 Ovansiljan är ett testfall, och modellen ska fungera för valfri kommun.
 
-MEKANISMEN (core/bransch.py). Kommunens jobb fördelas på branscher efter
+Skriptet mäter antagandet i den FÖRRA mekanismen, rikets P(yrke | bransch)
+(e2d7f8c-e7516ba). Sedan Kommunprofil (core/bransch.py) fördelas kommunens
+egen profil, och mot samma år är överensstämmelsen exakt; den oberoende
+prövningen är en pool ur ett annat år.
+
+DEN FÖRRA MEKANISMEN. Kommunens jobb fördelas på branscher efter
 dagbefolkningen, storleksklassen dras givet branschen ur riket, och yrket ur
 rikets P(SSYK3 | bransch, klass). I väntevärde summeras storleken bort, och
 kommunens förväntade fördelning är

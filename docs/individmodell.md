@@ -370,7 +370,7 @@ inom branschen. Men b med kärnor dragna ur riket återger kommunernas
 KLUMPIGHET, inte deras faktiska profil -- Oxelösunds stålverk blir ett
 slumpmässigt tillverkningsarbetsställe.
 
-### Kommunens profil i arbetsställena (beslutat 2026-09-18, designutkast)
+### Kommunens profil i arbetsställena (beslutat och byggt 2026-09-18)
 
 **Beslut.** Modellen bygger på befintliga kommuner och generaliserar ur
 befintlig struktur, så kommunerna ska ha sin faktiska profil från start. En
@@ -385,7 +385,9 @@ Profilen är stabil nog att bygga på. Gemensam massa bransch × yrke mellan
 Malung-Sälen 0,82, Åre 0,79, Älvdalen 0,79, Orsa 0,74. Rikets fördelning gav
 Oxelösund 0,58.
 
-**Utkast, att pröva före bygge:**
+**Konstruktionen** (`Kommunprofil` i `core/bransch.py`). Vid start en pool,
+under körning en dragning (punkt 1 och 6), bredden ur kärnans task-radie
+(punkt 3), och jobbmålet ur TAB4436 som en egen commit:
 
 1. **En pool per kommun och bransch.** Kommunens jobb i bransch s får yrken ur
    kommunens egen P_k(ssyk | s) i TAB4436, i heltal (största rest). Summan
@@ -411,6 +413,26 @@ Oxelösund 0,58.
    väntevärde; driften mäts under körningen.
 7. **Storleksklassens inverkan på yrket släpps.** TAB4436 saknar storlek.
    Arbetsställenas storlek dras fortfarande givet branschen.
+
+**Utfall** (branschernas arbetsställen och pool för hela kommunen, jobbmål
+= TAB4436:s anställda). Arbetsställenas RMS-bredd, median för dem med minst
+20 jobb, mot kommunens:
+
+| kommun | arbetsställe | kommunen | kvot |
+|---|---|---|---|
+| Oxelösund (B+C 50 %) | 0,154 | 0,398 | 0,39 |
+| Olofström (B+C 52 %) | 0,170 | 0,380 | 0,45 |
+| Åre | 0,182 | 0,326 | 0,56 |
+| Malung-Sälen | 0,210 | 0,326 | 0,64 |
+| Mora | 0,214 | 0,339 | 0,63 |
+| Orsa | 0,208 | 0,325 | 0,64 |
+| Uppsala | 0,216 | 0,315 | 0,69 |
+
+Med rikets fördelning och oberoende jobb var kvoten 0,85 i Mora. Bruksorterna
+får smalast arbetsställen, som avsett. Uppsala (114 000 jobb) fördelas på
+1,6 sekunder. Att det största arbetsstället tas först är inte prövat av något
+test; det påverkar vilket arbetsställe som får det dominerande yrket, inte
+fördelningen.
 
 **Prövningen.** Mot 2024 är valideringen inte längre oberoende, eftersom
 poolen ÄR 2024. Oberoende: bygg poolen ur 2020 och jämför med 2024, med

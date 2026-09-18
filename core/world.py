@@ -334,7 +334,7 @@ class World(IndividualViews):
         proto = jobs.drop_duplicates('employer_id', keep='last').set_index('employer_id')
         # Arbetsställets svenska yrken och deras O*NET-realisering, ur ALLA
         # dess jobb. Ett nytt jobb i ett yrke som redan finns där får samma
-        # kod (core/bransch.py, YrkeGivetBransch.dra).
+        # kod (core/bransch.py, Kommunprofil.onet).
         realiserat = {}
         if 'ssyk_code' in jobs.columns:
             har = jobs[jobs['employer_id'].isin(n_new.index) & jobs['ssyk_code'].notna()]
@@ -385,26 +385,28 @@ class World(IndividualViews):
         return len(rows)
 
     def _draw_occupation_for_employer(self, base_row, realiserade=None):
-        """Yrkeskod för ett nytt jobb: arbetsställets bransch och storlek ger
-        fördelningen, samma funktion som scenariobyggaren använder
-        (core/bransch.py).
+        """(ssyk, O*NET) för ett nytt jobb: kommunens profil i arbetsställets
+        bransch, viktad mot arbetsställets kärnyrke (core/bransch.py,
+        Kommunprofil.dra_nytt). Vid start fördelades en pool; under körning
+        dras yrket, så kommunens profil bevaras i väntevärde.
 
-        Tidigare drogs nya jobb ur KOMMUNENS yrkesfördelning, oavsett
-        arbetsställe, så en läkare kunde postas på en bilverkstad. Före det
-        ärvde de mallens yrke, och arbetsgivaren drev mot monokultur: med tio
-        procents destruktion per år var ungefär en tredjedel av beståndet
-        efter fem år kopior av ETT yrke per arbetsgivare. Mallen bär nu bara
-        branschen och storleken; yrket dras på nytt.
+        Tidigare drogs nya jobb ur KOMMUNENS yrkesfördelning oavsett
+        arbetsställe, så en läkare kunde postas på en bilverkstad, och före
+        det ärvde de mallens yrke, så arbetsgivaren drev mot monokultur. Mallen
+        bär nu bara kommun, bransch och kärna; yrket dras på nytt.
 
-        Returnerar (ssyk, O*NET). realiserade är arbetsställets svenska yrken
-        och deras O*NET-kod; ett yrke som redan finns där behåller sin kod."""
+        realiserade är arbetsställets svenska yrken och deras O*NET-kod; ett
+        yrke som redan finns där behåller sin kod."""
         if self.conn is None:                   # syntetisk värld utan databas
             return base_row.get("ssyk_code"), base_row.get("onet_code")
-        if not hasattr(self, "_yrken"):
-            from core.bransch import YrkeGivetBransch
-            self._yrken = YrkeGivetBransch(self.conn)
-        return self._yrken.dra(base_row["sni_code"], base_row["employer_size"],
-                               np.random, realiserade)
+        if not hasattr(self, "_profil"):
+            from core.bransch import Kommunprofil
+            self._profil = Kommunprofil(self.conn)
+        karna = base_row.get("core_ssyk")
+        karna = None if karna is None or (isinstance(karna, float) and np.isnan(karna)) else str(karna)
+        ssyk = self._profil.dra_nytt(base_row["municipal_code"], base_row["sni_code"],
+                                     karna, np.random)
+        return ssyk, self._profil.onet(ssyk, np.random, realiserade)
 
     def _geom_lookup(self, onet_code):
         """Yrkets geometri, pris OCH kravintensitet.

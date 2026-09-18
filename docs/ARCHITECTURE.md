@@ -88,10 +88,12 @@ geografiskt efter zonlager och får en yrkesposition som medelvärdet av sina
 jobbs `(x_occ, y_occ)` – alltså centroiden, i linje med geometrimodellens
 definition.
 
-**Jobb** får sitt yrke ur arbetsställets bransch och storleksklass
-(`YrkeGivetBransch` i `core/bransch.py`: yrkesregistret gånger
-SSYK-O*NET-crosswalken), samma funktion vid start och för nya jobb under
-körningen, och ärver yrkets position och task-radie r_o.
+**Jobb** får sitt yrke ur kommunens egen profil i arbetsställets bransch
+(`Kommunprofil` i `core/bransch.py`, TAB4436 gånger SSYK-O*NET-crosswalken):
+vid start fördelas en pool så att kommunens profil blir exakt, och varje
+arbetsställe får ett kärnyrke som dess övriga yrken viktas mot; under
+körningen dras nya jobb med samma vikt. Ett svenskt yrke realiseras som en
+O*NET-kod per arbetsställe. Jobbet ärver yrkets position och task-radie r_o.
 
 ---
 
