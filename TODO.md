@@ -53,11 +53,14 @@ Före 6a, i tur och ordning:
 - [ ] Reservoarens generering tar omkring 70 s (98 ursprungskommuner genom
       generate_individuals); många ursprung bidrar med ett fåtal personer.
 - [x] 6a-i: primingen flyttar erfarenheten till jobben (`core/priming.py`).
-- [ ] Inkörningen i arbetsmarknadens stockar: utan åldrande och inträde
-      faller arbetslösheten omkring 40 % på fyra år och pendlingen växer förbi
-      målet. Uppstartens ordning är prövad (svag, stark, mitten); resten är
-      relaxation genom jobbens omsättning. Utred takten (spår C), annars
-      uppvärmning med den riktiga simuleringen.
+- [ ] Inkörningen i arbetsmarknadens stockar (spår C, `docs/stockarna.md`):
+      utan åldrande och inträde faller arbetslösheten omkring 40 % på fyra år.
+      Det är tre fel, inte relaxation. I ordning:
+  - [ ] C1 jobbmålet räknar in vakanserna: J_data · (1 + v*), v* ur TAB6605.
+  - [ ] C2 utpendlingen som ett bestånd av platser, inte en ström av erbjudanden.
+  - [ ] C3 inpendlarnas utträde oberoende av `simulation.demografi`.
+  - [ ] C4 modellens vakansnivå (4,75 % öppna mot Dalarnas 2,03 %), och
+        därefter uppvärmningens längd.
 - [ ] Ny baslinje, efter omgivningen och inkörningen.
 
 ---

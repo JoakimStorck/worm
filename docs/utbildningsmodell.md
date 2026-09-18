@@ -343,8 +343,10 @@ någon fullständig historik byggs inte för varje individ.
   gång, svagast först i strikt ordning och ett sänkt anspråk i svansen (grenen
   `experiment/svagast-forst`). Ordningen ger lägre stockar vid start och en
   nästan platt lönespridning; resten av inkörningen, arbetslösheten ned
-  omkring 40 procent på fyra år utan demografi, är modellens egen relaxation
-  genom jobbens omsättning och nås inte med ordningen. En tidsförkortad
+  omkring 40 procent på fyra år utan demografi, nås inte med ordningen. Det
+  är inte relaxation genom jobbens omsättning, som skrevs först: vakanserna
+  sätter sig på två år, och sedan bär pendlingens stockar fallet
+  (`stockarna.md`). En tidsförkortad
   sökning (grenen `experiment/tidsforkortad-uppstart`) konvergerade först
   efter 4,5 virtuella år och tömde vakanserna, eftersom jobbflödena saknades.
 
