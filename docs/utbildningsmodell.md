@@ -720,6 +720,23 @@ jämförs mot en baslinje med fem frön.
    obetydliga cirklar behövs inte.
 4. **Läsare för TAB4359, TAB4360 och TAB655**, och rakingen till P(yrke |
    inriktning, nivå, ålder, kön), med kontrollerna ovan.
+   - **Läsarna är gjorda** (`core/database/load_utbildning.py`), år 2024, till
+     `employment_occupation_field`, `employment_occupation_level` och
+     `population_level_field`. Kontroll 1 håller exakt: de två
+     anställdatabellerna har samma 5 006 642 anställda och identiska
+     yrkestotaler i alla 2 980 celler av yrke, ålder och kön; databasbygget
+     kastar annars.
+   - Vad datan visar (dialog 2026-09-18). I TAB655 för 25–34 år är
+     förgymnasial nivå alltid allmän inriktning, och uppgift saknas på nivå
+     sammanfaller med okänd inriktning (4,4 procent). De anställda 16–24 år
+     (515 547) arbetar framför allt som butikspersonal (15,1 procent mot 5,0
+     för alla åldrar), i snabbmat och kök (8,6 mot 2,1) och som servitörer
+     (3,4 mot 0,8) -- de lågbetalda jobb som står tomma i modellen
+     (`stockarna.md`, "Rekryteringstiden per bransch").
+   - Rakingen: den tredje marginalen, nivå × inriktning, tas ur TAB655 som
+     FORM, normerad till de anställdas total, och TAB655:s 25–34 används för
+     25–29. Befolkning mot anställda och tioårsklasser mot femårsklasser står
+     kvar som skillnader, inte utjämnade.
 5. **Massan:** `EDU_MASS` blir studietid × intensitet.
 6. **Priming och inträde** ("Två situationer" ovan). Först rättas
    startens yrkeskälla. Scenariot anger `occupation_source: register`, men

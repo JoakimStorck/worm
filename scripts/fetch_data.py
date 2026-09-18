@@ -114,6 +114,26 @@ MANIFEST = [
         "query_args": {"ar": "2024"},
     },
 
+    # Tvillingen till TAB4359: yrke gånger utbildningsNIVÅ, samma anställda.
+    # Tillsammans med TAB655 underlaget för P(yrke, nivå, inriktning | ålder,
+    # kön) (docs/utbildningsmodell.md, steg 4).
+    {
+        "type": "scb_px",
+        "dest": os.path.join(DATA_DIR, "Anstallda yrke utbildningsniva.csv"),
+        "table_id": "TAB4360",
+        "query_fn": "yrke_per_utbildningsniva",
+        "query_args": {"ar": "2024"},
+    },
+    # Befolkningen per utbildningsnivå och inriktning (TAB655): den tredje
+    # marginalen och kohortandelarna för inträdet (6b).
+    {
+        "type": "scb_px",
+        "dest": os.path.join(DATA_DIR, "Befolkning utbildningsniva inriktning.csv"),
+        "table_id": "TAB655",
+        "query_fn": "befolkning_per_utbildning",
+        "query_args": {"ar": "2024"},
+    },
+
     # Anställda med arbetsplats i kommunen (DAGBEFOLKNING) efter yrke (SSYK3),
     # näringsgren (SNI 2007, grov nivå) och kön. Arbetsställenas bransch per
     # kommun, som i dag tas ur invånarnas bransch (employment_deso_sni,
@@ -570,11 +590,70 @@ def bygg_lediga_jobb_uttag(meta, ar=None):
             "selection": {"selection": val}}
 
 
+
+def _utbildningsuttag(meta, ar, dimensioner):
+    """Gemensam form för utbildningstabellerna i steg 4 (TAB4359, TAB4360,
+    TAB655): alla kategorier i dimensionerna, ett år, ett innehåll, bara
+    koder. Samma skäl som för TAB4359 ovan: ett innehåll ger ingen risk för
+    förväxlade värdekolumner, och klartext i varje cell hade bara gjort filen
+    större."""
+    dim = meta.get("dimension", {})
+
+    def kategorier(namn):
+        return list(dim.get(namn, {}).get("category", {}).get("index", {}).keys())
+
+    saknas = [d for d in dimensioner if not kategorier(d)]
+    if saknas:
+        raise ValueError(f"metadatan saknar dimensionerna {saknas}")
+    tider = kategorier("Tid")
+    tid = str(ar) if ar is not None else (tider[-1] if tider else None)
+    if tider and tid not in tider:
+        raise ValueError(f"året {tid} finns inte i tabellen ({tider[0]}-{tider[-1]})")
+    val = [{"variableCode": d, "valueCodes": kategorier(d)} for d in dimensioner]
+    val.append({"variableCode": "Tid", "valueCodes": [tid]})
+    innehall = kategorier("ContentsCode")
+    if len(innehall) != 1:
+        raise ValueError(f"väntade ett innehåll, fick {innehall}")
+    val.append({"variableCode": "ContentsCode", "valueCodes": innehall})
+    return {"params": {"lang": "sv", "outputFormat": "csv",
+                       "outputFormatParams": "UseCodes"},
+            "selection": {"selection": val,
+                          "placement": {"stub": list(dimensioner) + ["Tid"],
+                                        "heading": ["ContentsCode"]}}}
+
+
+def bygg_yrke_utbildningsniva_uttag(meta, ar=None):
+    """Anställda per yrke, utbildningsnivå (SUN 2020), ålder och kön (TAB4360).
+
+    Tvillingen till TAB4359: samma anställda, samma yrken, åldrar och kön,
+    med nivån i stället för inriktningen. Yrkestotalerna ska vara identiska
+    i de två, och det prövas när databasen byggs (docs/utbildningsmodell.md,
+    "Data för dragningen"). Nivåns åtta värden är 1-7 plus US (uppgift
+    saknas), en restpost och ingen total."""
+    return _utbildningsuttag(meta, ar, ["Yrke2012", "UtbNivaSun2020", "Alder", "Kon"])
+
+
+def bygg_befolkning_utbildning_uttag(meta, ar=None):
+    """Befolkningen 16-74 år per kön, ålder, nationell bakgrund, utbildningsnivå
+    och utbildningsinriktning (TAB655).
+
+    Den tredje marginalen, nivå gånger inriktning, och kohortandelarna för
+    inträdet. HELA BEFOLKNINGEN och TIOÅRSKLASSER, inte anställda i
+    femårsklasser som TAB4359 och TAB4360; skillnaden ska synas i läsaren,
+    inte jämnas ut. Nationell bakgrund hålls isär: en fjärdedel av 25-34-
+    åringarna är födda utomlands, och deras nivåer och okända uppgifter
+    skiljer sig."""
+    return _utbildningsuttag(meta, ar, ["Kon", "Alder", "NationellBakgrund",
+                                        "UtbildningsNiva", "UtbinriktnSUN2020"])
+
+
 QUERY_BUILDERS = {"befolkning_per_alder": bygg_befolkningsuttag,
                   "arbetskraft_per_alder": bygg_arbetskraftsuttag,
                   "yrke_per_utbildningsinriktning": bygg_yrkesutfallsuttag,
                   "dagbef_yrke_bransch": bygg_dagbef_yrke_bransch_uttag,
-                  "lediga_jobb_per_lan": bygg_lediga_jobb_uttag}
+                  "lediga_jobb_per_lan": bygg_lediga_jobb_uttag,
+                  "yrke_per_utbildningsniva": bygg_yrke_utbildningsniva_uttag,
+                  "befolkning_per_utbildning": bygg_befolkning_utbildning_uttag}
 
 
 def fetch_scb_px(item):

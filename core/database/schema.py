@@ -195,6 +195,25 @@ def create_schema(db_path="data/worm.sqlite3"):
             year INTEGER, employed INTEGER
         )
     """)
+    # Utbildningstabellerna för steg 4 (core/database/load_utbildning.py)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS employment_occupation_field (
+            ssyk_code TEXT, field TEXT, age_class TEXT, sex TEXT,
+            year INTEGER, employed INTEGER
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS employment_occupation_level (
+            ssyk_code TEXT, level TEXT, age_class TEXT, sex TEXT,
+            year INTEGER, employed INTEGER
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS population_level_field (
+            sex TEXT, age_class TEXT, background TEXT, level TEXT, field TEXT,
+            year INTEGER, population INTEGER
+        )
+    """)
     # Lediga jobb per 100 anställningar och län (TAB6605, core/database/load_lediga_jobb.py)
     c.execute("""
         CREATE TABLE IF NOT EXISTS vacancy_rate_county (

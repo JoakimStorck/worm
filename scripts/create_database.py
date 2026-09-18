@@ -86,6 +86,17 @@ else:
     log("OBS: Laddar inte dagbefolkning per yrke och bransch, filen saknas. "
         "Hämta den med: python scripts/fetch_data.py --only \"dagbef yrke bransch\"")
 
+# Utbildningstabellerna för steg 4 (TAB4359, TAB4360, TAB655): marginalerna
+# av P(yrke, nivå, inriktning | ålder, kön), docs/utbildningsmodell.md.
+from core.database.load_utbildning import FILER as UTB_FILER, load_utbildning
+utb_saknas = [f for f, _, _ in UTB_FILER.values() if not file_exists(f)]
+if not utb_saknas:
+    load_utbildning(db_path=DB_PATH)
+else:
+    log(f"OBS: Laddar inte utbildningstabellerna, filerna {utb_saknas} saknas. "
+        "Hämta dem med: python scripts/fetch_data.py --only \"Anstallda yrke utbildning\" "
+        "och --only \"Befolkning utbildning\".")
+
 # Lediga jobb per 100 anställningar och län (TAB6605): skillnaden mellan
 # pendlingsmatrisens sysselsatta och modellens positioner (docs/stockarna.md).
 lediga_csv = "data/Lediga jobb per anstallning lan.csv"
