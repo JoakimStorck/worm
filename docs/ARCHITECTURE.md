@@ -77,6 +77,10 @@ viktade yrkescentrum, och varje individ placeras vid ett centrum plus gaussisk
 jitter i planet, klippt till skivan. Att jittra kartesiskt snarare än i (χ, ξ)
 undviker den förvrängning som uppstår nära origo.
 
+**Omgivningen.** Scenariot är en region med öppen rand: in- och utpendling
+över gränsen, och senare flyttningar, går mot en diffus omgivning som
+beskrivs av data (`docs/omgivning.md`). Under uppbyggnad.
+
 **Arbetsgivare** (arbetsställen) får bransch och storlek ur data
 (`core/bransch.py`). Kommunens jobbmål fördelas på branscherna efter
 dagbefolkningen, anställda med arbetsplats i kommunen (TAB4436,

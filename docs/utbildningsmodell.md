@@ -337,7 +337,9 @@ blir därmed en validering, inte indata.
   arbetsmarknaden, genom lön och vakanser, är ett alternativ som ska utredas
   senare som en egen mekanism. Byggs det in från början finns inget att
   validera det mot.
-- **Studieorten parkeras.** Gymnasium och högre utbildning finns inte i
+- **Studieorten parkeras, och får en väg genom omgivningen**
+  (`omgivning.md`, "Flyttningar"): studieflyttningen byggs med inträdet som
+  utflyttning till omgivningen och återkomst därifrån. Gymnasium och högre utbildning finns inte i
   alla kommuner. Den som utbildar sig måste flytta eller pendla, och vissa
   kommer inte tillbaka. Det är ett för stort steg nu. Den kända följden är
   att alla som utbildar sig i modellen stannar, så att det lokala utbudet

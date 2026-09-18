@@ -32,7 +32,9 @@ Före 6a, i tur och ordning:
   - [ ] c. yrke gånger tvåsiffrig SNI, om SCB publicerar den
   - [x] b. kärnyrke som sätter specialistprofilen, med stödyrken kvar, ur
         kommunens egen profil (individmodell.md avsnitt 3)
-- [ ] Jobbmålet per kommun ur TAB4436 i stället för jobbandelar.
+- [x] ~~Jobbmålet per kommun ur TAB4436.~~ Strukits: delmatrisen var avsiktlig
+      i ett slutet scenario, och TAB4436 saknar företagarna. Ersätts av
+      omgivningen nedan.
 - [ ] Oberoende prövning: poolen ur 2020 mot 2024.
 - [x] Arbetsställenas branschandelar ur dagbefolkningen (TAB4436), inte ur
       invånarnas bransch.
@@ -41,7 +43,10 @@ Före 6a, i tur och ordning:
       brusgolvet 0,95; störst avvikelse i bruksorter med en dominerande
       arbetsgivare.
 - [ ] `employment_municipality_sni` pensioneras, eller hämtas riktigt.
-- [ ] Ny baslinje.
+- [ ] Omgivningen, regionens öppna rand (`docs/omgivning.md`): O1 underlaget,
+      O2 bokföringen, O3 inpendling och jobbmålet, O4 utpendling, O5
+      kalibrering. Före 6a; flyttningarna med 6b.
+- [ ] Ny baslinje, efter omgivningen.
 
 ---
 
