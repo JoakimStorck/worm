@@ -114,6 +114,20 @@ MANIFEST = [
         "query_args": {"ar": "2024"},
     },
 
+    # Anställda med arbetsplats i kommunen (DAGBEFOLKNING) efter yrke (SSYK3),
+    # näringsgren (SNI 2007, grov nivå) och kön. Arbetsställenas bransch per
+    # kommun, som i dag tas ur invånarnas bransch (employment_deso_sni,
+    # nattbefolkning), och kommunens P(yrke | bransch), som i dag tas ur
+    # riket (core/bransch.py). Finare SNI än grov nivå publiceras inte korsat
+    # med yrke i någon tabell.
+    {
+        "type": "scb_px",
+        "dest": os.path.join(DATA_DIR, "Anstallda dagbef yrke bransch kommun.csv"),
+        "table_id": "TAB4436",
+        "query_fn": "dagbef_yrke_bransch",
+        "query_args": {"ar": "2024"},
+    },
+
     # Stubbar – fyll i "table_query" och en "query_fn" i QUERY_BUILDERS:
     {"type": "scb_px", "dest": os.path.join(DATA_DIR, "employment_municipality_sni_2020.csv"),
      "table_query": None},
@@ -445,9 +459,80 @@ def bygg_yrkesutfallsuttag(meta, ar=None):
                                         "heading": ["ContentsCode"]}}}
 
 
+UTTAGSGRANS = 150_000
+
+
+def bygg_dagbef_yrke_bransch_uttag(meta, ar=None):
+    """Anställda med arbetsplats i regionen (dagbef) per yrke, bransch och kön
+    (TAB4436), ett år, uppdelat i flera uttag.
+
+    FÖR STORT FÖR ETT UTTAG. 314 regioner × 149 yrken × 16 branscher × 2 kön
+    är 1,5 miljoner celler per år, tio gånger uttagsgränsen. Regionerna delas
+    därför i omgångar som var och en ryms under gränsen, och fetch_scb_px
+    skriver dem till samma fil med rubriken en gång.
+
+    ALLA REGIONER, inte scenariots kommuner. Modellen ska fungera för valfri
+    kommunkombination, så filen täcker riket, länen, kommunerna och
+    restposterna ("län okänt", "kommun okänd"). Läsaren väljer.
+
+    KÖNEN HÅLLS ISÄR, som i TAB4359-uttaget: summering kan läsaren göra, det
+    omvända går inte.
+
+    KODER UTAN TEXT. Ett enda innehåll (Antal), och klartexten skulle skrivas
+    i varje cell.
+
+    FILEN, SOM DEN SER UT (2024, hämtad 2026-09-18). Rubriken är
+    Region,Yrke2012,SNI2007,Kon,Tid,000006XZ -- värdekolumnen heter efter
+    innehållskoden, inte efter året. 1 497 152 datarader, en per cell.
+    INGA TOTALRADER: regionerna är en hierarki -- 00 riket, tvåsiffriga län,
+    fyrsiffriga kommuner, 99 län okänt, 9999 kommun okänd -- och riket, summan
+    av länen och summan av de fyrsiffriga koderna är alla 5 006 642. Läsaren
+    VÄLJER nivå och summerar inte över nivåer. Restposter: yrke 0002 (okänt)
+    och SNI 00 (okänd verksamhet). Branschgrupperna är desamma som i
+    occupation_by_industry (A, B+C, D+E, ..., M+N, R+S+T+U).
+    """
+    dim = meta.get("dimension", {})
+
+    def kategorier(namn):
+        return list(dim.get(namn, {}).get("category", {}).get("index", {}).keys())
+
+    regioner = kategorier("Region")
+    yrken = kategorier("Yrke2012")
+    branscher = kategorier("SNI2007")
+    kon = kategorier("Kon")
+    if not (regioner and yrken and branscher and kon):
+        raise ValueError("metadatan saknar region, yrke, bransch eller kön")
+    tider = kategorier("Tid")
+    tid = str(ar) if ar is not None else (tider[-1] if tider else None)
+    if tider and tid not in tider:
+        raise ValueError(f"året {tid} finns inte i tabellen "
+                         f"({tider[0]}-{tider[-1]})")
+    per_region = len(yrken) * len(branscher) * len(kon)
+    steg = UTTAGSGRANS // per_region
+    if steg < 1:
+        raise ValueError(f"en region ger {per_region} celler, över gränsen {UTTAGSGRANS}")
+    innehall = kategorier("ContentsCode")
+    uttag = []
+    for i in range(0, len(regioner), steg):
+        val = [{"variableCode": "Region", "valueCodes": regioner[i:i + steg]},
+               {"variableCode": "Yrke2012", "valueCodes": yrken},
+               {"variableCode": "SNI2007", "valueCodes": branscher},
+               {"variableCode": "Kon", "valueCodes": kon},
+               {"variableCode": "Tid", "valueCodes": [tid]}]
+        if innehall:
+            val.append({"variableCode": "ContentsCode", "valueCodes": [innehall[0]]})
+        uttag.append({"selection": val,
+                      "placement": {"stub": ["Region", "Yrke2012", "SNI2007", "Kon", "Tid"],
+                                    "heading": ["ContentsCode"]}})
+    return {"params": {"lang": "sv", "outputFormat": "csv",
+                       "outputFormatParams": "UseCodes"},
+            "selections": uttag}
+
+
 QUERY_BUILDERS = {"befolkning_per_alder": bygg_befolkningsuttag,
                   "arbetskraft_per_alder": bygg_arbetskraftsuttag,
-                  "yrke_per_utbildningsinriktning": bygg_yrkesutfallsuttag}
+                  "yrke_per_utbildningsinriktning": bygg_yrkesutfallsuttag,
+                  "dagbef_yrke_bransch": bygg_dagbef_yrke_bransch_uttag}
 
 
 def fetch_scb_px(item):
@@ -478,13 +563,20 @@ def fetch_scb_px(item):
     uttag = QUERY_BUILDERS[item["query_fn"]](r.json(), ar=ar)
 
     url = f"{SCB_API2_BASE}/tables/{tabell}/data"
-    print(f"[SCB] POST {url}")
-    r = requests.post(url, params=uttag["params"], json=uttag["selection"],
-                      timeout=300)
-    _kontrollera(r, "data")
+    # Ett uttag som överstiger gränsen delas av byggaren i flera. De skrivs
+    # till samma fil, och rubrikraden tas bara ur det första; annars står den
+    # mitt i filen som en datarad.
+    delar = uttag.get("selections") or [uttag["selection"]]
     with open(item["dest"], "wb") as f:
-        f.write(_som_utf8(r))
-    print(f"  -> {item['dest']} ({len(r.content)} bytes)")
+        for n, sel in enumerate(delar, 1):
+            print(f"[SCB] POST {url}" + (f" ({n}/{len(delar)})" if len(delar) > 1 else ""))
+            r = requests.post(url, params=uttag["params"], json=sel, timeout=300)
+            _kontrollera(r, "data")
+            kropp = _som_utf8(r)
+            if n > 1:
+                kropp = kropp.split(b"\n", 1)[1] if b"\n" in kropp else b""
+            f.write(kropp)
+    print(f"  -> {item['dest']} ({os.path.getsize(item['dest'])} bytes)")
 
 
 def fetch_scb_geo(item):
