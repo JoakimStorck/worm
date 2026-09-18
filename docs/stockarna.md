@@ -337,3 +337,60 @@ arbetskraften, och de ligger utanför åldrarna som modellens mått räknar.
 **Noterat:** den som väntar på tillträde och förlorar jobbet innan
 (`job_gone_before_start`) får `unemployed_since` nollställd fast hon aldrig
 arbetade. Det gör henne till nyinskriven i måttet och i anspråkets sänkning.
+
+## C4, prövat (2026-09-18)
+
+**Bytestakten styr inte vakansnivån.** Svep av `on_the_job_search_factor`,
+fem år, frö 1, fönster 40:
+
+| faktor | byten per år | tillsättningar per besatt | öppna år 4 | utlovade år 4 | vakansens ålder, medel | u_bas år 5 |
+|---|---|---|---|---|---|---|
+| 10 | 16,2 % | 0,248 | 4,80 % | 1,74 % | 69 d | 5,98 % |
+| 14 | 13,9 % | 0,228 | 4,89 % | 1,54 % | 82 d | 5,81 % |
+| 18 | 11,7 % | 0,205 | 4,78 % | 1,31 % | 83 d | 5,58 % |
+| 24 | 10,2 % | 0,192 | 4,77 % | 1,17 % | 95 d | 5,24 % |
+
+Färre sökande anställda ger färre tillsättningar, men varje vakans väntar
+längre på sina sökande, och stocken står still. Faktorn ändras inte: den är
+satt mot sökfrekvensen (1,1 sökning per anställd och år, AKU:s nivå; se
+kommentaren i `_simulation_defaults.yml`, 0090), och bytena ska enligt samma
+beslut bäras av ingångslönens rabatt. **Att bytena är 16 procent om året mot
+omkring 10 är en egen kalibreringsfråga, utanför C4.**
+
+**Vakansstocken sätter sig fortfarande år 4–5.** Vakanser äldre än ett år är
+2–4 procent av tillsättningarna år 3–4 men 26–41 procent av vakansdagarna,
+med p99 på 1 000–1 300 dagar: positioner skapade under det första året, när
+mismatchen efter uppstarten var störst. I slutläget år 5 är bilden en annan:
+
+| fönster | öppna år 5 | varav lediga sedan t = 0 | uppstått under körningen |
+|---|---|---|---|
+| 40 | 3,74 % | 0,28 % | 3,46 % |
+| 15 | 2,16 % | 0,23 % | 1,93 % |
+
+Årsmedlen ovan överskattar därför det stationära läget, och fönstret prövas
+över tio år.
+
+## C4b: ansökningsfönstret (2026-09-18)
+
+Tio år, frö 1, medel år 5–9 (stocken har satt sig från år 5):
+
+| fönster | öppna vakanser | utlovade | u_bas |
+|---|---|---|---|
+| 40 | ~4,6 % | 1,5 % | ~5,9 % |
+| 25 | ~3,4 % | 1,9 % | ~5,3 % |
+| 20 | ~3,1 % | 1,8 % | ~4,9 % |
+| 15 | ~3,0 % | 1,5 % | ~4,5 % |
+
+SCB:s rekryteringstid (TAB4307) är lediga jobb genom nyanställningar, samma
+Littles lag som modellens öppna tid, och ligger på 32 dagar för näringslivet
+2022–2024. Med rekryteringsgraden 2,7 procent ger den en anställningstakt
+kring 0,3 per jobb och år; modellens 0,25 är i rätt storleksordning. Det var
+tiden per vakans som var för lång: 64–69 dagar med fönstret 40, omkring 45
+med 20. **Fönstret sätts till 20 dagar.** Under 20 planar nivån ut kring 3,0
+procent, och där sätts golvet av vakanser som länge saknar lämplig sökande.
+
+Kvar av skillnaden mot SCB, med fönstret 20: öppna vakanser omkring 1
+procentenhet över Dalarnas 2,03, och de utlovade positionerna, omkring 1,8
+procent av jobben, som ännu inte finns i jobbmålet (C4c). Väntan på
+lämpliga sökande är en egen fråga om mismatch, inte om rekryteringens
+tider.

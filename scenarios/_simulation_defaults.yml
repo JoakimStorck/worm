@@ -262,9 +262,16 @@ simulation:
   # och vid stängning väljs den med högst KONKURRENSKRAFT q -- inte högst
   # produktivitet p, som är identiskt ett för alla i jobb med r_j ~ 0 och
   # därför inte kan rangordna någon i just den kvartilen. Motivet är
-  # upplärningskostnad och risk, inte produktion. Fyrtio dagar svarar mot
-  # svensk praxis för annonseringstid; tillsammans med recruitment_lag ger det
-  # vakansvaraktigheten, som mäts mot svenska 30-40 dagar.
+  # upplärningskostnad och risk, inte produktion.
+  #
+  # FÖNSTRET ÄR TJUGO DAGAR, inte fyrtio (C4b, docs/stockarna.md). Fönstret
+  # öppnar vid första ansökan och är en fast minsta vakanstid: med 40 dagar
+  # var medianen vid beslut 42 och den öppna tiden enligt Littles lag 64-69
+  # dagar, mot SCB:s rekryteringstid -- lediga jobb genom nyanställningar,
+  # TAB4307 -- på 32 dagar för näringslivet 2022-2024. Öppna vakanser låg
+  # stationärt på 4,6 procent av jobben mot Dalarnas 2,03 (TAB6605). Med 20
+  # dagar blir de 3,1 procent; under 20 planar det ut kring 3,0, eftersom
+  # golvet då sätts av väntan på en lämplig sökande och inte av fönstret.
   # Tre tider, var och en med sitt skäl:
   #   application_window_days  annonsering, tills arbetsgivaren väljer
   #   hiring_decision_days     referenser, beslut, kontrakt -- gäller alla
@@ -300,7 +307,7 @@ simulation:
   on_the_job_search_ramp_days: 180
   switching_cost_share: 0.05
 
-  application_window_days: 40
+  application_window_days: 20
   hiring_decision_days: 10
   notice_period_days: 30
   min_surplus: 0.0          # acceptera om S > min_surplus

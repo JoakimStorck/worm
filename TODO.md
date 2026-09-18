@@ -66,8 +66,13 @@ Före 6a, i tur och ordning:
   - [x] C2b inpendlingen som ett bestånd av platser per par av ursprung och
         arbetskommun. Att den ska kunna växa när regionen stramas åt är en egen
         mekanism, efter inträdet och flyttningarna.
-  - [ ] C4 modellens vakansnivå (4,75 % öppna mot Dalarnas 2,03 %), och
-        därefter uppvärmningens längd.
+  - [x] Arbetslösheten mäts med SCB:s definition (BAS): hela månaden, 20–65 år.
+  - [x] C4b ansökningsfönstret 40 → 20 dagar: öppna vakanser 4,6 → 3,1 %.
+  - [ ] C4c de utlovade positionerna (~1,8 %) i jobbmålet.
+  - [ ] Väntan på lämplig sökande: golvet ~3,0 % öppna mot Dalarnas 2,03.
+  - [ ] Bytestakten 16 % mot ~10 %: bärs enligt 0090 av ingångslönens rabatt,
+        inte av on_the_job_search_factor (svepet: faktorn flyttar inte vakanserna).
+  - [ ] Uppvärmningens längd: u_bas sätter sig på omkring fem år.
 - [ ] Ny baslinje, efter omgivningen och inkörningen.
 - [ ] Genereringsfröet är scenariofilens `seed`, inte `WORM_SEED`: baslinjens
       frön delar en värld och underskattar spridningen (±100 arbetslösa vid
