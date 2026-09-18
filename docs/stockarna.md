@@ -246,3 +246,43 @@ inträdet och flyttningarna finns. Fem år, frö 1 (`output/run_20260918_221128`
 Båda pendlingsstockarna står still vid 96–97 procent av matrisen från år 2.
 Det som rör sig är vakanserna, som invånarna nu fyller i stället för
 inpendlarna, och de faller fortfarande omkring 100 om året. Det är C4.
+
+## C4: vakansnivån, mätt (2026-09-18)
+
+C3-körningen, år 3–4 (C2b ändrar inte vakansernas mekanik):
+
+| | modellen |
+|---|---|
+| tillsättningar i regionen | 3 681 om året, 0,226 per besatt jobb |
+| varav vinnaren anställd (byte) | 60 procent |
+| vakansens ålder vid beslut | p10 40, median 42, medel 61, p90 63 dagar |
+| väntan till första sökande | median 2, medel 21 dagar |
+| öppen tid (Littles lag) | 64 dagar |
+| utlovad tid (beslut + uppsägning) | 26 dagar |
+
+**Den öppna tiden är nästan helt parametrar.** Annonsen öppnar vid första
+ansökan och stänger efter `application_window_days` = 40: medianen 42 är
+fönstret. Medlet dras upp av en svans som väntar länge på första sökande.
+
+**Vad data kräver.** Med SCB:s 2,03 procent och modellens anställningstakt
+0,226 blir den öppna tiden 0,0203/0,226 · 365 ≈ 33 dagar, hälften av
+modellens. Anställningstakten själv är inte prövad mot data: SCB:s
+statistikdatabas har ingen tabell över nyanställningar eller jobbflöden.
+
+**Rekryteringen börjar för sent.** Vid ett byte behåller den som går sitt jobb
+under uppsägningstiden, och positionen blir ledig först när hon tillträder
+det nya -- först då öppnar annonsen. I verkligheten rekryterar arbetsgivaren
+under uppsägningstiden, och SCB räknar en befattning som "snart blir ledig"
+som ett ledigt jobb. 60 procent av tillsättningarna är byten, så varje byte
+ger en kedja av tomma positioner som i verkligheten till stor del överlappar.
+
+Tre spakar, i den ordning de bör prövas:
+1. **Rekrytering under uppsägningstiden.** Annonsen öppnar när uppsägningen
+   lämnas, inte när positionen blir tom. Strukturell, och den gör modellens
+   lediga jobb jämförbara med SCB:s begrepp.
+2. **Ansökningsfönstret.** 40 dagar är en fast minsta vakanstid. Kortare, eller
+   ett löpande urval, men först efter 1: fönstret överlappar då
+   uppsägningstiden.
+3. **Bytestakten.** 60 procent av 0,226 är 0,136 byten per jobb och år; TODO
+   anger omkring 10 procent som mål (`on_the_job_search_factor`). Fler byten
+   ger fler kedjor av vakanser.
