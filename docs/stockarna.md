@@ -325,10 +325,14 @@ Skillnaden i slutläget för svepet i C4 (fem år, frö 1):
 BAS utanför arbetskraften; modellen har ingen sådan skillnad, så dess tal är
 en övre gräns för BAS.
 
-**Kvar på datasidan:** arbetskraften räknas bakåt som L = syss / (1 − u) med
+**På datasidan:** arbetskraften räknas bakåt som L = syss / (1 − u) med
 syss för 15–74 år ur pendlingsmatrisen och u för 20–65 ur
-arbetsmarknadsstatusen. Åldersklasserna finns i TAB2921, som redan hämtas för
-deltagandet; att ta u därifrån för 15–74 är en egen rättelse.
+arbetsmarknadsstatusen. Det går inte att rätta med ett u för 15–74: BAS
+redovisar arbetslösa bara för 20–65 (TAB2921 har ".." för 15–74, 15–19 och
+65–74), eftersom begreppet vilar på inskrivningen. Strikt vore L = syss +
+syss(20–65) · u/(1 − u); skillnaden för Ovansiljan är omkring 54 arbetslösa
+(1 893 sysselsatta utanför 20–65 gånger 2,8 procent), 0,3 procent av
+arbetskraften, och de ligger utanför åldrarna som modellens mått räknar.
 
 **Noterat:** den som väntar på tillträde och förlorar jobbet innan
 (`job_gone_before_start`) får `unemployed_since` nollställd fast hon aldrig
