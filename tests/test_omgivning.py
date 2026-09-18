@@ -464,3 +464,18 @@ def test_extern_ar_alltid_boolesk():
     w.individuals = _personer(["unemployed", "extern"], [np.nan, True])
     w.prepare()
     assert w.individuals["extern"].tolist() == [False, True]
+
+
+def test_externt_erbjudande_betalar_ingen_pendlingskostnad():
+    """Matrisen bär avståndet. Med kostnaden 0,1 per km och Falun 10 km bort
+    hade överskottet varit negativt för varje erbjudande."""
+    from core.matching_core import externt_erbjudande
+    w = _utvarld()
+    w.cfg_reader.config["simulation"]["commute_cost_per_km"] = 0.1
+    w.individuals = _personer(["unemployed"], [False], municipal_code="2062",
+                              x=0.0, y=-20000.0)
+    w.prepare()
+    rng = np.random.default_rng(3)
+    erbj = [e for e in (externt_erbjudande(w, 0, 1.0, rng) for _ in range(200)) if e]
+    assert len(erbj) > 150
+    assert min(e["km"] for e in erbj) > 20

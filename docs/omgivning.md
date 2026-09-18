@@ -173,9 +173,19 @@ inte kalibrerade och körs inte som baslinje.
   aldrig en vakans, förstörs i regionens takt och upphör när det lämnas.
   Provkörning, två år, frö 1: 106 utpendlare vid start, 176 efter två år, mot
   matrisens 1 767; de antagna jobben ligger i median 43 km bort, matrisens
-  utpendling 76 km. **Öppen fråga:** pendlingskostnaden 0,005 per km,
-  kalibrerad för lokal pendling, gör de längre arbetsresorna olönsamma, och
-  en fjärdedel av matrisens utpendling ligger över 215 km.
+  utpendling 76 km. Pendlingskostnaden 0,005 per km, kalibrerad för lokal
+  pendling, gjorde de längre arbetsresorna olönsamma, och en fjärdedel av
+  matrisens utpendling ligger över 215 km.
+- **O4b. Ingen pendlingskostnad för externa erbjudanden** (avgjort
+  2026-09-18). Långpendlare arbetar ofta ett par dagar i veckan på plats och
+  reser med tåg, resten hemifrån; pendling till grannkommuner sker med bil,
+  buss eller tåg. Modellen ska inte hantera sådana specialfall nu. Matrisen
+  är observerat beteende och bär redan hur långt och hur ofta folk pendlar,
+  så erbjudandet värderas på lön mot hennes läge nu, och takten kalibreras
+  mot stocken (O5). Provkörning, två år, frö 1: utpendlare 1 183 vid start,
+  1 078 efter ett år, 1 033 efter två, mot 1 767; de antagna jobben ligger i
+  median 94 km bort, matrisens 76. Uppstarten når sitt tak på 40 omgångar,
+  eftersom varje omgång ger några externa tillsättningar.
 - **O5. Kalibrering.** Takterna mot matrisens stockar per kommun; mäts över
   körningen, för Ovansiljan och för kommuner med annan pendling (Oxelösund,
   Göteborg, Åre).

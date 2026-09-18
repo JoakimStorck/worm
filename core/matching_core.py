@@ -242,10 +242,10 @@ def externt_erbjudande(world, idx, t_now, rng):
     också ett erbjudande utifrån. Destinationen dras ur invånarens kommuns
     utpendling i pendlingsmatrisen, bransch och yrke ur destinationens
     jobbfördelning i TAB4436, platsen är en DeSO i destinationen dragen med
-    befolkningen. Erbjudandet värderas som ett lokalt i search_once: mötet
-    med sannolikheten min(1, q), produktiviteten
+    befolkningen. Erbjudandet värderas som ett lokalt i search_once, men utan
+    avstånd: mötet med sannolikheten min(1, q), produktiviteten
     ur q och kravet, den förhandlade lönen ur fältets pris, och överskottet
-    mot hennes läge nu. Arbetsgivarens urval modelleras inte: omgivningen är
+    mot hennes läge nu, utan pendlingskostnad (se nedan). Arbetsgivarens urval modelleras inte: omgivningen är
     exogen, och den som får ett lönsamt erbjudande får jobbet. Mötet dämpas
     inte med avståndet: destinationen bär det redan.
 
@@ -305,7 +305,16 @@ def externt_erbjudande(world, idx, t_now, rng):
              if cfg['bargaining'] is not None else float(w_field[0]))
     if not np.isfinite(w_off):
         return None
-    S = w_off - cfg['commute_cost_per_km'] * km - w_res
+    # INGEN PENDLINGSKOSTNAD för ett externt erbjudande (avgjort 2026-09-18).
+    # Destinationen är dragen ur pendlingsmatrisen, som är observerat
+    # beteende: hur folk faktiskt pendlar, med bil, buss eller tåg, dagligen
+    # eller ett par dagar i veckan med arbete hemifrån resten. Modellens
+    # kostnad, 0,005 per km och kalibrerad för lokal pendling, gjorde de
+    # längre arbetsresorna olönsamma: utpendlingen från Mora ligger i median
+    # 76 km bort, en fjärdedel över 215 km, och de antagna jobben hamnade på
+    # 43 km med 176 utpendlare mot 1 767. Att prissätta färdsätt och
+    # distansarbete vore en egen modell av något som datan redan bär.
+    S = w_off - w_res
     if S <= cfg['min_surplus']:
         return None
     return {"kommun": dest, "bransch": bransch, "ssyk": ssyk, "onet": onet,
