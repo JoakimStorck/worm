@@ -1325,6 +1325,14 @@ def handle_new_month(event, world):
         "in_commuters": stats['in_commuters'],
         "out_commuters": stats['out_commuters'],
     }
+    # SCB:s definition (BAS) för månaden som just gått: arbetslös hela
+    # månaden, 20-65 år. Jämförelsetalet mot labour_market_status; stockarna
+    # ovan är ögonblicksbilder och bär identiteten.
+    from core.statistics.basic_stats import arbetsloshet_bas
+    t0 = getattr(world, "_forra_manadsskiftet", None)
+    if t0 is not None:
+        m_extra.update(arbetsloshet_bas(world, t0, float(event['time'])))
+    world._forra_manadsskiftet = float(event['time'])
     m_extra.update(_wage_flow_quantiles(world))
     world.event_logger.log_event(world, event, extra=m_extra, print_line=True)
     world.census_open_vacancies(float(event['time']))    # folkräkning av de lediga (0107)

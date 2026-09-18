@@ -286,3 +286,50 @@ Tre spakar, i den ordning de bör prövas:
 3. **Bytestakten.** 60 procent av 0,226 är 0,136 byten per jobb och år; TODO
    anger omkring 10 procent som mål (`on_the_job_search_factor`). Fler byten
    ger fler kedjor av vakanser.
+
+## Arbetslöshetsmåttet (2026-09-18)
+
+**Jämförelsen var mellan två olika begrepp.** SCB:s tal i
+`labour_market_status` (2,35, 3,51 och 3,17 procent; 2,75 för Ovansiljan) är
+BAS, registerbaserad arbetsmarknadsstatistik för november 2023, 20–65 år:
+sysselsatt är den som haft betalt arbete någon gång under månaden, arbetslös
+den som inte haft det och är inskriven på Arbetsförmedlingen. Modellens
+`unemployed_individuals` är en ögonblicksbild, där varje kort glapp mellan
+två jobb och varje väntan på tillträde räknas, i åldrarna 15–74.
+Analysrapportens referens, 7,5 procent "svensk arbetslöshet", var AKU för
+riket -- ett tredje begrepp.
+
+Resten av underlaget är också BAS med november som referens:
+pendlingsmatrisens sysselsatta, dagbefolkningen och arbetskraftsprofilerna.
+Det är därför BAS modellen ska mätas mot.
+
+**Nu:** `arbetsloshet_bas` (`core/statistics/basic_stats.py`) räknar vid varje
+månadsskifte invånarna 20–65 år som varit arbetslösa hela månaden
+(`unemployed_since` före månadens början), mot invånarna 20–65 år i
+arbetskraften. Månadsraden bär `unemployed_bas` och `labour_force_bas`,
+tidsserien `u_bas` och sammanfattningen `u_bas_pct`. Rapporten jämför
+`u_bas_pct` med SCB:s tal för scenariots kommuner tillsammans och har ingen
+referens för ögonblicksbilden. Identiteten U = L − J + V + In − Ut är
+bokföring och räknas som förut på ögonblicksbilden.
+
+Skillnaden i slutläget för svepet i C4 (fem år, frö 1):
+
+| fönster | ögonblick | hela sista månaden | därav 20–65 |
+|---|---|---|---|
+| 40 | 6,95 % | 6,08 % | 6,00 % |
+| 30 | 6,28 % | 5,49 % | 5,44 % |
+| 20 | 5,77 % | 4,99 % | 4,84 % |
+| 15 | 5,55 % | 4,79 % | 4,67 % |
+
+**Inte modellerat:** inskrivningen. En arbetslös som inte är inskriven är i
+BAS utanför arbetskraften; modellen har ingen sådan skillnad, så dess tal är
+en övre gräns för BAS.
+
+**Kvar på datasidan:** arbetskraften räknas bakåt som L = syss / (1 − u) med
+syss för 15–74 år ur pendlingsmatrisen och u för 20–65 ur
+arbetsmarknadsstatusen. Åldersklasserna finns i TAB2921, som redan hämtas för
+deltagandet; att ta u därifrån för 15–74 är en egen rättelse.
+
+**Noterat:** den som väntar på tillträde och förlorar jobbet innan
+(`job_gone_before_start`) får `unemployed_since` nollställd fast hon aldrig
+arbetade. Det gör henne till nyinskriven i måttet och i anspråkets sänkning.

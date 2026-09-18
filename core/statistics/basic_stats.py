@@ -58,6 +58,54 @@ def analyze_world(world):
         stats["open_vacancies"] = stats["unmatched_jobs"]
     return stats
 
+BAS_ALDER = (20, 65)     # SCB:s uttag i labour_market_status
+
+
+def arbetsloshet_bas(world, t0, t1, alder=BAS_ALDER):
+    """Arbetslösheten med SCB:s registerbaserade definition (BAS), för
+    referensmånaden [t0, t1).
+
+    VARFÖR ETT EGET MÅTT. Jämförelsetalet i labour_market_status är BAS, och
+    där är den SYSSELSATT som haft betalt arbete någon gång under
+    referensmånaden, och den ARBETSLÖS som inte haft det och är inskriven på
+    Arbetsförmedlingen. Modellens unemployed_individuals är en ögonblicksbild:
+    varje kort glapp mellan två jobb och varje väntan på tillträde räknas.
+    Mot BAS överskattade den arbetslösheten med 0,8-0,9 procentenheter
+    (docs/stockarna.md, "Arbetslöshetsmåttet").
+
+    Här är den arbetslös som är arbetslös vid t1 och har varit det sedan
+    t0 eller tidigare (unemployed_since <= t0); den som blev arbetslös under
+    månaden arbetade i den och räknas som sysselsatt. Arbetskraften är
+    invånarna i åldern alder, anställda eller arbetslösa vid t1.
+
+    Inte modellerat: inskrivningen på Arbetsförmedlingen. En arbetslös som
+    inte är inskriven är i BAS utanför arbetskraften; i modellen finns ingen
+    sådan skillnad, så måttet är en övre gräns för BAS.
+
+    Returnerar {} för en värld utan ålder eller arbetslöshetens början
+    (syntetiska tester). En arbetslös invånare UTAN början är ett fel och
+    kastar: hon hade tyst räknats åt ena eller andra hållet."""
+    ind = world.individuals
+    if "age" not in ind.columns or "unemployed_since" not in ind.columns:
+        return {}
+    status = ind["status"].to_numpy()
+    boende = ~_extern(ind).to_numpy()
+    age = pd.to_numeric(ind["age"], errors="coerce").to_numpy(float)
+    i_alder = (age >= alder[0]) & (age < alder[1] + 1)
+    ak = boende & i_alder & np.isin(status, ("employed", "unemployed"))
+    arbl = ak & (status == "unemployed")
+    sedan = pd.to_numeric(ind["unemployed_since"], errors="coerce").to_numpy(float)
+    saknas = arbl & np.isnan(sedan)
+    if saknas.any():
+        raise ValueError(
+            f"{int(saknas.sum())} arbetslösa invånare saknar unemployed_since. "
+            "Varje väg till arbetslöshet ska gå genom bli_arbetslos, och startens "
+            "arbetslösa får tiden av primingen (simulation.priming).")
+    hela = arbl & (sedan <= float(t0))
+    n_ak = int(ak.sum())
+    return {"unemployed_bas": int(hela.sum()), "labour_force_bas": n_ak}
+
+
 def hist_as_dict(data, bins=20, range=None):
     hist, bin_edges = np.histogram(data, bins=bins, range=range)
     return {

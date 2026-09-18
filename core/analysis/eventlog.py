@@ -176,6 +176,10 @@ def timeseries_table(events):
             "v_open": 100 * _f(r, "open_vacancies", vac) / J if J else np.nan,
             "tightness": vac / unemp if unemp else np.nan,
             "in_commuters": inp, "out_commuters": utp,
+            # SCB:s definition (BAS): arbetslös hela månaden, 20-65 år. Det är
+            # jämförelsetalet mot labour_market_status; u är ögonblicksbilden.
+            "u_bas": (100 * _f(r, "unemployed_bas") / _f(r, "labour_force_bas")
+                      if _f(r, "labour_force_bas", 0.0) else np.nan),
             # U = L - J + V + In - Ut ska hålla exakt; avvikelsen är ett larm.
             "identity_residual": unemp - (L - J + vac + inp - utp),
         })
@@ -325,6 +329,8 @@ def summary_row(run_dir, events=None, tr=None, ts=None):
             "vacancies": last["vacancies"], "active_jobs": last["active_jobs"],
             "labour_force": last["labour_force"],
             "u_pct": round(float(last["u"]), 3), "v_pct": round(float(last["v"]), 3),
+            "u_bas_pct": round(float(last["u_bas"]), 3)
+            if "u_bas" in ts.columns and pd.notna(last["u_bas"]) else np.nan,
             "v_open_pct": round(float(last["v_open"]), 3)
             if "v_open" in ts.columns and pd.notna(last["v_open"]) else np.nan,
             "tightness": round(float(last["tightness"]), 4),

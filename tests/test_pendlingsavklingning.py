@@ -175,8 +175,11 @@ def test_modellens_arbetsloshet_ar_andel_av_arbetskraften(tmp_path):
                 for i in range(430, 469)]
              + [{"individual_id": f"2062_i{i:06d}", "status": "not_in_labor_force"}
                 for i in range(469, 1000)])
-    pd.DataFrame(rader).to_csv(os.path.join(d, "final_state_individuals.csv"),
-                               index=False)
+    df = pd.DataFrame(rader)
+    df["municipal_code"], df["age"], df["unemployed_since"] = "2062", 40.0, -100.0
+    df.to_csv(os.path.join(d, "final_state_individuals.csv"), index=False)
+    with open(os.path.join(d, "run_meta.json"), "w") as f:
+        f.write('{"n_years": 1}')
     t = arbetsloshet_per_kommun(d)
     assert t.loc["2062", "u_rate"] == pytest.approx(100 * 39 / 469, abs=0.05)
     # Andelen av befolkningen hade varit 3.9 procent -- ungefär halva.

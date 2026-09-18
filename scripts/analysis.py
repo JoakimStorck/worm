@@ -34,7 +34,11 @@ if ROOT not in sys.path:
 
 from core.analysis.eventlog import collect_runs, group_stats, export
 
-REF = {"median_u_R": 0.70, "u_pct": 7.5, "v_pct": 2.0}
+# u_pct har ingen referens: det är modellens ögonblicksbild, och SCB:s
+# jämförelsetal är BAS (u_bas_pct), vars referens räknas ur
+# labour_market_status för scenariots kommuner. De 7,5 procent som stod här
+# var AKU för riket, ett tredje begrepp.
+REF = {"median_u_R": 0.70, "v_pct": 2.0}
 
 
 def runs_under(outdir):
@@ -384,13 +388,11 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
             mod_u = arbetsloshet_per_kommun(senaste) if senaste else None
             scb_u = scb_arbetsloshet(kommuner) if kommuner else None
             if mod_u is not None and scb_u is not None:
-                A("\n**Arbetslöshet per kommun.** Modellens tal är andel av "
-                  "arbetskraften i slutläget; SCB:s avser 20-65 år och "
-                  "registerbaserad status. Åldersintervallen skiljer sig, så "
-                  "det jämförbara är rangordningen och spridningen, inte "
-                  "nivån. Modellens arbetslösa är dessutom avgränsade till "
-                  "scenariots kommuner: den som i verkligheten pendlar ut ur "
-                  "området finns inte i modellen.\n")
+                A("\n**Arbetslöshet per kommun**, med SCB:s definition (BAS) "
+                  "på båda sidor: arbetslös hela referensmånaden, 20-65 år, "
+                  "modellens sista månad mot SCB:s november. Inskrivningen på "
+                  "Arbetsförmedlingen modelleras inte, så modellens tal är en "
+                  "övre gräns för BAS.\n")
                 A("| kommun | modell | SCB | kvot |")
                 A("|---|---|---|---|")
                 for kod in sorted(scb_u.index):
@@ -466,9 +468,15 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
     A("## Mot referensvärden\n")
     A("| Storhet | Modell (median) | Spridning över frön | Referens | Källa |")
     A("|---|---|---|---|---|")
+    kommuner_ref = set()
+    for rad in df.get("municipalities", pd.Series(dtype=str)).dropna():
+        kommuner_ref.update(str(rad).split(","))
+    u_ref = scb_arbetsloshet_region(kommuner_ref) if kommuner_ref else None
     for key, ref, src in (("median_u_R", REF["median_u_R"],
                            "papper 2, inom delsystem"),
-                          ("u_pct", REF["u_pct"], "svensk arbetslöshet"),
+                          ("u_bas_pct", (round(u_ref, 2) if u_ref is not None else "saknas"),
+                           "SCB BAS 20-65 år, scenariots kommuner"),
+                          ("u_pct", "—", "ögonblicksbild, inget SCB-begrepp"),
                           ("v_pct", REF["v_pct"], "svensk vakansgrad")):
         if key not in df.columns:
             continue
@@ -558,16 +566,38 @@ def arbetsloshet_per_kommun(run_dir):
     p = os.path.join(run_dir, "final_state_individuals.csv")
     if not os.path.isfile(p):
         return None
-    ind = pd.read_csv(p)
+    ind = pd.read_csv(p, low_memory=False)
     if "status" not in ind.columns:
         return None
-    ind["kom"] = ind["individual_id"].astype(str).str.split("_i").str[0]
-    t = ind.groupby("kom")["status"].value_counts().unstack(fill_value=0)
-    for k in ("employed", "unemployed"):
-        if k not in t.columns:
-            t[k] = 0
-    t["u_rate"] = 100 * t["unemployed"] / (t["employed"] + t["unemployed"]).replace(0, np.nan)
+    # SCB:S DEFINITION (BAS), som core.statistics.basic_stats.arbetsloshet_bas:
+    # arbetslös hela den sista månaden, 20-65 år, invånare. Ögonblicksbilden
+    # låg 0,8-0,9 procentenheter högre (docs/stockarna.md).
+    import json
+    from core.statistics.basic_stats import BAS_ALDER
+    with open(os.path.join(run_dir, "run_meta.json"), encoding="utf-8") as f:
+        t_slut = float(json.load(f)["n_years"]) * 365.25
+    if "extern" in ind.columns:
+        ind = ind[ind["extern"].astype(str) != "True"]
+    ind = ind[(ind["age"] >= BAS_ALDER[0]) & (ind["age"] < BAS_ALDER[1] + 1)]
+    ind["kom"] = ind["municipal_code"].astype(str).str.zfill(4)
+    sedan = pd.to_numeric(ind["unemployed_since"], errors="coerce")
+    ind["arbl_bas"] = (ind["status"] == "unemployed") & (sedan <= t_slut - 365.25 / 12)
+    ind["ak"] = ind["status"].isin(["employed", "unemployed"])
+    t = ind.groupby("kom").agg(employed=("status", lambda s: int((s == "employed").sum())),
+                               unemployed=("arbl_bas", "sum"), ak=("ak", "sum"))
+    t["u_rate"] = 100 * t["unemployed"] / t["ak"].replace(0, np.nan)
     return t[["employed", "unemployed", "u_rate"]]
+
+
+def scb_arbetsloshet_region(koder, db_path="data/worm.sqlite3"):
+    """SCB:s arbetslöshet (BAS, 20-65 år) för kommunerna tillsammans, i
+    procent: summan av arbetslösa genom summan av arbetskraften, inte medlet
+    av kommunernas tal. None om tabellen saknas eller inte täcker alla."""
+    df = scb_arbetsloshet(koder, db_path)
+    if df is None or len(df) < len({str(k).strip().zfill(4) for k in koder}):
+        return None
+    ak = float(df["employed"].sum() + df["unemployed"].sum())
+    return 100.0 * float(df["unemployed"].sum()) / ak if ak else None
 
 
 def scb_arbetsloshet(koder, db_path="data/worm.sqlite3"):
