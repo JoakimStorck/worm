@@ -215,14 +215,13 @@ Det är avsett. Unionen läser två platta cirklar som täckning av olika
 uppgifter, och gymnasiet lär ut annat än grundskolan även om geometrin inte kan
 placera skillnaden. Två till tre allmänna steg per liv håller effekten liten.
 
-*Läget i koden.* `_union` genomför inte formeln ovan. Varje cirkel dras av bara
-mot den närmast ovanför i ordningen, och avdraget förs vidare i en kedja. Med
-dagens tre cirklar per startindivid (grundskola, `EDU:ℓ`, yrket) är felet högst
-0,009. Med en cirkel per händelse växer det: två identiska anställningar och en
-cirkel i en annan riktning gav 0,858 mot formelns 0,978, eftersom cirkeln i den
-andra riktningen drogs av för täckning den inte delar. Det ska rättas innan en
-cirkel per händelse införs. Samma docstring anger m\* = 13; med gällande
-parametrar är den 21,6.
+**Avdraget görs mot varje starkare cirkel, inte i en kedja.** Koden drog
+tidigare av cirkeln på plats k bara mot den på plats k − 1 och förde produkten
+vidare. För två cirklar är det samma sak. Från tre är det fel: två identiska
+anställningar och en cirkel åt annat håll gav 0,858 mot formelns 0,978,
+eftersom cirkeln åt annat håll drogs av för täckning den inte delar. Med
+dagens tre cirklar per startindivid var felet högst 0,009, men med en cirkel
+per händelse är identiska cirklar regel. Rättat som steg 1 i byggordningen.
 
 Den mogna arbetaren vid sitt eget jobb: massa över referens, ρ = r_o, d = 0,
 q ≈ 1. **Kalibreringen mot 1,03 task-radier står**, eftersom den handlar om

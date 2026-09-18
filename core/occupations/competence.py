@@ -185,8 +185,9 @@ class Circles:
         täcker något de starkare inte redan täcker.
 
         Summan över cirklar hade ingen gräns. Massan är bunden av balansen
-        tillväxt mot glömska, m* = a/lambda = 13, och en ensam cirkel exakt på
-        jobbet mättar mot 1 -- men N skarpa cirklar på samma ställe gav q = N.
+        tillväxt mot glömska, m* = a/lambda = 21.6 (13 efter tjugo år i samma
+        yrke), och en ensam cirkel exakt på jobbet mättar mot 1 -- men N
+        skarpa cirklar på samma ställe gav q = N.
         Därav en premie på FRAGMENTERING: tjugo år i ett jobb gav 1.00, samma
         tjugo år delade på tre närliggande jobb gav 3 x 0.887 = 2.66. Den som
         bytte ofta blev mer konkurrenskraftig än den som stannade, med samma
@@ -218,6 +219,16 @@ class Circles:
         variant -- hur mycket av DET HÄR jobbet täcker k som l inte täckte --
         är rätt storhet men en trippelprodukt; den står som nästa steg i
         docs/lonemodell.md.
+
+        AVDRAGET GÖRS MOT VARJE STARKARE CIRKEL, inte i en kedja. Koden drog
+        tidigare av cirkeln på plats k bara mot den på plats k-1 och förde
+        produkten vidare, alltså prod_j (1 - O_{j-1,j} * c_{j-1}) i stället
+        för prod_{l<k} (1 - O_lk * c_l). Det är samma sak för två cirklar och
+        fel från tre: två identiska anställningar A och B och en cirkel C åt
+        annat håll gav C avdraget (1 - O_AB * c_A), som om A täckte det C
+        täcker -- 0.858 i stället för 0.978. Med tre cirklar per startindivid
+        var felet högst 0.009, men med en cirkel per händelse
+        (docs/individmodell.md, avsnitt 2) är identiska cirklar regel.
         """
         K, J = contrib.shape
         if K == 1:
@@ -252,15 +263,17 @@ class Circles:
 
         ordning = np.argsort(-contrib, axis=0)              # K x J
         c_s = np.take_along_axis(contrib, ordning, axis=0)
-        novel = np.ones(J)
-        q = np.zeros(J)
-        for k in range(K):
-            if k > 0:
-                # O mellan cirkeln på plats k och den på plats k-1, per jobb
-                Ok = O[ordning[k - 1], ordning[k]]
-                novel = novel * (1.0 - Ok * np.minimum(c_s[k - 1], 1.0))
-            q += c_s[k] * novel
-        return q
+        # ny[k, j]: den andel av täckningen hos cirkeln på plats k i jobb j
+        # som ingen starkare cirkel täcker. Cirkeln på plats l drar av från
+        # alla platser efter sig på en gång, så att plats k har fått exakt
+        # prod_{l<k} (1 - O_lk c_l) när loopen är klar. Att bara röra
+        # platserna efter l halverade tiden mot att uppdatera alla K rader
+        # varje steg; en K x K x J-tensor över hela triangeln var långsammast.
+        ny = np.ones((K, J))
+        c_tak = np.minimum(c_s, 1.0)
+        for l in range(K - 1):
+            ny[l + 1:] *= 1.0 - O[ordning[l], ordning[l + 1:]] * c_tak[l]
+        return (c_s * ny).sum(axis=0)
 
     # ---- sammanfattning --------------------------------------------------------
     def summarize(self):

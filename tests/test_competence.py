@@ -242,7 +242,7 @@ def test_u_R_occ_measures_from_source_occupation():
 
 def test_coverage_is_a_union_not_a_sum():
     """REGRESSION: summan över cirklar hade ingen gräns. Massan är bunden av
-    balansen tillväxt mot glömska, m* = a/lambda = 13, och en ensam cirkel på
+    balansen tillväxt mot glömska, m* = a/lambda = 21.6, och en ensam cirkel på
     jobbet mättar mot 1 -- men N skarpa cirklar på samma ställe gav q = N.
     Tjugo år i ett jobb gav 1.00; samma tjugo år delade på tre NÄRLIGGANDE
     YRKEN gav 2.66. Inom samma yrke slås cirklarna ihop (nyckeln är
@@ -273,6 +273,75 @@ def test_coverage_is_a_union_not_a_sum():
     assert två_sidor > en_sida
     # och nybörjaren är oförändrad
     assert q_of([(0.0, 0.0, 1.0, 1.0)]) == pytest.approx(0.047, abs=0.005)
+
+
+def _union_enligt_formeln(c, p, jx, jy, jro):
+    """q = sum_k c_k * prod_{l<k} (1 - O_lk * min(c_l, 1)), cirklarna i
+    fallande bidragsordning, räknad jobb för jobb och par för par. Oberoende
+    av kodens vektorisering: det är formeln i docs/lonemodell.md 1.1."""
+    occ = c.key[0] != EMPTY
+    cx, cy, r2, m = c.x[0, occ], c.y[0, occ], c.rho2[0, occ], c.mass[0, occ]
+    ut = []
+    for x, y, ro in zip(jx, jy, jro):
+        w = r2 + ro ** 2
+        bidrag = ((1 - np.exp(-m / p.m_ref)) * (2 * ro ** 2 / w)
+                  * np.exp(-0.5 * ((cx - x) ** 2 + (cy - y) ** 2) / (p.gamma ** 2 * w)))
+        ordning = sorted(range(len(bidrag)), key=lambda k: -bidrag[k])
+        q = 0.0
+        for plats, k in enumerate(ordning):
+            faktor = 1.0
+            for l in ordning[:plats]:
+                s2 = r2[k] + r2[l]
+                O = (np.exp(-((cx[k] - cx[l]) ** 2 + (cy[k] - cy[l]) ** 2) / (2 * s2))
+                     * 2 * np.sqrt(r2[k] * r2[l]) / s2)
+                faktor *= 1 - O * min(bidrag[l], 1.0)
+            q += bidrag[k] * faktor
+        ut.append(q)
+    return np.array(ut)
+
+
+def test_union_follows_the_formula_for_many_circles():
+    """REGRESSION: unionen drog av cirkeln på plats k bara mot den på plats
+    k-1 och förde produkten vidare i en kedja -- prod_j (1 - O_{j-1,j}
+    c_{j-1}) i stället för prod_{l<k} (1 - O_lk c_l). För två cirklar är det
+    samma sak, därför fångade inget test det; från tre cirklar är det fel,
+    och med en cirkel per händelse (docs/individmodell.md 2) är tre eller
+    fler regel. Slumpade cirklar, alltså inga symmetrier som kan dölja
+    ordningsfel."""
+    p = CompetenceParams()
+    rng = np.random.default_rng(11)
+    for K in (3, 4, 6, 9):
+        for _ in range(8):
+            c = Circles(1, 12)
+            for k in range(K):
+                c.add(0, f"K{k}", float(rng.normal(0, 0.3)), float(rng.normal(0, 0.3)),
+                      float(rng.uniform(0.02, 0.4)), float(rng.uniform(0.3, 15.0)))
+            jx, jy = rng.normal(0, 0.3, 40), rng.normal(0, 0.3, 40)
+            jro = rng.uniform(0.1, 0.35, 40)
+            koden = c.competitiveness(0, jx, jy, jro, p)
+            np.testing.assert_allclose(koden, _union_enligt_formeln(c, p, jx, jy, jro),
+                                       rtol=0, atol=1e-12)
+
+
+def test_a_circle_that_shares_nothing_with_the_stronger_counts_in_full():
+    """Två identiska anställningar A och B i ett yrke, och en cirkel C åt
+    andra hållet som inte överlappar dem. C ska räknas fullt: det C täcker
+    täcker varken A eller B. Kedjan drog av C för A:s täckning, eftersom A
+    och B överlappar varandra, och gav 0.858 mot 0.978 i ett exempel."""
+    p = CompetenceParams()
+    RO2 = 0.15 ** 2
+    A = (0.35, 0.0, RO2, 13.0)
+    C = (-0.35, 0.0, RO2, 13.0)
+
+    def q_of(cirklar):
+        c = Circles(1, 12)
+        for n, t in enumerate(cirklar):
+            c.add(0, f"H{n}", *t)
+        return float(c.competitiveness(0, [0.05], [0.0], [0.15], p)[0])
+
+    ensam_c = q_of([C])
+    assert ensam_c > 0.05, "testet saknar tänder om C inte bidrar"
+    assert q_of([A, A, C]) - q_of([A, A]) == pytest.approx(ensam_c, abs=0.002)
 
 
 def test_union_is_vectorised_over_jobs():

@@ -575,9 +575,8 @@ full konkurrenskraft. Den ska vara studietid × intensitet.
 
 Varje steg är en egen mekanism och en egen commit.
 
-1. **`_union` följer sin formel** (`individmodell.md`, avsnitt 2). En
-   förutsättning för en cirkel per händelse: kedjan drar av cirklar för
-   täckning de inte delar.
+1. ~~**`_union` följer sin formel**~~ — gjort. Avdraget görs mot varje
+   starkare cirkel i stället för i en kedja (`individmodell.md`, avsnitt 2).
 2. **Inget tak på antalet cirklar.** Arrayerna växer när en rad blir full.
 3. **En cirkel per händelse.** `Circles.add` slutar slå ihop på nyckel. Kräver
    först beslut om skärpning vid återkomst till ett tidigare yrke

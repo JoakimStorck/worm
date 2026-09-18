@@ -75,10 +75,10 @@ Unionen är också det som gör en cirkel per händelse möjlig: två identiska
 anställningar i samma yrke ger samma täckning som en, så att dela upp en
 karriär i fler händelser ger ingen premie.
 
-*Läget i koden.* `_union` genomför inte formeln ovan. Varje cirkel dras av
-bara mot den närmast ovanför i ordningen, och avdraget förs vidare i en
-kedja. Med dagens tre cirklar per startindivid är felet högst 0,009; med en
-cirkel per händelse växer det (`individmodell.md`, avsnitt 2).
+Avdraget görs mot **varje** starkare cirkel. Koden drog tidigare av bara mot
+den närmast ovanför i ordningen och förde avdraget vidare i en kedja. Det är
+samma sak för två cirklar men fel från tre, och med en cirkel per händelse är
+tre eller fler regel (`individmodell.md`, avsnitt 2).
 
 Före 0078 var q summan, och summan hade ingen gräns. Över tio år gav det en
 premie på fragmentering: median q vid anställning 1,21, 67 procent över ett,
@@ -103,9 +103,6 @@ q och p är olika storheter med olika roller. q avgör om mötet leder någonsta
   (Lazear & Shaw) medan lärare når full produktivitet först efter flera år.
   m_ref ska vara en funktion av r_j. Modellen har r_j på varje jobb, så det
   kostar ingen ny data; det kräver kalibrering mot två ändar.
-- **`_union` ska följa formeln** i 1.1, med avdrag mot alla starkare cirklar
-  och inte bara mot den närmast ovanför. Första steget i byggordningen i
-  `utbildningsmodell.md`.
 - **Överlappet mäts mellan cirklarna, inte via jobbet.** Rätt storhet är hur
   mycket av *det här jobbet* cirkel k täcker som l inte täckte -- en
   trippelprodukt. Nuvarande approximation är pairwise Bhattacharyya.
