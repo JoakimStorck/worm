@@ -26,9 +26,11 @@ Före 6a, i tur och ordning:
 - [x] Jobbets yrke givet arbetsställets bransch och storlek, samma funktion
       vid start och under körningen. Läkare ska inte kunna anställas på en
       bilverkstad. `sni_onet_link` slutar användas för jobb.
-- [ ] Yrkesbredden inom ett arbetsställe: jobben dras oberoende ur
-      branschens fördelning, så arbetsställena i en bransch är identiska i
-      väntevärde och nästan lika breda som kommunen (RMS 0,33 mot 0,39).
+- [ ] Yrkesbredden inom ett arbetsställe (individmodell.md avsnitt 3,
+      "Arbetsställets yrken"), i ordningen:
+  - [ ] a. ett svenskt yrke realiseras som en O*NET-kod per arbetsställe
+  - [ ] c. yrke gånger tvåsiffrig SNI, om SCB publicerar den
+  - [ ] b. kärnyrke som sätter specialistprofilen, med stödyrken kvar
 - [ ] `employment_municipality_sni` pensioneras, eller hämtas riktigt.
 - [ ] Ny baslinje.
 

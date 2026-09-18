@@ -304,6 +304,35 @@ Jobb ligger exakt på sitt yrkes centroid. Det är avsiktligt: den empiriska
 referensen för mobilitet mäter avstånd centroid till centroid mellan
 SOC-koder. Sprids jobben förlorar modellens u_R sin jämförbarhet.
 
+### Arbetsställets yrken (avgjort 2026-09-18)
+
+Jobbets yrke dras ur arbetsställets bransch och storleksklass
+(`core/bransch.py`): yrkesregistrets P(SSYK3 | bransch, klass) gånger
+crosswalken till O\*NET. En läkare anställs alltså inte på en bilverkstad.
+
+**Blandningen av yrken är verklig och ska finnas kvar.** Chefer, kontor och
+städ är 7–35 procent av varje bransch, och ett stort arbetsställe är inte
+begränsat till en typ av yrke. Men arbetsstället har en riktning: det är inte
+ett slumpurval ur hela branschen. I dag dras varje jobb oberoende, och ett
+arbetsställe med minst 20 jobb blir nästan lika brett som kommunen: RMS-avstånd
+till centroiden 0,33 mot 0,39 för Moras hela jobbstock, och 28 O\*NET-koder i
+effektiv mening.
+
+Bredden har tre källor, och de tas i ordningen:
+
+- **a. Crosswalken.** En SSYK3-grupp sprids på i median 19 O\*NET-koder,
+  med RMS 0,19 inom gruppen; städare (911) på 12 koder med RMS 0,33. Ett
+  arbetsställe realiserar varje svenskt yrke som EN O\*NET-kod: dess
+  mekaniker är samma yrke, inte 21. Ingen ny parameter, och fördelningen
+  över befolkningen är oförändrad.
+- **c. Branschens grovhet.** G rymmer både bilverkstaden och butiken. Om SCB
+  publicerar yrke gånger tvåsiffrig SNI för riket skiljs de åt med data.
+- **b. Ett kärnyrke som sätter arbetsställets specialistprofil.** Kärnan
+  dras ur branschen, och övriga yrken viktas mot den med avståndet, blandat
+  med en andel stödyrken utan avståndsvikt så att blandningen finns kvar.
+  Två parametrar, bredden och stödandelen. Vad de kalibreras mot är öppet;
+  data om yrkessammansättning per arbetsställe saknas.
+
 ---
 
 ## 4. Matchning: två frågor med olika ägare
