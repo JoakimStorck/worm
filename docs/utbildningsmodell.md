@@ -771,6 +771,24 @@ jämförs mot en baslinje med fem frön.
      då överflödig.
    - **6b. Inträdet.** Utbildningshistorik ur kohortandelarna, och det
      första yrket som ett utfall av matchningen.
+   - **6c. Studerande med extrajobb** (avgjort 2026-09-18). Gymnasieelever
+     och studenter arbetar i regel en eller två kvällar i veckan eller på
+     lördagar. BAS räknar den som arbetat en timme i november som
+     sysselsatt, och sysselsättning går före studier, så deras positioner
+     ingår i jobbmålet och de själva i arbetskraften. I modellen blir de
+     vanliga 16–24-åringar med vuxnas anspråk, och butiks-, köks- och
+     serveringsjobben står tomma (`stockarna.md`, "Rekryteringstiden per
+     bransch": hotell och restaurang 121 dagar mot SCB:s 12). AKU (TAB3026,
+     2024): 174 000 sysselsatta 15–24 år studerar, 157 000 på heltid,
+     omkring en tredjedel av de sysselsatta i åldern; i BAS sannolikt fler.
+     Byggs som antal, inte timmar: lågt anspråk, smal sökning (nära hemmet,
+     låga krav), och aldrig arbetslös -- utan jobb är hon studerande, inte
+     arbetslös, och går in och ut ur arbetskraften med jobbet. En andel av
+     startens 16–24-åringar i arbetskraften blir studerande med extrajobb;
+     hur AKU:s andel översätts till BAS avgörs då. Prövningen:
+     rekryteringstiden i hotell och restaurang faller, och korrelationen per
+     bransch mot TAB4307 (i dag −0,55) vänder. De som börjar arbeta direkt
+     efter grundskolan är vanliga inträdare med förgymnasial nivå (6b).
 7. **Grindvaktsfrågan**, och därefter spärren.
 8. **Omskolningens mål dras** i stället för att medelvärdesbildas.
    Startpunkten försvinner samtidigt. `handle_start_education` räknar
