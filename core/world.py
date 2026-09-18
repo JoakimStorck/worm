@@ -384,6 +384,43 @@ class World(IndividualViews):
         self._schedule_destruction(new_ids, t_now)
         return len(rows)
 
+    def omgivning(self):
+        """Omgivningen för scenariots kommuner (core/omgivning.py), en gång."""
+        if not hasattr(self, "_omgivning"):
+            from core.omgivning import Omgivning
+            self._omgivning = Omgivning(self.conn, self.cfg_reader.config.get("municipalities", []))
+        return self._omgivning
+
+    def kommunprofil(self):
+        if not hasattr(self, "_profil"):
+            from core.bransch import Kommunprofil
+            self._profil = Kommunprofil(self.conn)
+        return self._profil
+
+    def skapa_externt_jobb(self, t_now, kommun, bransch, ssyk, onet_code, x, y):
+        """Ett jobb utanför regionen, för en utpendlare (docs/omgivning.md, O4).
+
+        Ingen arbetsgivare och ingen vakans: raden är utlovad (pending) från
+        start och upphör när den lämnas (set_job_filled). Den förstörs i samma
+        takt som regionens jobb. Lönen är yrkets pris i fältet, utan
+        arbetsgivareffekt."""
+        geom = self._geom_lookup(onet_code) or {}
+        if not hasattr(self, "_next_ext_seq"):
+            self._next_ext_seq = 0
+        jid = f"X{self._next_ext_seq:07d}"
+        self._next_ext_seq += 1
+        rad = {c: None for c in self.jobs.columns}
+        rad.update(geom)
+        rad.update({"job_id": jid, "employer_id": None, "individual_id": None,
+                    "municipal_code": str(kommun).zfill(4), "sni_code": bransch,
+                    "ssyk_code": ssyk, "onet_code": onet_code, "core_ssyk": None,
+                    "x": float(x), "y": float(y), "active": True, "pending": True,
+                    "extern": True, "vacant_since": float(t_now),
+                    "employer_size": np.nan, "wage_eta": 0.0})
+        self.jobs = pd.concat([self.jobs, pd.DataFrame([rad])], ignore_index=True)
+        self._schedule_destruction([jid], t_now)
+        return jid
+
     def _draw_occupation_for_employer(self, base_row, realiserade=None):
         """(ssyk, O*NET) för ett nytt jobb: kommunens profil i arbetsställets
         bransch, viktad mot arbetsställets kärnyrke (core/bransch.py,
@@ -399,14 +436,12 @@ class World(IndividualViews):
         yrke som redan finns där behåller sin kod."""
         if self.conn is None:                   # syntetisk värld utan databas
             return base_row.get("ssyk_code"), base_row.get("onet_code")
-        if not hasattr(self, "_profil"):
-            from core.bransch import Kommunprofil
-            self._profil = Kommunprofil(self.conn)
         karna = base_row.get("core_ssyk")
         karna = None if karna is None or (isinstance(karna, float) and np.isnan(karna)) else str(karna)
-        ssyk = self._profil.dra_nytt(base_row["municipal_code"], base_row["sni_code"],
-                                     karna, np.random)
-        return ssyk, self._profil.onet(ssyk, np.random, realiserade)
+        profil = self.kommunprofil()
+        ssyk = profil.dra_nytt(base_row["municipal_code"], base_row["sni_code"],
+                               karna, np.random)
+        return ssyk, profil.onet(ssyk, np.random, realiserade)
 
     def _geom_lookup(self, onet_code):
         """Yrkets geometri, pris OCH kravintensitet.
@@ -489,9 +524,14 @@ class World(IndividualViews):
         # ett externt jobb ett jobb utanför regionen som en utpendlare har.
         # Kolumnerna hör till schemat, så att bokföringen alltid kan skilja
         # regionens egna från randens; ingen skapas förrän flödena finns (O3, O4).
+        # Alltid boolesk: när regionens invånare slås ihop med reservoaren får
+        # invånarna NaN, och bool(NaN) är sant -- utpendlingen behandlade då
+        # varje invånare som extern och gav ingen utpendlare alls.
         for tabell in (self.individuals, self.jobs):
             if "extern" not in tabell.columns:
                 tabell["extern"] = False
+            else:
+                tabell["extern"] = tabell["extern"].fillna(False).astype(bool)
         if "onet_code" in self.individuals.columns and not hasattr(self, "circles"):
             self.init_competence()
         self.refresh_ind()
@@ -791,7 +831,11 @@ class World(IndividualViews):
                    if "active" in self.jobs.columns else np.ones(n, dtype=bool))
             pend = (self.jobs["pending"].to_numpy(dtype=bool)
                     if "pending" in self.jobs.columns else np.zeros(n, dtype=bool))
-            self._vm = (~filled) & act & (~pend)
+            # Externa jobb (utpendlarnas, docs/omgivning.md) är aldrig vakanser
+            # i regionen.
+            ext = (self.jobs["extern"].fillna(False).to_numpy(dtype=bool)
+                   if "extern" in self.jobs.columns else np.zeros(n, dtype=bool))
+            self._vm = (~filled) & act & (~pend) & (~ext)
             self._vm_n = n
         return self._vm
 
@@ -811,6 +855,19 @@ class World(IndividualViews):
             raise TypeError("set_job_filled(..., False) kräver t_now: "
                             "vacant_since stämplas med händelsens tid")
         pos = self.job_index().get(job_id)
+        if pos is not None and not filled and "extern" in self.jobs.columns \
+                and bool(self.jobs["extern"].iat[pos]):
+            # ETT EXTERNT JOBB UPPHÖR NÄR DET LÄMNAS. Det har ingen arbetsgivare
+            # som kan annonsera det igen, och en ledig position utanför regionen
+            # är ingen vakans här (docs/omgivning.md, O4). Alla vägar som
+            # lämnar ett jobb går hit.
+            self.jobs.iat[pos, self.jobs.columns.get_loc("active")] = False
+            if "destroyed_time" in self.jobs.columns:
+                self.jobs.iat[pos, self.jobs.columns.get_loc("destroyed_time")] = float(t_now)
+            vm = self.vacant_mask()
+            if pos < vm.size:
+                vm[pos] = False
+            return
         if pos is not None:
             vm = self.vacant_mask()
             if pos < vm.size:

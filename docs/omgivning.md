@@ -164,7 +164,18 @@ inte kalibrerade och körs inte som baslinje.
   124 och 229. Identiteten håller exakt. Reservoarens generering, 98 kommuner
   genom generate_individuals, lägger omkring 70 sekunder till uppbyggnaden.
 - **O4. Utpendling.** Externa erbjudanden till invånarna, externa jobb utan
-  arbetsställe. Startens utpendlare på plats.
+  arbetsställe. Startens utpendlare på plats. **Gjort** (`externt_erbjudande`
+  och `anta_externt` i `core/matching_core.py`, `World.skapa_externt_jobb`):
+  vid en andel `utpendling_erbjudande_andel` (0,1) av invånarnas sökningar
+  kommer ett erbjudande ur destinationens jobbfördelning i TAB4436, med mötet
+  min(1, q) utan avståndsdämpning -- destinationen bär redan avståndet -- och
+  överskottet mot hennes läge nu. Det externa jobbet är utlovat från start,
+  aldrig en vakans, förstörs i regionens takt och upphör när det lämnas.
+  Provkörning, två år, frö 1: 106 utpendlare vid start, 176 efter två år, mot
+  matrisens 1 767; de antagna jobben ligger i median 43 km bort, matrisens
+  utpendling 76 km. **Öppen fråga:** pendlingskostnaden 0,005 per km,
+  kalibrerad för lokal pendling, gör de längre arbetsresorna olönsamma, och
+  en fjärdedel av matrisens utpendling ligger över 215 km.
 - **O5. Kalibrering.** Takterna mot matrisens stockar per kommun; mäts över
   körningen, för Ovansiljan och för kommuner med annan pendling (Oxelösund,
   Göteborg, Åre).

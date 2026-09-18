@@ -495,6 +495,19 @@ def handle_start_job_search(event, world):
     # delas med uppstarten. Kvar här är det HÄNDELSESPECIFIKA: loggningen och
     # omschemaläggningen. Två kodvägar som gör samma sak har glidit isär fem
     # gånger i den här serien; uppstarten återimplementerar därför ingenting.
+    # ERBJUDANDE UTIFRÅN (docs/omgivning.md, O4). Tackar hon ja till ett jobb
+    # utanför regionen söker hon inte lokalt den här gången.
+    from core.matching_core import externt_erbjudande, anta_externt
+    erbj = externt_erbjudande(world, idx, t_now, np.random)
+    if erbj is not None:
+        jid = anta_externt(world, idx, t_now, erbj)
+        world.event_logger.log_event(world, event, extra={
+            'event_detail': 'external_offer_accepted', 'status': status, 'job_id': jid,
+            'to_municipality': erbj['kommun'], 'surplus': round(erbj['surplus'], 4),
+            'w_neg': round(erbj['w_neg'], 4), 'q_hire': round(erbj['q'], 4),
+            'commute_km': round(erbj['km'], 3)})
+        world.schedule_search(idx, world.search_interval(idx, t_now))
+        return
     job_id, w_neg, q_hire, surplus, commute_km = apply_once(world, idx, t_now)
 
     if job_id is not None:

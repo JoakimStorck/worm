@@ -328,3 +328,139 @@ def test_reservoaren_fordelas_pa_ursprung_och_startdelen_ar_stocken():
     assert (res["status"] == "extern").all() and res["extern"].all()
     assert int(res["extern_start"].sum()) == 45
     assert res["w_neg"].isna().all()
+
+
+# ---------------------------------------------------------------------------
+# O4: utpendlingen
+# ---------------------------------------------------------------------------
+
+def _utvarld(andel=1.0, **sim):
+    """Värld med omgivningens underlag: invånare i Mora (2062) utpendlar till
+    Falun (2080) och Rättvik (2031) enligt _db, där Falun har ett enda yrke,
+    B, och Rättvik ett, C."""
+    w = _varld(utpendling_erbjudande_andel=andel, commute_cost_per_km=0.0, **sim)
+    conn = _db()
+    pd.DataFrame([("2080", "911", "N", "1", 2024, 50), ("2031", "912", "N", "1", 2024, 50)],
+                 columns=["municipal_code", "ssyk_code", "sni_code", "sex", "year",
+                          "employed"]).to_sql("employment_workplace_occupation_sni", conn,
+                                              index=False)
+    pd.DataFrame([("911", "B", 1.0), ("912", "C", 1.0)],
+                 columns=["occupation_code", "onet_code", "share"]).to_sql(
+        "ssyk3_onet_crosswalk", conn, index=False)
+    pd.DataFrame({"onet_code": ["B", "C"], "chi": 0.3, "xi": 0.3, "x_occ": [0.3, 0.3],
+                  "y_occ": [0.1, 0.1], "r_o": 0.27, "w_rel": 2.0, "r_req": 0.0,
+                  "geom_source": "occupation"}).to_sql("onet_occupation_space", conn,
+                                                       index=False)
+    w.conn = conn
+    w.cfg_reader.config["municipalities"] = ["2062", "2034"]
+    return w
+
+
+def test_invanaren_far_ett_erbjudande_utifran_langt_bort():
+    """Destinationen ur matrisen och ingen avståndsdämpning i mötet: Falun
+    ligger här 10 km bort i x, men med commute_decay_km = 1 hade mötet dämpats
+    till noll."""
+    from core.matching_core import externt_erbjudande
+    w = _utvarld(commute_decay_km=1.0)
+    w.individuals = _personer(["unemployed"], [False], municipal_code="2062")
+    w.prepare()
+    rng = np.random.default_rng(0)
+    erbj = [externt_erbjudande(w, 0, 1.0, rng) for _ in range(400)]
+    kommuner = pd.Series([e["kommun"] for e in erbj if e is not None])
+    assert len(kommuner) > 300
+    assert set(kommuner) == {"2080", "2031"}
+    assert kommuner.value_counts(normalize=True)["2080"] == pytest.approx(0.75, abs=0.07)
+
+
+def test_bara_invanare_utan_lofte_far_erbjudanden_och_takten_styr():
+    from core.matching_core import externt_erbjudande
+    w = _utvarld()
+    # en anställd inpendlare, en invånare, en invånare med löfte
+    w.individuals = _personer(["unemployed", "unemployed", "unemployed"], [True, False, False],
+                              municipal_code="2062", pi_o=1.0)
+    w.prepare()
+    _anstall(w, 0, 0)
+    w.individuals.at[2, "accepted_job_id"] = "J1"
+    rng = np.random.default_rng(0)
+    assert all(externt_erbjudande(w, 0, 1.0, rng) is None for _ in range(50)), \
+        "en inpendlare fick ett utpendlingserbjudande"
+    assert any(externt_erbjudande(w, 1, 1.0, rng) is not None for _ in range(50))
+    assert externt_erbjudande(w, 2, 1.0, rng) is None
+    w0 = _utvarld(andel=0.0)
+    w0.individuals = _personer(["unemployed"], [False], municipal_code="2062")
+    w0.prepare()
+    assert all(externt_erbjudande(w0, 0, 1.0, rng) is None for _ in range(50))
+
+
+def test_det_externa_jobbet_ar_ingen_vakans_och_upphor_nar_det_lamnas():
+    from core.matching_core import externt_erbjudande, anta_externt
+    from core.event_handlers import _become_unemployed
+    from core.statistics.basic_stats import analyze_world
+    w = _utvarld()
+    w.individuals = _personer(["unemployed"], [False], municipal_code="2062")
+    w.prepare()
+    fore = analyze_world(w)
+    rng = np.random.default_rng(1)
+    erbj = next(e for e in (externt_erbjudande(w, 0, 1.0, rng) for _ in range(50)) if e)
+    jid = anta_externt(w, 0, 1.0, erbj, omedelbart=True)
+    pos = w.job_index()[jid]
+    assert bool(w.jobs.at[pos, "extern"]) and not w.vacant_mask()[pos]
+    assert w.individuals.at[0, "status"] == "employed"
+    s = analyze_world(w)
+    assert (s["out_commuters"], s["employed_individuals"]) == (1, 1)
+    assert (s["total_jobs"], s["unmatched_jobs"]) == (fore["total_jobs"], fore["unmatched_jobs"])
+    _become_unemployed(w, 0, 20.0)
+    assert not bool(w.jobs.at[pos, "active"]), "det externa jobbet lever kvar"
+    assert not w.vacant_mask()[pos], "det externa jobbet blev en vakans"
+
+
+def test_utpendlaren_tilltrader_efter_fordrojning_under_korningen():
+    from core.matching_core import externt_erbjudande, anta_externt
+    w = _utvarld()
+    w.individuals = _personer(["unemployed"], [False], municipal_code="2062")
+    w.prepare()
+    w._pushed = []
+    orig = w._push_event
+    w._push_event = lambda ev, _o=orig: (w._pushed.append(ev), _o(ev))[1]
+    rng = np.random.default_rng(1)
+    erbj = next(e for e in (externt_erbjudande(w, 0, 1.0, rng) for _ in range(50)) if e)
+    jid = anta_externt(w, 0, 1.0, erbj)
+    start = [e for e in w._pushed if e["event_type"] == "start_job"]
+    assert len(start) == 1 and start[0]["params"]["job_id"] == jid
+    assert start[0]["time"] > 1.0
+    assert w.individuals.at[0, "accepted_job_id"] == jid
+
+
+def test_uppstarten_ger_utpendlare_och_slutar_inte_for_tidigt():
+    """Regionens enda vakans betalar inget, så ingen omgång tillsätter något i
+    regionen. Omgångar med bara externa tillsättningar är inte tomma: alla fem
+    ska bli utpendlare, två och två per omgång."""
+    from core.matching_core import bootstrap_matching
+    w = _utvarld(application_window_days=40)
+    w.individuals = _personer(["unemployed"] * 5, [False] * 5, municipal_code="2062")
+    w.jobs["active"] = [True] + [False] * (len(w.jobs) - 1)
+    w.jobs["wage"] = 0.0
+    w._vm_n = None
+    bootstrap_matching(w, 0.0, log=None)
+    held = w.jobs.set_index("job_id").loc[w.individuals["job_id"].dropna()]
+    assert len(held) == 5 and held["extern"].all()
+
+
+def test_ett_externt_jobb_ar_aldrig_en_vakans():
+    """Skyddet i vakansmasken: även ett aktivt, obesatt och inte utlovat
+    externt jobb är ingen vakans i regionen."""
+    w = _varld()
+    w.individuals = _personer(["unemployed"], [False])
+    w.prepare()
+    w.jobs.loc[0, "extern"] = True
+    w._vm_n = None
+    assert not w.vacant_mask()[0] and w.vacant_mask()[1]
+
+
+def test_extern_ar_alltid_boolesk():
+    """Invånarna fick NaN när de slogs ihop med reservoaren, och bool(NaN) är
+    sant: ingen invånare fick något erbjudande."""
+    w = _varld()
+    w.individuals = _personer(["unemployed", "extern"], [np.nan, True])
+    w.prepare()
+    assert w.individuals["extern"].tolist() == [False, True]

@@ -234,6 +234,110 @@ def apply_once(world, idx, t_now):
     return job_id, w_neg, q_hire, surplus, km
 
 
+def externt_erbjudande(world, idx, t_now, rng):
+    """Ett erbjudande om jobb utanför regionen (docs/omgivning.md, O4), eller
+    None.
+
+    Vid en andel utpendling_erbjudande_andel av invånarnas sökningar kommer
+    också ett erbjudande utifrån. Destinationen dras ur invånarens kommuns
+    utpendling i pendlingsmatrisen, bransch och yrke ur destinationens
+    jobbfördelning i TAB4436, platsen är en DeSO i destinationen dragen med
+    befolkningen. Erbjudandet värderas som ett lokalt i search_once: mötet
+    med sannolikheten min(1, q), produktiviteten
+    ur q och kravet, den förhandlade lönen ur fältets pris, och överskottet
+    mot hennes läge nu. Arbetsgivarens urval modelleras inte: omgivningen är
+    exogen, och den som får ett lönsamt erbjudande får jobbet. Mötet dämpas
+    inte med avståndet: destinationen bär det redan.
+
+    Bara invånare, anställda eller arbetslösa, utan löfte och utan pågående
+    uppsägning. Kommuner utan utpendling i matrisen får inga erbjudanden."""
+    ind = world.individuals
+    if getattr(world, 'conn', None) is None:          # syntetisk värld utan databas
+        return None
+    from core.event_handlers import ar_extern
+    if ar_extern(world, idx):
+        return None
+    st = world.get_ind(idx, 'status')
+    if st not in ('employed', 'unemployed'):
+        return None
+    for kol in ('accepted_job_id', 'notice_job_id'):
+        if kol in ind.columns and pd.notna(world.get_ind(idx, kol)):
+            return None
+    sim = world.cfg_reader.config.get('simulation', {})
+    if rng.random() >= float(sim.get('utpendling_erbjudande_andel', 0.1)):
+        return None
+    om = world.omgivning()
+    hem = str(ind.at[idx, 'municipal_code']).zfill(4)
+    if om.andel_utpendling(hem) <= 0:
+        return None
+    dest = om.dra_destination(hem, rng)
+    profil = world.kommunprofil()
+    bransch, ssyk = profil.dra_jobb(dest, rng)
+    onet = profil.onet(ssyk, rng)
+    geom = world._geom_lookup(onet)
+    if geom is None:
+        return None
+    x, y = om.dra_plats(dest, rng)
+    km = float(np.hypot(x - float(ind.at[idx, 'x']), y - float(ind.at[idx, 'y']))) / 1000.0
+    if hasattr(world, 'circles'):
+        q = float(world.circles.competitiveness(idx, [geom['x_occ']], [geom['y_occ']],
+                                                [geom['r_o']], world.competence_params())[0])
+    else:
+        q = 1.0
+    cfg = search_config(world)
+    # INGEN AVSTÅNDSDÄMPNING I MÖTET. Destinationen är redan dragen ur
+    # pendlingsmatrisen, som bär hur långt folk faktiskt pendlar; att dämpa
+    # med exp(-km / commute_decay_km) därtill räknade avståndet två gånger.
+    # Utpendlingen från Mora har medianen 76 km, och dämpningen gav mötet
+    # sannolikheten 0,08 i medel -- ingen utpendlare på två år.
+    p_mote = min(1.0, q)
+    if rng.random() >= p_mote:
+        return None
+    from core.occupations.requirement import productivity
+    from core.occupations.utils import negotiated_wage
+    rad = _with_current_reservation(world, idx, world.ind_row(idx), st, cfg)
+    w_res = float(rad.get('w_res') or 0.0)
+    r_req = geom.get('r_req')
+    pkt = productivity(np.array([q]), np.array([0.0 if r_req is None or np.isnan(r_req) else r_req]),
+                       k=cfg['requirement_k'])
+    w_field = np.array([float(geom['wage'])])
+    w_off = (float(negotiated_wage(pkt, w_field, w_res, **cfg['bargaining'])[0])
+             if cfg['bargaining'] is not None else float(w_field[0]))
+    if not np.isfinite(w_off):
+        return None
+    S = w_off - cfg['commute_cost_per_km'] * km - w_res
+    if S <= cfg['min_surplus']:
+        return None
+    return {"kommun": dest, "bransch": bransch, "ssyk": ssyk, "onet": onet,
+            "x": x, "y": y, "q": q, "w_neg": w_off, "surplus": S, "km": km}
+
+
+def anta_externt(world, idx, t_now, erbj, omedelbart=False):
+    """Hon tackar ja till ett externt erbjudande: jobbet skapas, löftet
+    skrivs, och tillträdet sker efter samma fördröjning som för ett lokalt
+    jobb -- med uppsägningstid om hon har ett jobb att säga upp. Vid
+    uppstarten sker tillträdet direkt, som för uppstartens lokala
+    anställningar. Returnerar jobbets id."""
+    from core import event_handlers as eh
+    jid = world.skapa_externt_jobb(t_now, erbj["kommun"], erbj["bransch"], erbj["ssyk"],
+                                   erbj["onet"], erbj["x"], erbj["y"])
+    ind = world.individuals
+    params = {"job_id": jid, "w_neg": erbj["w_neg"], "q_hire": erbj["q"],
+              "commute_km": erbj["km"], "n_applicants": 0, "extern": True}
+    if omedelbart:
+        params["bootstrap"] = True
+        eh.handle_start_job({"time": float(t_now), "agent_id": idx,
+                             "event_type": "start_job", "params": params}, world)
+        return jid
+    ind.at[idx, 'accepted_job_id'] = jid
+    if world.get_ind(idx, 'status') == 'employed' and pd.notna(world.get_ind(idx, 'job_id')):
+        ind.at[idx, 'notice_job_id'] = jid
+    lag = eh.start_delay_days(world, idx)
+    world._push_event({"time": float(t_now) + lag, "agent_id": idx,
+                       "event_type": "start_job", "params": params})
+    return jid
+
+
 def close_all_windows(world, t_now, immediate=False):
     """Stänger varje öppen annons genom handle_close_vacancy.
 
@@ -358,7 +462,16 @@ def bootstrap_matching(world, t_now=0.0, log=print):
         n = max(1, min(len(kö), int(round(per_vak * n_vak))))
         omgång = kö[:n]
 
+        externa = 0
         for i in omgång:
+            # Utpendlarna på plats (docs/omgivning.md, O4): en invånare kan få
+            # ett erbjudande utifrån också i uppstarten, och tillträder då
+            # direkt.
+            erbj = externt_erbjudande(world, i, t_now, np.random)
+            if erbj is not None:
+                anta_externt(world, i, t_now, erbj, omedelbart=True)
+                externa += 1
+                continue
             apply_once(world, i, t_now)
         före = dict(zip(ind.index, ind['job_id']))
         fyllda = close_all_windows(world, t_now, immediate=True)
@@ -372,6 +485,9 @@ def bootstrap_matching(world, t_now=0.0, log=print):
                             if 'w_neg' in ind.columns
                             and world.get_ind(i, 'w_neg') == world.get_ind(i, 'w_neg') else 0.0})
         omgångar += 1
+        # De externa räknas med: en omgång där någon tog ett jobb utanför
+        # regionen är inte tom.
+        fyllda += externa
         totalt += fyllda
         per_omgång.append(fyllda)
 

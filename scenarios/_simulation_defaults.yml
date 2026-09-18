@@ -128,6 +128,9 @@ simulation:
   # många som anställs; kalibreras i O5).
   inpendling_reservoar_faktor: 3.0
   inpendling_sokfaktor: 5.0
+  # Utpendlingen: andelen av invånarnas sökningar som också ger ett
+  # erbjudande utifrån (kalibreras i O5).
+  utpendling_erbjudande_andel: 0.1
 
   # --- Ålder (docs/individmodell.md, avsnitt 11) ---
   # Åldern dras ur SCB:s befolkning per ettårsklass (population_by_age) och

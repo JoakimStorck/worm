@@ -226,6 +226,14 @@ class Kommunprofil:
         for (k, s_), g in df.groupby(["municipal_code", "sni_code"]):
             n = g["n"].to_numpy(dtype=float)
             self._p[(str(k), str(s_))] = (g["ssyk_code"].astype(str).to_numpy(), n / n.sum())
+        # Kommunens hela jobbfördelning, bransch och yrke tillsammans: för jobb
+        # som inte tillhör något arbetsställe i regionen, som utpendlarnas
+        # (docs/omgivning.md, O4).
+        self._kommun = {}
+        for k, g in df[df["sni_code"].astype(str) != "00"].groupby("municipal_code"):
+            n = g["n"].to_numpy(dtype=float)
+            par = list(zip(g["sni_code"].astype(str), g["ssyk_code"].astype(str)))
+            self._kommun[str(k)] = (par, n / n.sum())
 
     # ---- underlag ----------------------------------------------------------
     def profil(self, kommun, bransch):
@@ -296,6 +304,16 @@ class Kommunprofil:
         lw = np.log(p) + self._logvikt(koder, karna if karna in self._lage else None)
         w = np.exp(lw - lw.max())
         return str(koder[int(rng.choice(len(koder), p=w / w.sum()))])
+
+    def dra_jobb(self, kommun, rng):
+        """(bransch, ssyk) för ett jobb i kommunen, dragen ur hela kommunens
+        jobbfördelning i TAB4436."""
+        try:
+            par, p = self._kommun[str(kommun).zfill(4)]
+        except KeyError:
+            raise ValueError(f"TAB4436 har inga anställda med placerbart yrke i kommun "
+                             f"{kommun}. " + HAMTA) from None
+        return par[int(rng.choice(len(p), p=p))]
 
     # ---- O*NET: ett svenskt yrke är en kod per arbetsställe ------------------
     def onet(self, ssyk, rng, realiserade=None) -> str:
