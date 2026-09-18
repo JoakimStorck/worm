@@ -125,12 +125,15 @@ simulation:
   # --- Omgivningen (docs/omgivning.md) ---
   # Inpendlingsreservoaren: storlek som multipel av matrisens inpendlingsstock
   # (ger urval), och sökintervallet som multipel av den arbetslösas (styr hur
-  # många som anställs; kalibreras i O5).
+  # många som anställs). Kalibrerat i O5 mot matrisens stock det FÖRSTA året,
+  # 1 685 mot 1 727 i Ovansiljan: senare växer stocken, eftersom inpendlarna
+  # fyller hålet efter pensionsavgångar som inget inträde ersätter.
+  # Kalibreras om efter steg 6b.
   inpendling_reservoar_faktor: 3.0
-  inpendling_sokfaktor: 5.0
+  inpendling_sokfaktor: 25.0
   # Utpendlingen: andelen av invånarnas sökningar som också ger ett
-  # erbjudande utifrån (kalibreras i O5).
-  utpendling_erbjudande_andel: 0.1
+  # erbjudande utifrån. Kalibrerat i O5: 1 745 utpendlare år 7-10 mot 1 767.
+  utpendling_erbjudande_andel: 0.2
 
   # --- Ålder (docs/individmodell.md, avsnitt 11) ---
   # Åldern dras ur SCB:s befolkning per ettårsklass (population_by_age) och

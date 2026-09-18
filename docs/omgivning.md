@@ -198,7 +198,21 @@ inte kalibrerade och körs inte som baslinje.
   1 078 efter ett år, 1 033 efter två, mot 1 767; de antagna jobben ligger i
   median 94 km bort, matrisens 76. Uppstarten når sitt tak på 40 omgångar,
   eftersom varje omgång ger några externa tillsättningar.
-- **O5. Kalibrering.** Takterna mot matrisens stockar per kommun; mäts över
-  körningen, för Ovansiljan och för kommuner med annan pendling (Oxelösund,
-  Göteborg, Åre).
+- **O5. Kalibrering.** **Gjort för Ovansiljan**, tio år, frö 1, två omgångar.
+  - Utpendlingen: `utpendling_erbjudande_andel` 0,20 ger 1 745 utpendlare år
+    7-10 mot matrisens 1 767, jämnt över kommunerna (Mora 1 039 / 1 112,
+    Orsa 323 / 323, Älvdalen 324 / 332). 0,15 gav 1 400-1 530.
+  - Inpendlingen stannar inte: den växer varje år oavsett takt, från
+    1 600-2 000 år 1 till 2 700-3 900 år 10. Två orsaker. Invånarnas
+    arbetskraft krymper med pensionsavgångarna, som inget inträde ersätter
+    (steg 6b), och reservoaren fyller en del av hålet; arbetslösheten ligger
+    kvar kring 500, så inpendlarna tränger inte undan invånarna. Och en
+    anställd inpendlare lämnade bara när jobbet förstördes eller när hon
+    bytte. Det senare är rättat: en anställd inpendlare möter sin kommuns
+    utträdeshasard vid sin fasta ålder och återgår då till reservoaren, som
+    förblir stationär. Det sänkte ökningen bara något.
+  - `inpendling_sokfaktor` sätts därför mot det första året: 25 ger 1 685
+    mot 1 727 (15 gav 1 840, 40 gav 1 590). Den kalibreras om efter 6b, när
+    regionens arbetskraft är stationär.
+  - Kvar: en kommun med annan pendling (Oxelösund, Göteborg, Åre).
 - **Därefter** 6a (priming), ny baslinje, och flyttningarna med 6b.

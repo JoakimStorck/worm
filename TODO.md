@@ -43,10 +43,13 @@ Före 6a, i tur och ordning:
       brusgolvet 0,95; störst avvikelse i bruksorter med en dominerande
       arbetsgivare.
 - [ ] `employment_municipality_sni` pensioneras, eller hämtas riktigt.
-- [ ] Omgivningen, regionens öppna rand (`docs/omgivning.md`): O1 underlaget (klart),
-      O2 bokföringen (klart), O3 inpendling och jobbmålet (klart), O4 utpendling (klart, utan
-      pendlingskostnad för externa erbjudanden), O5
-      kalibrering. Före 6a; flyttningarna med 6b.
+- [x] Omgivningen, regionens öppna rand (`docs/omgivning.md`): O1 underlaget,
+      O2 bokföringen, O3 inpendling och jobbmålet, O3c inpendlarnas
+      arbetskommun, O4 utpendling utan pendlingskostnad för externa erbjudanden,
+      O5 kalibrering för Ovansiljan. Flyttningarna byggs med 6b.
+- [ ] Inpendlingen kalibreras om efter 6b (sökfaktorn är satt mot år 1; stocken
+      växer när pensionsavgångarna inte ersätts). Pröva en kommun med annan
+      pendling (Oxelösund, Göteborg, Åre).
 - [ ] Reservoarens generering tar omkring 70 s (98 ursprungskommuner genom
       generate_individuals); många ursprung bidrar med ett fåtal personer.
 - [ ] Ny baslinje, efter omgivningen.

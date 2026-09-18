@@ -266,7 +266,10 @@ def test_reservoaren_far_ansoka():
     assert apply_once(w, 0, 1.0)[0] is not None
 
 
-def test_reservoaren_aldras_inte_och_gar_inte_i_pension():
+def test_reservoaren_aldras_inte_och_inpendlaren_atergar_vid_uttradet():
+    """Reservoaren är stationär: ingen åldras och ingen lämnar arbetskraften.
+    Men en anställd inpendlare möter sin kommuns hasard och återgår då till
+    reservoaren (O5) -- utan det ackumulerades inpendlarna."""
     import os, sys
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from test_alder import _varld_med_individer, _arsskifte, _profil
@@ -279,7 +282,9 @@ def test_reservoaren_aldras_inte_och_gar_inte_i_pension():
     _arsskifte(w)
     assert w.individuals["age"].tolist() == [71.0, 71.0], "inpendlaren åldrades"
     assert w.individuals.at[0, "status"] == "not_in_labor_force", "fixturen ska pensionera invånaren"
-    assert w.individuals.at[1, "status"] == "employed", "inpendlaren pensionerades"
+    assert w.individuals.at[1, "status"] == "extern", \
+        "inpendlaren lämnade inte jobbet, eller lämnade arbetskraften"
+    assert pd.isna(w.individuals.at[1, "job_id"])
 
 
 def test_uppstarten_tar_med_reservoarens_startdel():

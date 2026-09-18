@@ -1665,16 +1665,29 @@ def _aldras_och_pensioneras(world, event):
             "deltagandeprofilen. Den byggs av ScenarioBuilder och följer med "
             "via ScenarioResult till World.")
     kommun = ind['municipal_code'].astype(str).to_numpy()
+    # INPENDLARE I ARBETE LÄMNAR OCKSÅ (O5, docs/omgivning.md). Reservoaren
+    # är stationär: ingen åldras och ingen lämnar arbetskraften. Men utan
+    # utträde lämnade en anställd inpendlare jobbet bara när det förstördes
+    # eller när hon bytte, medan invånarna dessutom går i pension, och
+    # inpendlarna ackumulerades: 1 800-2 000 år ett, 3 400-3 900 år tio mot
+    # matrisens 1 727. Hon möter nu sin kommuns hasard vid sin (fasta) ålder
+    # och återgår vid utträdet till reservoaren. Omsättningen blir
+    # invånarnas, och reservoaren förblir stationär.
+    i_inpendlare = extern & (status == 'employed')
     h = np.zeros(len(ind))
     for kod, kurva in tabell.items():
-        i = np.flatnonzero(i_arbetskraft & (kommun == kod))
+        i = np.flatnonzero((i_arbetskraft | i_inpendlare) & (kommun == kod))
         if len(i):
             # ÖVER PROFILENS TAK lämnar alla: reindex ger NaN där kurvan
             # slutar, och den fylls med ett. Utan det kunde en individ åldras
             # förbi 74 och ligga kvar för att ingen hasard var definierad.
             h[i] = kurva.reindex(np.round(alder[i]).astype(int)
                                  ).fillna(1.0).to_numpy(float)
-    avgar = np.flatnonzero(i_arbetskraft & (np.random.random(len(ind)) < h))
+    slump = np.random.random(len(ind))
+    avgar = np.flatnonzero(i_arbetskraft & (slump < h))
+    tillbaka = np.flatnonzero(i_inpendlare & (slump < h))
+    for idx in ind.index[tillbaka]:
+        tillbaka_till_omgivningen(world, idx, t_now)
 
     fran_jobb = 0
     for idx in ind.index[avgar]:
@@ -1692,6 +1705,7 @@ def _aldras_och_pensioneras(world, event):
                    "job_id": lamnad})
     return {"retired": int(len(avgar)),
             "retired_from_job": int(fran_jobb),
+            "in_commuters_exit": int(len(tillbaka)),
             "exit_age_mean": (round(float(np.nanmean(alder[avgar])), 2)
                               if len(avgar) else None),
             "age_mean_labour_force": (
