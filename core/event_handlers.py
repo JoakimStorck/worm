@@ -1325,6 +1325,32 @@ def _wage_stock_stats(world):
     return ut
 
 
+def _circle_stats(world):
+    """Årligt tvärsnitt av antalet kompetenscirklar per individ.
+
+    Taket (max_circles) tar bort den lättaste cirkeln utan att något syns i
+    utfallen. I baslinjen (1e5a890) gick det bara att rekonstruera ur
+    transitioner och händelselogg: 13-17 individer per frö på taket, 2-4
+    som redan tappat en. Steg 2 (inget tak) och steg 3 (en cirkel per
+    händelse) ändrar just den här fördelningen, så den ska kunna läsas av
+    direkt. Tappen är kumulativa från körningens start."""
+    c = getattr(world, "circles", None)
+    if c is None:
+        return {}
+    n = c.counts()
+    if n.size == 0:
+        return {}
+    return {
+        "circles_mean": round(float(n.mean()), 4),
+        "circles_p50": float(np.median(n)),
+        "circles_p99": float(np.quantile(n, 0.99)),
+        "circles_max": int(n.max()),
+        "circles_at_cap": int((n >= c.K).sum()),
+        "circles_evicted_n": int((c.evicted > 0).sum()),
+        "circles_evictions": int(c.evicted.sum()),
+    }
+
+
 def _apply_wage_revision(world, t_now):
     """Årlig lönerevision: procentuell ökning på befintlig lön.
 
@@ -1606,6 +1632,7 @@ def handle_new_year(event, world):
     }
     extra.update(aldrande)
     extra.update(_wage_stock_stats(world))          # FÖRE revisionen
+    extra.update(_circle_stats(world))
     extra.update(_apply_wage_revision(world, float(event['time'])))
     world.refresh_ind()      # revisionen skriver med en Series levande: bygg om vyerna (0110)
     world.event_logger.log_event(world, event, extra=extra, print_line=True)

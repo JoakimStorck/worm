@@ -76,10 +76,13 @@ for r in runs["run"]:
     if not ny:
         continue
     rader = [(e.get("year"), e.get("stock_share_above_pi"), e.get("stock_sd_log_w"),
-              e.get("unemployed"), e.get("unmatched_jobs"), e.get("revision_d_bar"))
+              e.get("unemployed"), e.get("unmatched_jobs"), e.get("revision_d_bar"),
+              e.get("circles_p99"), e.get("circles_max"), e.get("circles_at_cap"),
+              e.get("circles_evicted_n"))
              for e in ny]
     d = pd.DataFrame(rader, columns=["år", "över_Pi", "sd_log_w", "arbetslösa",
-                                     "vakanser", "d_bar"])
+                                     "vakanser", "d_bar", "cirk_p99", "cirk_max",
+                                     "på_taket", "tappat"])
     print(f"\n{r}")
     print(d.to_string(index=False))
     for kol in ("över_Pi", "sd_log_w"):

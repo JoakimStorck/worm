@@ -70,6 +70,11 @@ class Circles:
         self.key = np.full((n, K), EMPTY, dtype=np.int64)
         self.key_index: dict = {}          # nyckelsträng -> heltal
         self.key_names: list = []
+        # HUR OFTA TAKET BITER. En full rad tappar sin lättaste cirkel utan
+        # spår, och antalet cirklar skrevs inte ut: att taket nåddes i
+        # baslinjen (1e5a890) gick bara att rekonstruera ur händelseloggen.
+        # Räknaren gör steg 2 och 3 i byggordningen prövbara direkt.
+        self.evicted = np.zeros(n, dtype=np.int64)
 
     # ---- nycklar ---------------------------------------------------------
     def code(self, key) -> int:
@@ -96,7 +101,11 @@ class Circles:
             self.mass[i, j] = tot
             return j
         free = np.flatnonzero(row == EMPTY)
-        j = int(free[0]) if free.size else int(np.argmin(self.mass[i]))
+        if free.size:
+            j = int(free[0])
+        else:
+            j = int(np.argmin(self.mass[i]))
+            self.evicted[i] += 1
         self.key[i, j] = k
         self.x[i, j], self.y[i, j] = x, y
         self.rho2[i, j] = rho2
@@ -276,6 +285,10 @@ class Circles:
         return (c_s * ny).sum(axis=0)
 
     # ---- sammanfattning --------------------------------------------------------
+    def counts(self) -> np.ndarray:
+        """Antal upptagna cirklar per individ."""
+        return (self.key != EMPTY).sum(axis=1)
+
     def summarize(self):
         """Härledda mått per individ: centroid (skärpeviktad), chi, xi,
         riktningskonsekvens R och spridning r_i. För loggning och kompatibilitet."""

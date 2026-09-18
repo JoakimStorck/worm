@@ -375,3 +375,82 @@ def test_union_is_vectorised_over_jobs():
     for i in range(50):
         ett = c.competitiveness(0, jx[i:i + 1], jy[i:i + 1], jr[i:i + 1], p)[0]
         assert många[i] == pytest.approx(ett, rel=1e-12)
+
+
+def test_eviction_is_counted_only_when_the_row_is_full():
+    """Taket tar bort den lättaste cirkeln utan spår i utfallen. Räknaren
+    ska öka bara då -- inte när en ledig plats fylls och inte när samma
+    nyckel slås ihop."""
+    c = Circles(2, 3)
+    c.add(0, "a", 0, 0, 0.1, 1.0)
+    c.add(0, "b", 0, 0, 0.1, 2.0)
+    c.add(0, "c", 0, 0, 0.1, 3.0)
+    c.add(0, "a", 0, 0, 0.1, 1.0)               # sammanslagning, ingen ny plats
+    assert c.evicted.tolist() == [0, 0]
+    c.add(0, "d", 0, 0, 0.1, 0.5)
+    c.add(0, "e", 0, 0, 0.1, 0.5)
+    assert c.evicted.tolist() == [2, 0]
+    assert c.counts().tolist() == [3, 0]
+
+
+def test_circle_counts_reach_the_log_and_the_run_table(tmp_path):
+    """Hela vägen: årsskiftet mäter cirklarna, den riktiga loggen skriver
+    dem, läsaren tolkar raden och körningstabellen bär dem. Slutläget får
+    dem som kolumner i individtabellen. Stock-fälten tappades en gång på
+    just den vägen (se test_stock_and_revision_reach_the_run_table)."""
+    import os, sys
+    import pandas as pd
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from conftest import make_world
+    from core.event_handlers import handle_new_year
+    from core.log import EventLogger
+    from core.analysis.eventlog import parse_line, summary_row
+
+    w = make_world(n_employers=2, size=1)
+    w.individuals = pd.DataFrame([{
+        "individual_id": f"i{k}", "status": "unemployed", "job_id": None,
+        "w_res": 0.5, "chi": 0.3, "xi": 0.3, "r_i": 0.0,
+        "x_occ": 0.3, "y_occ": 0.1, "x": 0.0, "y": 0.0,
+        "onet_code": "11-1011.00", "r_o_home": 0.27, "tenure_years": 3.0,
+        "education_level": 3, "municipal_code": "2062"} for k in range(2)]
+    ).astype({"job_id": object})
+    w.init_competence()
+    K = w.circles.K
+    # individ 0 får fler yrken än taket rymmer; individ 1 har startens tre
+    for k in range(K + 2):
+        w.circles.add(0, f"yrke{k}", 0.1, 0.1, 0.1, 0.01 * (k + 1))
+    assert w.circles.counts().tolist() == [K, 3]
+
+    path = tmp_path / "eventlog.csv"
+    w.event_logger = EventLogger(str(path))
+    handle_new_year({"time": 0.0, "agent_id": None, "event_type": "new_year",
+                     "params": {"year": 2024}}, w)
+    w.event_logger.close()
+    ev = [r for r in (parse_line(l) for l in path.read_text(encoding="utf-8").splitlines())
+          if r is not None and r.get("event") == "new_year"]
+    assert len(ev) == 1
+    rad = ev[0]
+    assert int(rad["circles_max"]) == K
+    assert int(rad["circles_at_cap"]) == 1
+    assert int(rad["circles_evicted_n"]) == 1
+    assert int(rad["circles_evictions"]) == 5        # tre från starten plus två
+    assert float(rad["circles_mean"]) == pytest.approx((K + 3) / 2)
+
+    tr = pd.DataFrame({"u_R": [0.7], "u_R_occ": [0.7], "w_neg": [1.0],
+                       "w_occ": [1.0], "w_field": [1.0], "wage_ratio": [1.0],
+                       "in_cps_sample": [True], "occ_change": [True],
+                       "is_mgmt": [False], "r_req": [0.3], "q_hire": [0.9],
+                       "commute_km": [5.0], "n_applicants": [3.0]})
+    ts = pd.DataFrame({"year": [1.0], "month": [1], "vacancies": [10],
+                       "employed": [90], "unemployed": [10],
+                       "labour_force": [100], "active_jobs": [100],
+                       "posted": [0], "not_in_labour_force": [0],
+                       "u": [10.0], "v": [10.0], "tightness": [1.0],
+                       "identity_residual": [0]})
+    row = summary_row(str(tmp_path), events=ev, tr=tr, ts=ts)
+    assert row["circles_max"] == K
+    assert row["circles_evictions"] == 5
+
+    w._write_competence_summary()
+    assert w.individuals["n_circles"].tolist() == [K, 3]
+    assert w.individuals["n_circles_evicted"].tolist() == [5, 0]

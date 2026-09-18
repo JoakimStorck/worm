@@ -777,6 +777,10 @@ class World(IndividualViews):
         for col in ("x_occ", "y_occ", "chi", "xi", "r_i"):
             ind[col] = summ[col]
         ind["R"] = summ["R"]
+        # Till individtabellen så att slutläget bär dem; årsraden bär
+        # fördelningen (_circle_stats).
+        ind["n_circles"] = self.circles.counts()
+        ind["n_circles_evicted"] = self.circles.evicted.copy()
         self.refresh_ind()
 
     def set_active_occupation(self, idx, onet_code, x, y, r_o):
