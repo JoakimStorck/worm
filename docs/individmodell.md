@@ -370,6 +370,58 @@ inom branschen. Men b med kärnor dragna ur riket återger kommunernas
 KLUMPIGHET, inte deras faktiska profil -- Oxelösunds stålverk blir ett
 slumpmässigt tillverkningsarbetsställe.
 
+### Kommunens profil i arbetsställena (beslutat 2026-09-18, designutkast)
+
+**Beslut.** Modellen bygger på befintliga kommuner och generaliserar ur
+befintlig struktur, så kommunerna ska ha sin faktiska profil från start. En
+kommun som domineras av en industri ska göra det i modellen, och en kommun
+som domineras av turism likaså. Kommunens profil styr från vilka branscher
+och från vilka yrken arbetsställena får sin profil, och ju spetsigare
+kommunens profil är, desto smalare är arbetsställena avgränsade i
+uppgiftsrummet.
+
+Profilen är stabil nog att bygga på. Gemensam massa bransch × yrke mellan
+2020 och 2024 i TAB4436: Oxelösund 0,86, Olofström 0,85, Mora 0,87,
+Malung-Sälen 0,82, Åre 0,79, Älvdalen 0,79, Orsa 0,74. Rikets fördelning gav
+Oxelösund 0,58.
+
+**Utkast, att pröva före bygge:**
+
+1. **En pool per kommun och bransch.** Kommunens jobb i bransch s får yrken ur
+   kommunens egen P_k(ssyk | s) i TAB4436, i heltal (största rest). Summan
+   över arbetsställena är då kommunens profil exakt, inte bara i väntevärde.
+2. **Kärnan först, störst först.** Arbetsställena i branschen tas i fallande
+   storlek. Vart och ett drar ett kärnyrke ur det som återstår i poolen, med
+   antalet som vikt. Det största arbetsstället får alltså troligast det
+   dominerande yrket: stålverket får metallarbetarna.
+3. **Profilyrkena viktas mot kärnan.** Arbetsställets övriga jobb tas ur
+   poolen med vikten antal · exp(−d² / 2 r_c²), där d är avståndet mellan
+   SSYK-gruppernas tyngdpunkter i uppgiftsrummet och r_c kärnans task-radie.
+   Bredden är alltså kärnyrkets egen radie, ingen fri parameter. Spetsigheten
+   följer av poolen: i en kommun där branschens jobb ligger tätt finns bara
+   närliggande yrken att ta, och arbetsställena blir smala av sig själva.
+4. **Stödyrkena utan avståndsvikt.** Chefer (SSYK 1), administration (4) och
+   städ (91) -- 16,9 procent i riket, 7–35 procent per bransch -- fördelas ur
+   poolen utan avståndsvikt. Blandningen finns kvar, och stödandelen kommer
+   ur data i stället för att vara en parameter.
+5. **O\*NET-realiseringen per arbetsställe** (a) är oförändrad.
+6. **Nya jobb under körningen** följer arbetsställets profil: kärnan sparas
+   på jobben (core_ssyk), och ett nytt jobb dras ur P_k(ssyk | s) med samma
+   avståndsvikt mot kärnan, stödyrkena utan. Aggregatet bevaras då bara i
+   väntevärde; driften mäts under körningen.
+7. **Storleksklassens inverkan på yrket släpps.** TAB4436 saknar storlek.
+   Arbetsställenas storlek dras fortfarande givet branschen.
+
+**Prövningen.** Mot 2024 är valideringen inte längre oberoende, eftersom
+poolen ÄR 2024. Oberoende: bygg poolen ur 2020 och jämför med 2024, med
+kommunens egen stabilitet 2020→2024 som måttstock. Arbetsställenas bredd
+mäts som förut (RMS mot centroiden, effektivt antal yrken) och ska bli
+smalare i spetsiga kommuner.
+
+**Öppet.** Kommunens jobbmål kommer från jobbandelar och skiljer sig från
+TAB4436:s anställda (Mora 9 948 mot 10 223); med en pool ur TAB4436 ligger
+det nära till hands att ta målet därifrån också.
+
 ---
 
 ## 4. Matchning: två frågor med olika ägare
