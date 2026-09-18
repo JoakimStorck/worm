@@ -27,7 +27,10 @@ class IndividualViews:
                         'notice_job_id', 'individual_id', 'q_last', 'x_occ', 'y_occ',
                         'x', 'y', 'r_i', 'propensity_start_education', 'next_search_time',
                         'last_onet_code', 'propensity_internal_training',
-                        'propensity_internal_job_change', 'municipal_code', 'extern')
+                        'propensity_internal_job_change', 'municipal_code', 'extern',
+                        # anspråkets tillstånd, läst vid varje sökning (_tal)
+                        'unemployed_since', 'w_last', 'pi_o', 'w_rel_med', 'w_rel_sd',
+                        'p_claim0', 'w_res_time', 'last_education_draw')
     _SAKNAS = object()
 
     def refresh_ind(self, verify=False):

@@ -21,6 +21,18 @@ def default_converter(o):
         return o.item()
     raise TypeError(f"Object of type {o.__class__.__name__} is not JSON serializable")
 
+_TOMT_INDEX = pd.Index([])
+
+
+def _index(world, tabell):
+    """Tabellens index, eller ett tomt. INTE getattr(world, tabell,
+    pd.DataFrame()): standardvärdet utvärderas före anropet, också när
+    attributet finns, och varje loggad händelse byggde en tom DataFrame --
+    84 000 per simulerat år och 4,7 sekunder."""
+    df = getattr(world, tabell, None)
+    return df.index if df is not None else _TOMT_INDEX
+
+
 def build_standard_logdict(event, agent_type, agent=None, agent_id=None, extra=None, free_text=""):
     return {
         "time": event["time"],
@@ -142,9 +154,9 @@ class EventLogger:
             # Försök avgöra agenttyp automatiskt
             if event["agent_id"] is None:
                 agent_type = "system"
-            elif event["agent_id"] in getattr(world, "individuals", pd.DataFrame()).index:
+            elif event["agent_id"] in _index(world, "individuals"):
                 agent_type = "individual"
-            elif event["agent_id"] in getattr(world, "employers", pd.DataFrame()).index:
+            elif event["agent_id"] in _index(world, "employers"):
                 agent_type = "employer"
             else:
                 agent_type = "unknown"
@@ -159,9 +171,9 @@ class EventLogger:
             extra = dict(extra)
             event = {**event, "agent_id": extra.pop("agent_id")}
             agent_type = None
-            if event["agent_id"] in getattr(world, "individuals", pd.DataFrame()).index:
+            if event["agent_id"] in _index(world, "individuals"):
                 agent_type = "individual"
-            elif event["agent_id"] in getattr(world, "employers", pd.DataFrame()).index:
+            elif event["agent_id"] in _index(world, "employers"):
                 agent_type = "employer"
             else:
                 agent_type = "unknown"

@@ -544,8 +544,11 @@ def _tal(world, idx, kol):
     uppdaterades aldrig. Felet syns inte som ett fel utan som att en grupp
     aldrig sänker sina krav.
     """
+    # Via kolumnvyn: .at på tabellen kostade 3,3 sekunder per simulerat år i
+    # anspråksuppdateringen ensam (189 000 läsningar).
     try:
-        v = float(world.individuals.at[idx, kol])
+        las = getattr(world, 'get_ind', None)
+        v = float(las(idx, kol) if las is not None else world.individuals.at[idx, kol])
     except (KeyError, TypeError, ValueError):
         return float("nan")
     return v
