@@ -51,7 +51,7 @@ def _fmt(v, nd=2):
     return "—" if v is None or (isinstance(v, float) and not np.isfinite(v)) else f"{v:.{nd}f}"
 
 
-def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
+def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario', tillagg=None):
     lines = []
     A = lines.append
     A("# Analys av WORM-körningar\n")
@@ -536,6 +536,9 @@ def write_report(df, grouped, out, run_dirs, figdir=None, by='scenario'):
                   f"| {x.max()-x.min():.3f} |")
         A("")
 
+    for rad in (tillagg or []):
+        A(rad)
+
     if figdir:
         A("## Figurer\n")
         for f in sorted(os.listdir(figdir)):
@@ -932,8 +935,52 @@ def main():
         F.fig_tenure(figdir)
         F.fig_wages(runs, figdir)
         F.fig_commute(runs, figdir)
+        tillagg = _avsnitt_intrade(F.fig_intrade(runs, figdir))
+        tillagg += _avsnitt_pensionsalder(figdir)
+    else:
+        tillagg = []
 
-    write_report(df, grouped, a.out, runs, figdir, by=by)
+    write_report(df, grouped, a.out, runs, figdir, by=by, tillagg=tillagg)
+
+
+def _avsnitt_intrade(r):
+    """Rapportens avsnitt om de ungas inträde (docs/intradet.md)."""
+    if r is None:
+        return ["## De ungas inträde\n",
+                "Ingen körning har inträden (6b); figuren `intrade.pdf` saknas.\n"]
+    L = ["## De ungas inträde\n",
+         f"Körning `{r['run']}`. Deltagandet per ålder är ett utfall av planerna, "
+         "inte en indata, och prövas mot kommunernas BAS-profil. Figur `intrade.pdf`.\n",
+         r["deltagande"].to_markdown(index=False, floatfmt=".3f") + "\n"]
+    f = r["floden"]
+    if len(f) > 1:
+        sen = f[f["år"] >= f["år"].max() - 4]
+        L.append(f"Senaste fem åren i medel: {sen['nya studenter'].mean():.0f} nya studenter, "
+                 f"{sen['gick in'].mean():.0f} inträden, {sen['aldrig in'].mean():.0f} aldrig in "
+                 f"och {sen['pensioneringar'].mean():.0f} pensioneringar om året; arbetskraften "
+                 f"{f['arbetskraft'].iloc[0]:.0f} -> {f['arbetskraft'].iloc[-1]:.0f}.\n")
+    if r.get("studerande_arbetar") is not None:
+        L += ["Andelen studerande som förvärvsarbetar (6c), mot TAB3731:\n",
+              r["studerande_arbetar"].to_markdown(index=False, floatfmt=".3f") + "\n"]
+    return L
+
+
+def _avsnitt_pensionsalder(figdir):
+    """Pensionsmyndighetens medelpensioneringsålder mot riktningen i
+    uppgiftsrummet (scripts/analys_pensionsalder.py). Saknas underlaget står
+    det i rapporten, med besked om var det kommer ifrån."""
+    from scripts.analys_pensionsalder import rapportfigur
+    L = ["## Pensionsåldern mot riktningen\n"]
+    try:
+        r = rapportfigur(os.path.join(figdir, "pensionsalder_xi.pdf"))
+    except FileNotFoundError as e:
+        return L + [f"Figuren saknas: {e}\n"]
+    L.append(f"Pensionsmyndighetens yrkesgrupper ({r['n']} rader), med intjänandeåren "
+             f"som kontroll: topp {r['topp']:.0f}° ± {r['se_topp']:.0f}, amplitud "
+             f"{r['amplitud']:.2f} ± {r['se_amp']:.2f} år, R² {r['R2']:.2f}. "
+             "Figur `pensionsalder_xi.pdf`; hela analysen i "
+             "`scripts/analys_pensionsalder.py`.\n")
+    return L
 
 
 if __name__ == "__main__":

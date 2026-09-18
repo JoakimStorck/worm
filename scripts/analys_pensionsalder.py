@@ -350,9 +350,44 @@ def figur(d, r, path):
     print(f"\nSparad: {path}")
 
 
+PENSIONSFIL = os.path.join("data", "Yrkesuppdelat.csv")
+YRKESFIL = os.path.join("data", "TAB4441_sv.csv")
+
+
+def matcha(pensionsfil, yrkesfil=YRKESFIL, db=DB):
+    """Pensionsmyndighetens yrkesgrupper med SSYK3 och läget i
+    uppgiftsrummet. Returnerar (matchade, omatchade)."""
+    pens = las_pensionsalder(pensionsfil)
+    namn = las_ssyk_namn(yrkesfil)
+    conn = sqlite3.connect(db)
+    geom = riktning_per_ssyk(conn)
+    conn.close()
+    d = pens.merge(namn[["ssyk3", "nyckel"]], on="nyckel", how="left")
+    utan = d[d["ssyk3"].isna()]
+    return d.dropna(subset=["ssyk3"]).merge(geom, on="ssyk3", how="inner"), utan
+
+
+def rapportfigur(figurvag, pensionsfil=PENSIONSFIL, yrkesfil=YRKESFIL, db=DB):
+    """Figuren och nyckeltalen för analysrapporten (scripts/analysis.py).
+    Kontrollen är intjänandeåren, som i huvudanalysen. Saknas filerna kastar
+    funktionen med besked om var de kommer ifrån."""
+    for f, kalla in ((pensionsfil, "Pensionsmyndighetens rapport Pensionsåldrar och "
+                                   "arbetslivets längd (2026), yrkesuppdelad tabell"),
+                     (yrkesfil, "python scripts/fetch_data.py (TAB4441)")):
+        if not os.path.isfile(f):
+            raise FileNotFoundError(f"{f} saknas: {kalla}.")
+    d, _ = matcha(pensionsfil, yrkesfil, db)
+    r = harmonisk(d, vikt="antal", kontroller=("intjanandear",))
+    os.makedirs(os.path.dirname(figurvag) or ".", exist_ok=True)
+    figur(d, r, figurvag)
+    d.to_csv(os.path.splitext(figurvag)[0] + ".csv", index=False)
+    return {"n": r["n"], "topp": r["topp"], "se_topp": r["se_topp"],
+            "amplitud": r["amplitud"], "se_amp": r["se_amp"], "R2": r["R2"]}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("pensionsfil")
+    ap.add_argument("pensionsfil", nargs="?", default=PENSIONSFIL)
     ap.add_argument("--yrkesfil", default="data/TAB4441_sv.csv",
                     help="yrkesregisterfil med SSYK3-benämningar")
     ap.add_argument("--db", default=DB)
@@ -362,14 +397,7 @@ def main():
     a = ap.parse_args()
 
     pens = las_pensionsalder(a.pensionsfil)
-    namn = las_ssyk_namn(a.yrkesfil)
-    conn = sqlite3.connect(a.db)
-    geom = riktning_per_ssyk(conn)
-    conn.close()
-
-    d = pens.merge(namn[["ssyk3", "nyckel"]], on="nyckel", how="left")
-    utan = d[d["ssyk3"].isna()]
-    d = d.dropna(subset=["ssyk3"]).merge(geom, on="ssyk3", how="inner")
+    d, utan = matcha(a.pensionsfil, a.yrkesfil, a.db)
 
     print(f"{len(pens)} rader i underlaget, {len(d)} matchade mot SSYK3 och "
           f"uppgiftsrummet")

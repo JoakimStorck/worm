@@ -657,6 +657,140 @@ def fig_commute(run_dirs, out):
 
 
 # ---------------------------------------------------------------------------
+def _med_intrade(run_dirs):
+    """Senaste körningen vars logg har inträden (6b, docs/intradet.md)."""
+    from core.analysis.eventlog import read_events
+    for rd in sorted(run_dirs, key=os.path.getmtime, reverse=True):
+        p = os.path.join(rd, "eventlog.csv")
+        if not os.path.isfile(p) or not os.path.isfile(os.path.join(rd, "final_state_individuals.csv")):
+            continue
+        with open(p, encoding="utf-8", errors="ignore") as f:
+            if "intrade" not in f.read():
+                continue
+        return rd, read_events(rd)
+    return None, None
+
+
+def fig_intrade(run_dirs, out, db=os.path.join(ROOT, "data", "worm.sqlite3")):
+    """De ungas inträde (6b/6c): deltagandet per ålder mot BAS, flödena per år,
+    och andelen studerande som arbetar mot TAB3731. Returnerar tabellerna för
+    rapporten, eller None om ingen körning har inträden."""
+    import json
+    import sqlite3
+    from core.analysis.eventlog import timeseries_table
+    rd, ev = _med_intrade(run_dirs)
+    if rd is None:
+        return None
+    meta = json.load(open(os.path.join(rd, "run_meta.json"), encoding="utf-8"))
+    kommuner = [str(k).zfill(4) for k in meta.get("municipalities", [])]
+    klasser = [(16, 19), (20, 24), (25, 29), (30, 34)]
+
+    def deltagande(fil):
+        f = pd.read_csv(os.path.join(rd, fil), usecols=lambda c: c in (
+            "status", "age", "extern", "studerande"), low_memory=False)
+        if "extern" in f.columns:
+            f = f[f["extern"].astype(str) != "True"]
+        ut = {}
+        for lo, hi in klasser:
+            g = f[(f.age >= lo) & (f.age < hi + 1)]
+            ut[f"{lo}-{hi}"] = float(g.status.isin(["employed", "unemployed"]).mean()) if len(g) else np.nan
+        return ut, f
+
+    start, _ = deltagande("initial_state_individuals.csv")
+    slut, f_slut = deltagande("final_state_individuals.csv")
+    conn = sqlite3.connect(db)
+    lf = pd.read_sql("SELECT age_group, in_labour_force, total FROM labour_force_by_age "
+                     "WHERE year = (SELECT MAX(year) FROM labour_force_by_age)", conn)
+    lf = lf[pd.read_sql("SELECT municipal_code FROM labour_force_by_age WHERE year = "
+                        "(SELECT MAX(year) FROM labour_force_by_age)", conn).municipal_code
+            .astype(str).str.zfill(4).isin(kommuner).to_numpy()]
+    g = lf.groupby("age_group")[["in_labour_force", "total"]].sum()
+    bas = {k: (float(g.loc[k, "in_labour_force"] / g.loc[k, "total"]) if k in g.index else np.nan)
+           for k in ("16-19", "20-24", "25-29", "30-34")}
+    delt = pd.DataFrame({"ålder": list(bas), "start": [start[k] for k in bas],
+                         "slut": [slut[k] for k in bas], "BAS": list(bas.values())})
+
+    # Flödena per år ur loggen.
+    ar = lambda e: int(float(e["time"]) // 365.25)
+    ny = {ar(e): e for e in ev if e.get("event") == "new_year"}
+    ts = timeseries_table(ev)
+    L = ts.groupby(ts.year.astype(int)).labour_force.first()
+    rows = []
+    for y in sorted(L.index):
+        n = ny.get(y, {})
+        rows.append({"år": y, "arbetskraft": float(L[y]),
+                     "nya studenter": float(n.get("new_students") or 0),
+                     "pensioneringar": float(n.get("retired") or 0),
+                     "gick in": sum(1 for e in ev if e.get("event") == "intrade" and ar(e) == y
+                                    and str(e.get("event_detail", "")).startswith("entered")),
+                     "aldrig in": sum(1 for e in ev if e.get("event") == "intrade" and ar(e) == y
+                                      and str(e.get("event_detail", "")).startswith("never"))})
+    flod = pd.DataFrame(rows)
+
+    # Andelen studerande som arbetar, per ålder (6c), mot TAB3731.
+    arb = None
+    if "studerande" in f_slut.columns:
+        st = f_slut[f_slut.studerande.astype(str) == "True"]
+        mod = {a: float((st[st.age.round() == a].status == "employed").mean())
+               for a in range(16, 25) if (st.age.round() == a).sum() >= 10}
+        t = pd.read_sql("SELECT age, study, employment, SUM(population) n FROM "
+                        "population_study_education GROUP BY 1, 2, 3", conn)
+        t = t[(t.study != "0") & t.age.isin([str(a) for a in range(16, 25)])]
+        ref = (t[t.employment == "FÖRV"].groupby("age").n.sum() / t.groupby("age").n.sum())
+        arb = pd.DataFrame({"ålder": list(range(16, 25)),
+                            "modellen": [mod.get(a, np.nan) for a in range(16, 25)],
+                            "TAB3731": [float(ref.get(str(a), np.nan)) for a in range(16, 25)]})
+    conn.close()
+
+    fig, axs = plt.subplots(1, 3, figsize=(15, 4.4))
+    ax = axs[0]
+    x = np.arange(len(delt))
+    for i, (kol, farg) in enumerate((("start", "0.6"), ("slut", "tab:blue"), ("BAS", "black"))):
+        ax.bar(x + (i - 1) * 0.27, delt[kol], width=0.27, color=farg, label=kol)
+    ax.set_xticks(x, delt["ålder"])
+    ax.set_ylabel("Andel i arbetskraften")
+    ax.legend(frameon=False, fontsize=8)
+    ps.title(ax, "A. Deltagande per ålder", pad=8)
+
+    ax = axs[1]
+    fl = flod[flod["år"] >= 1]            # år 0 är starten, inga flöden
+    for kol, farg in (("nya studenter", "tab:green"), ("gick in", "tab:blue"),
+                      ("aldrig in", "tab:gray"), ("pensioneringar", "tab:red")):
+        ax.plot(fl["år"], fl[kol], marker="o", ms=3, color=farg, label=kol)
+    ax.set_xlabel("År")
+    ax.set_ylabel("Personer per år")
+    ax2 = ax.twinx()
+    ax2.plot(flod["år"], flod["arbetskraft"], color="black", ls="--", label="arbetskraft")
+    ax2.set_ylabel("Arbetskraft")
+    h1, l1 = ax.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax.legend(h1 + h2, l1 + l2, frameon=False, fontsize=7.5, loc="center right")
+    ps.title(ax, "B. Inträde och utträde", pad=8)
+
+    ax = axs[2]
+    if arb is not None:
+        ax.plot(arb["ålder"], arb["TAB3731"], color="black", marker="s", ms=3, label="TAB3731")
+        ax.plot(arb["ålder"], arb["modellen"], color="tab:blue", marker="o", ms=3, label="modellen")
+        ax.legend(frameon=False, fontsize=8)
+    else:
+        ax.text(0.5, 0.5, "körningen är från före 6c", ha="center", va="center",
+                transform=ax.transAxes, color="0.4")
+    ax.set_xlabel("Ålder")
+    ax.set_ylabel("Andel av de studerande som arbetar")
+    ps.title(ax, "C. Studerande med extrajobb", pad=8)
+
+    fig.tight_layout()
+    figio.write(fig, "intrade", out,
+                data={"deltagande": delt, "floden": flod,
+                      **({"studerande_arbetar": arb} if arb is not None else {})},
+                run_dirs=[rd], save=ps.save,
+                note=f"Körning {os.path.basename(rd)}. Deltagandet är andelen av "
+                     "invånarna i arbetskraften; BAS är kommunernas profil.")
+    return {"run": os.path.basename(rd), "deltagande": delt, "floden": flod,
+            "studerande_arbetar": arb}
+
+
+# ---------------------------------------------------------------------------
 def latest_run():
     outdir = os.path.join(ROOT, "output")
     c = [os.path.join(outdir, d) for d in os.listdir(outdir)
