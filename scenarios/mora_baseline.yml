@@ -42,22 +42,9 @@ defaults:
         weight_field: num_workplaces
       urban_areas:
         weight_field: population
-    employer_size_distribution:
-      micro:
-        max_size: 9
-        ratio: 0.85
-      small:
-        min_size: 10
-        max_size: 49
-        ratio: 0.12
-      medium_large:
-        min_size: 50
-        max_size: 250
-        ratio: 0.025
-      very_large:
-        min_size: 251
-        max_size: 1000
-        ratio: 0.005
+    # Storleken dras givet branschen ur yrkesregistret (core/bransch.py).
+    # Talet stänger registrets öppna klass 100+.
+    workplace_max_size: 1000
 
   # === AGENT-PARAMETRAR: INDIVIDUALS ===
   individuals:

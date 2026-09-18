@@ -77,9 +77,15 @@ viktade yrkescentrum, och varje individ placeras vid ett centrum plus gaussisk
 jitter i planet, klippt till skivan. Att jittra kartesiskt snarare än i (χ, ξ)
 undviker den förvrängning som uppstår nära origo.
 
-**Arbetsgivare** placeras geografiskt efter zonlager och får en yrkesposition som
-medelvärdet av sina jobbs `(x_occ, y_occ)` – alltså centroiden, i linje med
-geometrimodellens definition.
+**Arbetsgivare** (arbetsställen) får bransch och storlek ur data
+(`core/bransch.py`). Kommunens jobbmål fördelas på branscherna efter
+invånarnas bransch (`employment_deso_sni`), och inom varje bransch dras
+arbetsställen tills branschens mål är fyllt. Storleksklassen dras givet
+branschen ur rikets fördelning av anställda (`occupation_by_industry`), och
+`workplace_max_size` stänger den öppna klassen 100+. Arbetsgivarna placeras
+geografiskt efter zonlager och får en yrkesposition som medelvärdet av sina
+jobbs `(x_occ, y_occ)` – alltså centroiden, i linje med geometrimodellens
+definition.
 
 **Jobb** ärver sitt yrkes position och task-radie r_o.
 

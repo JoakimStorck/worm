@@ -18,8 +18,16 @@ beroenden. Steg 1 (`_union`) är gjort i f4d2c03. Nästa:
 Steg 6 är delat i två ("Två situationer" i `docs/utbildningsmodell.md`):
 6a, priming av startpopulationen så att startåret redan är jämviktsläget, och
 6b, inträdet, där de unga kommer in med en utbildningshistorik och inte med
-ett yrke. Före 6a rättas startens yrkeskälla (registret faller tyst tillbaka
-på SNI). Parkerat: studieorten, och val som svarar på arbetsmarknaden.
+ett yrke. Parkerat: studieorten, och val som svarar på arbetsmarknaden.
+
+Före 6a, i tur och ordning:
+- [x] Startens yrkeskälla: registret föll tyst tillbaka på SNI (aa5cdff).
+- [x] Arbetsställenas bransch och storlek ur data (`core/bransch.py`).
+- [ ] Jobbets yrke givet arbetsställets bransch och storlek, samma funktion
+      vid start och under körningen. Läkare ska inte kunna anställas på en
+      bilverkstad. `sni_onet_link` slutar användas för jobb.
+- [ ] `employment_municipality_sni` pensioneras, eller hämtas riktigt.
+- [ ] Ny baslinje.
 
 ---
 

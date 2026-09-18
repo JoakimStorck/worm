@@ -421,13 +421,6 @@ class ConfigReader:
             if abs(total - 1.0) > 0.01:
                 warn.append(f"education_levels summerar till {total}, ej 1.0.")
 
-        # === Kolla employer_distribution ===
-        emp_dist = defaults.get("employer_distribution", {})
-        size_dist = emp_dist.get("employer_size_distribution", {})
-        size_sum = sum(float(cls.get("ratio", 0.0)) for cls in size_dist.values())
-        if size_dist and abs(size_sum - 1.0) > 0.01:
-            warn.append(f"employer_size_distribution ratio summerar till {size_sum}, ej 1.0.")
-
         # === Dubbletter: Warn om param finns på flera nivåer ===
         overrides = self.config.get("municipality_overrides", {})
         for mcode, ovr in overrides.items():

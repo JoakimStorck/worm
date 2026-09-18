@@ -67,18 +67,23 @@ class ScenarioBuilder:
         self.onet_space_df = self.load_onet_occupation_space_table()
 
 
+    def _branschstruktur(self, max_storlek):
+        from core.bransch import Branschstruktur
+        nyckel = int(max_storlek) if max_storlek is not None else None
+        if getattr(self, "_bransch_cache", (None, None))[0] != nyckel:
+            self._bransch_cache = (nyckel, Branschstruktur(self.conn, max_storlek))
+        return self._bransch_cache[1]
+
     def print_employer_size_stats(self, employers_df, employer_dist_cfg):
-        bins, probs, class_names = self.get_size_distribution_from_config(employer_dist_cfg)
-        class_ranges = bins
-        counts = {name: 0 for name in class_names}
-        for size in employers_df['size']:
-            for name, (min_s, max_s) in zip(class_names, class_ranges):
-                if min_s <= size <= max_s:
-                    counts[name] += 1
-                    break
-        log("Storleksfördelning (antal arbetsgivare per klass):")
-        for name, (min_s, max_s) in zip(class_names, class_ranges):
-            log(f"  {name:12}: {counts[name]:5d} st ({min_s}-{max_s} anställda)")
+        from core.bransch import STORLEKSKLASSER, storleksklass
+        klass = employers_df['size'].map(storleksklass)
+        log("Arbetsställen per storleksklass (antal, andel av jobben):")
+        jobb = employers_df['size'].sum()
+        for namn, _, _ in STORLEKSKLASSER:
+            i = klass == namn
+            log(f"  {namn:16}: {int(i.sum()):5d} st  {employers_df.loc[i, 'size'].sum() / jobb:6.1%}")
+        andel = employers_df.groupby('sni_code')['size'].sum() / jobb
+        log("Jobb per bransch: " + "  ".join(f"{k} {v:.1%}" for k, v in andel.items()))
 
     def fetch_zones(self, layer_name, weight_field, municipal_code, year=None):
         cursor = self.conn.execute(f"PRAGMA table_info({layer_name})")
@@ -185,29 +190,22 @@ class ScenarioBuilder:
         else:
             raise ValueError(f"Oväntad geometri från sample_points: {result.geom_type}")
 
-    def get_size_distribution_from_config(self, employer_dist_cfg):
-        size_cfg = employer_dist_cfg['employer_size_distribution']
-        bins = []
-        probs = []
-        for klass in size_cfg.values():
-            min_size = klass.get('min_size', 1)
-            max_size = klass['max_size']
-            ratio = klass['ratio']
-            bins.append((min_size, max_size))
-            probs.append(ratio)
-        total = sum(probs)
-        if not np.isclose(total, 1.0):
-            probs = [p / total for p in probs]
-        return bins, probs, list(size_cfg.keys())
-
     def generate_employers_with_target_jobs(
-        self, 
-        year, 
-        municipal_code, 
-        target_jobs, 
-        employer_dist_cfg, 
-        sni_source="municipality"
+        self,
+        year,
+        municipal_code,
+        target_jobs,
+        employer_dist_cfg,
     ):
+        # BRANSCH OCH STORLEK UR DATA (core/bransch.py), inte ur scenariots
+        # storleksklasser och en bransch dragen per arbetsställe.
+        if "employer_size_distribution" in employer_dist_cfg:
+            raise ValueError(
+                "employer_distribution.employer_size_distribution används inte "
+                "längre: storleken dras givet branschen ur yrkesregistret "
+                "(core/bransch.py). Ta bort blocket och ange workplace_max_size, "
+                "som stänger storleksklassen 100+.")
+        struktur = self._branschstruktur(employer_dist_cfg.get("workplace_max_size"))
         allocation_order = employer_dist_cfg['allocation_order']
         layer_configs = employer_dist_cfg['layer_configs']
         layer_gdfs = {}
@@ -219,7 +217,6 @@ class ScenarioBuilder:
                 log(f"[VARNING] {e} -- Lager '{layer}' hoppas över för kommun {municipal_code}.")
                 continue
 
-        bins, probs, class_names = self.get_size_distribution_from_config(employer_dist_cfg)
         rng = self.rng
 
         # VIKTERNA ANVÄNDS NU. fetch_zones normaliserade redan varje lagers
@@ -241,23 +238,11 @@ class ScenarioBuilder:
         lager_namn, lager_p, zon_vikt = _lagervikter(layer_gdfs, municipal_code)
 
         employers = []
-        n_jobs = 0
-
-        while n_jobs < target_jobs:
-            class_i = rng.choice(len(bins), p=probs)
-            size = rng.integers(low=bins[class_i][0], high=bins[class_i][1] + 1)
+        for sni_code, size in struktur.dra_arbetsstallen(municipal_code, target_jobs, rng):
             layer = lager_namn[rng.choice(len(lager_namn), p=lager_p)]
             gdf = layer_gdfs[layer]
             row = gdf.iloc[rng.choice(len(gdf), p=zon_vikt[layer])]
             pt = self.random_points_in_polygon(row.geometry, 1)[0]
-            deso_code = row.get('deso_code', None)
-
-            if sni_source == 'deso' and deso_code is not None:
-                sni_dist = self.fetch_sni_distribution(municipal_code, year, deso_code=deso_code, sni_source='deso')
-            else:
-                sni_dist = self.fetch_sni_distribution(municipal_code, year, sni_source='municipality')
-            sni_code = rng.choice(sni_dist['sni_code'], p=sni_dist['prob'])
-
             employers.append({
                 'employer_id': f"{municipal_code}_e{len(employers):06d}",
                 'municipal_code': municipal_code,
@@ -269,16 +254,6 @@ class ScenarioBuilder:
                 'size': size,
                 'sni_code': sni_code
             })
-            n_jobs += size
-
-        # Sista arbetsgivaren kapas till målet. Blir den noll ska den bort --
-        # en arbetsgivare utan jobb bidrar med en punkt i geografin och en rad
-        # i statistiken utan att någon kan anställas där.
-        overflow = n_jobs - target_jobs
-        if overflow > 0:
-            employers[-1]['size'] -= overflow
-            if employers[-1]['size'] <= 0:
-                employers.pop()
 
         employers_df = gpd.GeoDataFrame(employers, geometry='geometry')
         log(f"Antal arbetsgivare: {len(employers_df)} (mål: {target_jobs} jobb)")
@@ -503,6 +478,11 @@ class ScenarioBuilder:
                 else:
                     # SNI-vägen: arbetsställets bransch ger yrkesfördelningen
                     occ_freq = self.get_onet_codes_with_freq_for_sni(sni)
+                    if not occ_freq:
+                        raise ValueError(
+                            f"sni_onet_link saknar bransch {sni}. Arbetsställena "
+                            "bär registrets branschgrupper (core/bransch.py), som "
+                            "länktabellen inte har; använd occupation_source: register.")
                     onet_codes, freqs = zip(*occ_freq)
                     onet_code = self.rng.choice(onet_codes, p=np.array(freqs)/np.sum(freqs))
 
