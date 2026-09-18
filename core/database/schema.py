@@ -195,6 +195,13 @@ def create_schema(db_path="data/worm.sqlite3"):
             year INTEGER, employed INTEGER
         )
     """)
+    # Lediga jobb per 100 anställningar och län (TAB6605, core/database/load_lediga_jobb.py)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS vacancy_rate_county (
+            county_code TEXT, vacancy_type TEXT, quarter TEXT,
+            per_100 REAL, margin REAL
+        )
+    """)
     c.execute("""
         CREATE TABLE IF NOT EXISTS occupation_by_industry (
             ssyk_code TEXT, sni_code TEXT, size_class TEXT, employed INTEGER

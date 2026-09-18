@@ -56,12 +56,16 @@ Före 6a, i tur och ordning:
 - [ ] Inkörningen i arbetsmarknadens stockar (spår C, `docs/stockarna.md`):
       utan åldrande och inträde faller arbetslösheten omkring 40 % på fyra år.
       Det är tre fel, inte relaxation. I ordning:
-  - [ ] C1 jobbmålet räknar in vakanserna: J_data · (1 + v*), v* ur TAB6605.
+  - [x] C1 jobbmålet räknar in vakanserna: J_data · (1 + v*), v* ur TAB6605.
+        Verkan syns först efter C2.
   - [ ] C2 utpendlingen som ett bestånd av platser, inte en ström av erbjudanden.
   - [ ] C3 inpendlarnas utträde oberoende av `simulation.demografi`.
   - [ ] C4 modellens vakansnivå (4,75 % öppna mot Dalarnas 2,03 %), och
         därefter uppvärmningens längd.
 - [ ] Ny baslinje, efter omgivningen och inkörningen.
+- [ ] Genereringsfröet är scenariofilens `seed`, inte `WORM_SEED`: baslinjens
+      frön delar en värld och underskattar spridningen (±100 arbetslösa vid
+      start mellan världar, ±30 mellan matchningsfrön). Avgörs före nästa baslinje.
 
 ---
 

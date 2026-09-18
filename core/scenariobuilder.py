@@ -1071,6 +1071,53 @@ class ScenarioBuilder:
         return {"jobb": {k: om.jobb(k) for k in koder},
                 "boende": {k: om.sysselsatta(k) for k in koder}}
 
+    def vakansgrad(self, municipalities):
+        """Lediga jobb per anställning i kommunens län, som andel
+        (docs/stockarna.md).
+
+        Måttet är "lediga jobb, totalt" (LJtotA): SCB räknar en befattning som
+        ledig så länge arbetsgivaren söker, också med tillträde längre fram,
+        men inte när den är tillsatt -- det modellens öppna vakans är. Medlet
+        tas över alla kvartal, eftersom modellen saknar säsong och ett
+        enskilt läns kvartal har en osäkerhetsmarginal på upp till 0,8
+        procentenheter kring en nivå omkring 2.
+
+        Länet är kommunkodens två första siffror. Saknas tabellen eller länet
+        kastar funktionen: utan vakansgrad blir positionerna lika många som
+        de sysselsatta, och det är felet som rättas, inte en reserv."""
+        hamta = ("Hämta den med: python scripts/fetch_data.py --only "
+                 "\"Lediga jobb\" och kör python scripts/create_database.py.")
+        finns = self.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                                  "AND name='vacancy_rate_county'").fetchone()
+        if finns is None:
+            raise ValueError("Tabellen vacancy_rate_county saknas. " + hamta)
+        df = pd.read_sql("SELECT county_code, per_100 FROM vacancy_rate_county "
+                         " WHERE vacancy_type = 'LJtotA'", self.conn)
+        medel = df.groupby(df["county_code"].astype(str).str.zfill(2))["per_100"].mean()
+        koder = [str(k).zfill(4) for k in municipalities]
+        saknas = sorted({k[:2] for k in koder} - set(medel.index))
+        if saknas:
+            raise ValueError(f"Vakansgraden saknas för länen {saknas}. " + hamta)
+        return {k: float(medel[k[:2]]) / 100.0 for k in koder}
+
+    def positioner(self, sysselsatta):
+        """Jobbmålet per kommun: de sysselsatta plus de lediga.
+
+        Pendlingsmatrisens kolumnsumma räknar personer sysselsatta med
+        arbetsställe i kommunen, alltså BESATTA jobb. Togs den som antalet
+        positioner blev varje vakans en sysselsatt för lite, och arbetslösheten
+        u = u_min + V/L låg V/L över SCB:s (docs/stockarna.md). Positionerna är
+        därför J_data · (1 + v), v ur vakansgrad().
+
+        De utlovade positionerna, där någon tackat ja men inte tillträtt, läggs
+        medvetet inte till: andelen är modellens egen och kan inte läsas ur
+        SCB.
+
+        sysselsatta är pendlingsmarginaler()["jobb"], kommun -> antal."""
+        v = self.vakansgrad(list(sysselsatta))
+        return {k: int(round(n * (1.0 + v[str(k).zfill(4)])))
+                for k, n in sysselsatta.items()}
+
     def generate_inpendlingsreservoar(self, year):
         """Inpendlingsreservoaren (docs/omgivning.md, O3b).
 
@@ -1233,11 +1280,16 @@ class ScenarioBuilder:
         # kolumnsumman i pendlingsmatrisen och de sysselsatta invånarna hela
         # radsumman; pendlingen över randen bärs av omgivningen. Se
         # pendlingsmarginaler().
+        #
+        # Kolumnsumman är sysselsatta, alltså besatta jobb; positionerna är de
+        # plus länets lediga jobb (positioner(), docs/stockarna.md).
         marginaler = self.pendlingsmarginaler(municipalities)
-        jobb_per_kommun = marginaler["jobb"]
+        jobb_per_kommun = self.positioner(marginaler["jobb"])
         boende_per_kommun = marginaler["boende"]
         total_jobs = int(sum(jobb_per_kommun.values()))
-        log("[pendling] jobb " + ", ".join(
+        log("[pendling] sysselsatta med arbetsställe i kommunen " + ", ".join(
+            f"{k}: {v}" for k, v in marginaler["jobb"].items()))
+        log("[pendling] positioner med länets lediga jobb " + ", ".join(
             f"{k}: {v}" for k, v in jobb_per_kommun.items()) + f" av {total_jobs}")
         log("[pendling] sysselsatta invånare " + ", ".join(
             f"{k}: {v}" for k, v in boende_per_kommun.items()))

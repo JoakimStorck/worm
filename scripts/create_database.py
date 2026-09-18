@@ -86,6 +86,16 @@ else:
     log("OBS: Laddar inte dagbefolkning per yrke och bransch, filen saknas. "
         "Hämta den med: python scripts/fetch_data.py --only \"dagbef yrke bransch\"")
 
+# Lediga jobb per 100 anställningar och län (TAB6605): skillnaden mellan
+# pendlingsmatrisens sysselsatta och modellens positioner (docs/stockarna.md).
+lediga_csv = "data/Lediga jobb per anstallning lan.csv"
+if file_exists(lediga_csv):
+    from core.database.load_lediga_jobb import load_lediga_jobb
+    load_lediga_jobb(lediga_csv, db_path=DB_PATH)
+else:
+    log("OBS: Laddar inte lediga jobb per län, filen saknas. "
+        "Hämta den med: python scripts/fetch_data.py --only \"Lediga jobb\"")
+
 # Ladda O*NET-data (yrken och skills)
 # O*NET:s råtabeller laddas inte längre. onet_occupations, onet_skills och
 # occupation_skill_link lästes bara av skill-PCA:n, som var uppgiftsrummet

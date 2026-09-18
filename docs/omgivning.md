@@ -124,7 +124,10 @@ Identitetskontrollen i rapporten och i `check_invariants.py` skrivs om.
 
 **Jobbmålet** blir alla jobb i regionens kommuner, kolumnsumman i hela
 matrisen, i stället för delmatrisens. Nivån är sysselsatta med arbetsställe i
-kommunen, inklusive företagare, som TAB4436 saknar.
+kommunen, inklusive företagare, som TAB4436 saknar. Kolumnsumman är BESATTA
+jobb; vakanserna i bokföringen ovan fanns inte med förrän C1
+(`stockarna.md`), och positionerna är nu kolumnsumman gånger ett plus länets
+lediga jobb per anställning.
 
 **Primingen (steg 6a)** börjar med de observerade pendlarna på plats:
 inpendlare i regionens jobb och utpendlare i externa jobb.

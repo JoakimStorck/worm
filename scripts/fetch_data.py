@@ -128,6 +128,17 @@ MANIFEST = [
         "query_args": {"ar": "2024"},
     },
 
+    # Lediga jobb per 100 anställningar och län, hela ekonomin (TAB6605,
+    # 2024K2 och framåt). Skillnaden mellan pendlingsmatrisens sysselsatta och
+    # modellens positioner (docs/stockarna.md). Den äldre serien (TAB4300-
+    # TAB4305, till 2024K1) täcker bara näringslivet.
+    {
+        "type": "scb_px",
+        "dest": os.path.join(DATA_DIR, "Lediga jobb per anstallning lan.csv"),
+        "table_id": "TAB6605",
+        "query_fn": "lediga_jobb_per_lan",
+    },
+
     # Stubbar – fyll i "table_query" och en "query_fn" i QUERY_BUILDERS:
     {"type": "scb_px", "dest": os.path.join(DATA_DIR, "employment_municipality_sni_2020.csv"),
      "table_query": None},
@@ -529,10 +540,41 @@ def bygg_dagbef_yrke_bransch_uttag(meta, ar=None):
             "selections": uttag}
 
 
+
+def bygg_lediga_jobb_uttag(meta, ar=None):
+    """Lediga jobb per 100 anställningar, hela ekonomin, per län (TAB6605).
+
+    ALLA KVARTAL, inte ett år. Modellen har ingen säsong, och ett enskilt läns
+    kvartal har en osäkerhetsmarginal på upp till 0,8 procentenheter kring en
+    nivå omkring 2. Konsumenten tar medlet (docs/stockarna.md). ar ignoreras.
+
+    LÄNEN VÄLJS. Regionerna blandar riket, län, riksområden och NUTS2; bara
+    länen, tvåsiffriga koder utom 00, hämtas. Båda typerna (totalt och med
+    omgående tillträde) och båda innehållen (värdet och dess
+    osäkerhetsmarginal) hämtas; tabellen är liten.
+    """
+    dim = meta.get("dimension", {})
+
+    def kategorier(namn):
+        return list(dim.get(namn, {}).get("category", {}).get("index", {}).keys())
+
+    lan = [k for k in kategorier("AARegion") if re.fullmatch(r"\d{2}", k) and k != "00"]
+    if not lan or not kategorier("LedJobbTyp") or not kategorier("Tid"):
+        raise ValueError("metadatan saknar län, typ av lediga jobb eller kvartal")
+    val = [{"variableCode": "LedJobbTyp", "valueCodes": kategorier("LedJobbTyp")},
+           {"variableCode": "AARegion", "valueCodes": lan},
+           {"variableCode": "ContentsCode", "valueCodes": kategorier("ContentsCode")},
+           {"variableCode": "Tid", "valueCodes": kategorier("Tid")}]
+    return {"params": {"lang": "sv", "outputFormat": "csv",
+                       "outputFormatParams": "UseCodesAndTexts"},
+            "selection": {"selection": val}}
+
+
 QUERY_BUILDERS = {"befolkning_per_alder": bygg_befolkningsuttag,
                   "arbetskraft_per_alder": bygg_arbetskraftsuttag,
                   "yrke_per_utbildningsinriktning": bygg_yrkesutfallsuttag,
-                  "dagbef_yrke_bransch": bygg_dagbef_yrke_bransch_uttag}
+                  "dagbef_yrke_bransch": bygg_dagbef_yrke_bransch_uttag,
+                  "lediga_jobb_per_lan": bygg_lediga_jobb_uttag}
 
 
 def fetch_scb_px(item):

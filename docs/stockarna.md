@@ -123,3 +123,40 @@ verkligheten börjar redan under den avgåendes uppsägningstid, är punkt 4.
 
 Uppvärmningens längd avgörs först därefter. Vakanserna sätter sig i dag på
 omkring två år.
+
+## C1 prövad (2026-09-18)
+
+Positionerna blev 17 181 mot 16 839. Fem år utan demografi, frö 1
+(`output/run_20260918_212927`), mot körningen ovan:
+
+| | före | med C1 |
+|---|---|---|
+| U vid start | 2 338 | 2 664 |
+| U år 5 | 1 117 | 1 110 |
+| öppna vakanser år 4 | 4,74 % | 5,11 % |
+| Ut / In år 5 | 2 960 / 2 482 | 2 801 / 2 555 |
+
+**År 5 syns rättelsen inte i arbetslösheten.** Av de 342 positionerna blev
+omkring 100 fler vakanser och omkring 230 mindre nettopendling; tio blev färre
+arbetslösa. Så länge utpendlingen är en ström som inte töms (fel 2) sätts
+arbetslösheten av flödesbalansen, inte av bokföringen. C1 kan visa sin verkan
+först efter C2.
+
+**Startens högre arbetslöshet var världen, inte C1.** Med fler positioner blir
+varje arbetsgivardragning en annan, och byggarens frö är scenariofilens
+`seed: 12345`, inte `WORM_SEED`. Uppstarten ensam, frö 1:
+
+| genereringsfrö | utan v\* | med v\* |
+|---|---|---|
+| 12345 | 2 419 | 2 664 |
+| 12346 | 2 616 | 2 549 |
+| 12347 | 2 478 | 2 505 |
+| medel | 2 504 | 2 573 |
+
+Matchningsfröna 1–3 i samma värld skiljer ±30; världarna ±100. De tillagda
+positionerna blir vid start nästan helt vakanser (medel 2 188 mot 1 794).
+
+**Följd för alla jämförelser:** `WORM_SEED` varierar bara matchningen och
+körningen. Baslinjens fem frön delar en genererad värld och underskattar
+spridningen. Ett beslut om genereringsfröet ska följa `WORM_SEED` hör till
+nästa baslinje, inte till C1.
