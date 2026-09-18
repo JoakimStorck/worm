@@ -1045,99 +1045,31 @@ class ScenarioBuilder:
             return None
         return {k: float(d[k]) / 100.0 for k in koder}
 
-    def jobbandelar(self, municipalities, year):
-        """Hur scenariots jobb ska FÖRDELAS mellan kommunerna.
+    def pendlingsmarginaler(self, municipalities):
+        """Jobb och sysselsatta invånare per kommun, med öppen rand
+        (docs/omgivning.md, steg O3).
 
-        Tidigare fick varje kommun target_jobs = workforce - n_unemployed,
-        alltså exakt lika många jobb som den har sysselsatta invånare.
-        Nettopendlingen blev därmed noll i varje kommun per konstruktion och
-        det enda som kunde uppstå var symmetriska bruttoflöden. I SCB:s tal
-        för Ovansiljan har Mora 1.11 jobb per sysselsatt invånare, Orsa 0.74
-        och Älvdalen 0.83; modellen gav 1.00 åt alla tre. Ingen justering av
-        commute_cost_per_km kan ändra det -- parametern skalar bruttoflödena
-        men kan inte skapa ett netto.
+        Tidigare (jobbandelar) togs båda ur DELMATRISEN, där både bostad och
+        arbetsställe ligger i scenariot, så att summan jobb var lika med summan
+        sysselsatta invånare och scenariot var slutet: jobb som innehas av
+        pendlare utifrån togs bort, och invånare som arbetar utanför fanns inte
+        som sysselsatta någonstans. För Ovansiljan är det 10 procent åt vardera
+        hållet, för Oxelösund ensam 44. Scenarier med en enda kommun hoppade
+        dessutom över matrisen helt.
 
-        Källan är kolumnsumman i SCB:s pendlingsmatris (tabellen commuting). Den senare såg ut att duga -- den räknar
-        efter arbetsställe -- men är ett urval: den ger Mora 4 250 sysselsatta
-        på 164 arbetsställen när kommunen har omkring 10 000 jobb, och
-        summorna är jämna femtiotal. Andelarna blev 81/12/7 mot de riktiga
-        66/15/19, alltså Älvdalen halverat. Att fetch_sni_distribution läser
-        kolumnen workplaces och inte employed ur samma tabell var tecknet på
-        att employed inte bär det den ser ut att bära.
-
-        Kolumnsumman i pendlingsmatrisen är jobben i kommunen, och kvoten
-        mellan kommunerna är den fördelning jobben ska ha.
-
-        SUMMAN BEVARAS. Scenariot är ett slutet system: en Morabo som i
-        verkligheten arbetar i Falun kan i modellen inte pendla ut, eftersom
-        Falun inte finns. Skulle totalen tas rakt ur arbetsställestatistiken
-        skulle Ovansiljan få fler jobb än sysselsatta invånare och skillnaden
-        dyka upp som vakanser ingen kan fylla. Det är fördelningen som hämtas
-        ur data, inte nivån.
-
-        Returnerar dict kommun -> andel, eller None om underlaget saknas för
-        någon kommun. Då faller anroparen tillbaka på den gamla fördelningen,
-        som är fel men känd.
+        Nu är jobben HELA kolumnsumman -- alla sysselsatta med arbetsställe i
+        kommunen, inpendlarna inräknade -- och de sysselsatta invånarna HELA
+        radsumman, utpendlarna inräknade. Pendlingen över randen bärs av
+        omgivningen (core/omgivning.py). Saknas matrisen kastar Omgivning; den
+        gamla reserven, kommunens egen arbetskraft, fanns för att den stängda
+        modellen tålde det.
         """
-        koder = [str(k) for k in municipalities]
-        # KÄLLAN ÄR PENDLINGSMATRISENS KOLUMNSUMMA. Det är det enda underlag i
-        # databasen som otvetydigt räknar jobb efter ARBETSSTÄLLE.
-        #
-        # Två andra källor prövades och dög inte. employment_municipality_sni
-        # ger Mora 4 250 sysselsatta på 164 arbetsställen när kommunen har
-        # omkring 10 000 jobb -- ett urval, inte full statistik.
-        # employment_deso_sni är nattbefolkning: DeSO är en bostadsindelning,
-        # och totalraderna summerar till 10 163 / 3 399 / 3 450 för Mora, Orsa
-        # och Älvdalen, vilket är kommunernas BOENDE sysselsatta (10 116 /
-        # 3 348 / 3 245) och inte deras jobb. Med den källan hade fördelningen
-        # blivit densamma som den gamla, fast uppmätt i stället för antagen.
-        #
-        # PRÖVNINGEN SOM SKILJER DAG FRÅN NATT ÄR ORSA: 2 235 jobb mot 3 348
-        # boende sysselsatta. Mora skiljer bara någon procent och duger inte
-        # som kontroll.
-        #
-        # Delmatrisen och inte hela kolumnen: de jobb i Mora som innehas av
-        # Rättviks- eller Leksandsbor kan ingen i scenariot ta, eftersom de
-        # pendlarna inte finns i modellen. Det är också exakt den definition
-        # scripts/diagnose_commuting.py mäter mot, så källa och utvärdering
-        # använder samma tal.
-        try:
-            df = pd.read_sql("SELECT * FROM commuting", self.conn)
-        except Exception as e:
-            log(f"[jobbandelar] tabellen commuting saknas ({e}) -- faller "
-                f"tillbaka på kommunernas egen arbetskraft.")
-            return None
-        if df.empty:
-            return None
-        for kol in ("home_municipality", "work_municipality"):
-            df[kol] = df[kol].astype(str).str.strip().str.zfill(4)
-        if "year" in df.columns and df["year"].notna().any():
-            df = df[df["year"] == df["year"].max()]
-        inom = df[df["home_municipality"].isin(koder)
-                  & df["work_municipality"].isin(koder)]
-        if inom.empty:
-            log("[jobbandelar] commuting täcker inte scenariots kommuner -- "
-                "faller tillbaka på kommunernas egen arbetskraft.")
-            return None
-        dag, natt = {}, {}
-        for kod in koder:
-            j = float(inom[inom["work_municipality"] == kod]["employed"].sum())
-            b = float(inom[inom["home_municipality"] == kod]["employed"].sum())
-            if j <= 0 or b <= 0:
-                log(f"[jobbandelar] {kod}: saknas i pendlingsmatrisen -- "
-                    f"faller tillbaka på kommunernas egen arbetskraft.")
-                return None
-            dag[kod], natt[kod] = j, b
-        # BÅDA MARGINALERNA UR SAMMA DELMATRIS. Kolumnsumman är jobben i
-        # kommunen, radsumman dess boende sysselsatta, och de summerar till
-        # samma tal -- delmatrisen ÄR en sluten arbetsmarknad. Hämtas bara
-        # täljaren ur SCB och nämnaren ur scenariofilens workforce_ratio mäter
-        # dag/natt skillnaden mellan två källor lika mycket som modellens
-        # beteende: med platshållarna för Ovansiljan fick Mora 63.3 procent av
-        # invånarna mot SCB:s 59.6 och Älvdalen 18.1 mot 20.4, vilket ensamt
-        # förklarade att kvoterna blev 1.04 och 1.07 i stället för 1.10 och
-        # 0.95.
-        return {"jobb": dag, "boende": natt}
+        from core.omgivning import Omgivning
+        om = Omgivning(self.conn, municipalities)
+        self._omgivning = om
+        koder = [str(k).zfill(4) for k in municipalities]
+        return {"jobb": {k: om.jobb(k) for k in koder},
+                "boende": {k: om.sysselsatta(k) for k in koder}}
 
     def generate(self, year=None):
         t0 = time.time()
@@ -1155,10 +1087,9 @@ class ScenarioBuilder:
 
         unemployment_rate = self.cfg_reader.config.get("unemployment_rate", 0.0)
 
-        # BÅDA SIDOR UR PENDLINGSMATRISEN. Jobben per kommun ur kolumnsumman,
-        # de boende sysselsatta ur radsumman. De summerar till samma tal, så
-        # scenariot förblir slutet: lika många jobb som sysselsatta invånare
-        # totalt, men fördelade olika mellan kommunerna. Se jobbandelar().
+        # BÅDA SIDOR UR PENDLINGSMATRISEN, med öppen rand: jobben ur hela
+        # kolumnsumman, de boende sysselsatta ur hela radsumman. Se
+        # pendlingsmarginaler().
         #
         # workforce_ratio i scenariofilen slutar därmed styra HUR MÅNGA
         # sysselsatta varje kommun har och blir bara det den bör vara: en
@@ -1174,22 +1105,18 @@ class ScenarioBuilder:
         else:
             faktisk_u = None
 
-        marginaler = None
-        if len(municipalities) > 1:
-            marginaler = self.jobbandelar(municipalities, year)
-        if marginaler:
-            jobb_per_kommun = marginaler["jobb"]
-            boende_per_kommun = marginaler["boende"]
-            total_jobs = int(round(sum(jobb_per_kommun.values())))
-            log("[jobbandelar] jobb " + ", ".join(
-                f"{k}: {100 * v / total_jobs:.1f} %"
-                for k, v in jobb_per_kommun.items()) + f" av {total_jobs}")
-            log("[jobbandelar] boende " + ", ".join(
-                f"{k}: {100 * v / sum(boende_per_kommun.values()):.1f} %"
-                for k, v in boende_per_kommun.items()))
-        else:
-            jobb_per_kommun = boende_per_kommun = None
-            total_jobs = 0
+        # ÖPPEN RAND (docs/omgivning.md). Jobben per kommun är hela
+        # kolumnsumman i pendlingsmatrisen och de sysselsatta invånarna hela
+        # radsumman; pendlingen över randen bärs av omgivningen. Se
+        # pendlingsmarginaler().
+        marginaler = self.pendlingsmarginaler(municipalities)
+        jobb_per_kommun = marginaler["jobb"]
+        boende_per_kommun = marginaler["boende"]
+        total_jobs = int(sum(jobb_per_kommun.values()))
+        log("[pendling] jobb " + ", ".join(
+            f"{k}: {v}" for k, v in jobb_per_kommun.items()) + f" av {total_jobs}")
+        log("[pendling] sysselsatta invånare " + ", ".join(
+            f"{k}: {v}" for k, v in boende_per_kommun.items()))
 
         for municipal_code in municipalities:
             t1 = time.time()
@@ -1207,7 +1134,7 @@ class ScenarioBuilder:
             if boende_per_kommun:
                 # Arbetskraften back-räknas ur SCB:s sysselsatta och
                 # scenariots arbetslöshetstal: syss = arbetskraft * (1 - u).
-                syss = boende_per_kommun[str(municipal_code)]
+                syss = boende_per_kommun[str(municipal_code).zfill(4)]
                 arbetskraft = syss / max(1.0 - local_unemployment_rate, 1e-9)
                 harledd = arbetskraft / max(population, 1)
                 log(f"  arbetskraftsandel: {harledd:.3f} härledd ur SCB "
@@ -1234,7 +1161,7 @@ class ScenarioBuilder:
                 # Nycklarna är strängar; kommunkoderna i scenariofilen är
                 # heltal. Uppslaget med rå kod gav KeyError vid första
                 # kommunen.
-                target_jobs = int(round(jobb_per_kommun[str(municipal_code)]))
+                target_jobs = int(round(jobb_per_kommun[str(municipal_code).zfill(4)]))
                 log(f"  jobb: {target_jobs} mot {workforce - n_unemployed} "
                     f"sysselsatta invånare -- dag/natt "
                     f"{target_jobs / max(workforce - n_unemployed, 1):.2f}")

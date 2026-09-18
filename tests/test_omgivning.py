@@ -141,3 +141,33 @@ def test_varlden_bar_kolumnen_extern():
     w.prepare()
     assert "extern" in w.individuals.columns and "extern" in w.jobs.columns
     assert not w.individuals["extern"].any() and not w.jobs["extern"].any()
+
+
+# ---------------------------------------------------------------------------
+# O3a: jobbmålet och de sysselsatta invånarna med öppen rand
+# ---------------------------------------------------------------------------
+
+def _byggare(conn):
+    from core.scenariobuilder import ScenarioBuilder
+    sb = ScenarioBuilder.__new__(ScenarioBuilder)
+    sb.conn = conn
+    return sb
+
+
+def test_marginalerna_ar_hela_kolumn_och_radsumman():
+    """Jobben räknar inpendlarna och invånarna utpendlarna. Delmatrisen, som
+    stängde scenariot, gav Mora 120 jobb och 110 sysselsatta här."""
+    m = _byggare(_db()).pendlingsmarginaler([2062, 2034])
+    assert m["jobb"] == {"2062": 160, "2034": 65}
+    assert m["boende"] == {"2062": 150, "2034": 70}
+
+
+def test_en_ensam_kommun_far_ocksa_sin_rand():
+    """Scenarier med en kommun hoppade över matrisen helt."""
+    m = _byggare(_db()).pendlingsmarginaler(["2034"])
+    assert m == {"jobb": {"2034": 65}, "boende": {"2034": 70}}
+
+
+def test_utan_matris_ingen_tyst_reserv():
+    with pytest.raises(ValueError, match="commuting saknas"):
+        _byggare(_db(utan=("commuting",))).pendlingsmarginaler(REGION)

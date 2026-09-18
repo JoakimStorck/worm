@@ -140,6 +140,10 @@ inte kalibrerade och körs inte som baslinje.
   `analyze_world` räknar arbetskraften bland invånarna och jobben bland
   regionens, månads- och årsraderna bär `in_commuters` och `out_commuters`,
   och tidsseriens residual är U − (L − J + V + In − Ut).
+- **O3a. Jobbmålet.** **Gjort:** `ScenarioBuilder.pendlingsmarginaler` tar
+  jobben ur hela kolumnsumman och de sysselsatta invånarna ur hela radsumman,
+  också för en ensam kommun; `jobbandelar` och delmatrisen är borta. Utan
+  O3b och O4 fyller invånarna inpendlarnas jobb, så läget körs inte.
 - **O3. Inpendling och jobbmålet.** Jobbmålet blir hela kolumnsumman. Externa
   sökande till regionens vakanser; anställda inpendlare som agenter, borttagna
   när anställningen upphör. Startens inpendlare på plats.
